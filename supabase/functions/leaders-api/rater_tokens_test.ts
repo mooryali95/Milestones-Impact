@@ -1,5 +1,6 @@
 // P1-14 على قاعدة مزيفة تطبّق المرشحات: التذكير يضيف بصمة رابط جديد ولا يستبدلها، فرابط الدعوة الأولى والرابط الجديد
 // كلاهما صالح حتى الإغلاق ومرفوضان بعده؛ والإغلاق 23:59 بتوقيت الرياض، ويوم الإغلاق يُعرض بيوم الرياض.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail, hash } = await import('./core.ts');
@@ -11,6 +12,7 @@ const { MIGRATIONS, MIGRATION_GATES } = await import('./migrations.js');
 
 type Row = Record<string, any>;
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
     let single = false;

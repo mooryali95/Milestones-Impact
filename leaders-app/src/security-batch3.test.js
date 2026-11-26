@@ -81,7 +81,8 @@ describe('N15: تقييم 360 لا يقبل تقديرًا بعد إغلاق د�
     const s = read('supabase/functions/leaders-api/impact.ts');
     const b = s.slice(s.indexOf('export async function raterSubmit'), s.indexOf('\n}\n', s.indexOf('export async function raterSubmit')));
     expect(b).toContain("cyc.status !== 'open'");
-    expect(b.indexOf("cyc.status !== 'open'")).toBeLessThan(b.indexOf('raterQuestions('));
+    // النموذج يُقرأ بـraterForm (عبارات المجموعة، ومدير الأثر بثماني فقرات) بعد فحص الدورة
+    expect(b.indexOf("cyc.status !== 'open'")).toBeLessThan(b.indexOf('raterForm('));
   });
 });
 

@@ -21,7 +21,8 @@ describe('استوديو الكتاب', () => {
 
   it('الأسئلة الناقصة تُكتشف، والنقاط من ثوابت الخادم', () => {
     expect(badQuiz('س: كامل\n- أ\n* ب\n\nس: بلا صحيح\n- أ\n- ب')).toBe(1);
-    expect(maxPoints(3, true)).toBe(30);
+    // أوزان تصور المرحلة 3: 10 للباب و3 لكل صحيحة و10 للتأمل و5 لـ«أين ستطبقه؟»
+    expect(maxPoints(3, true)).toBe(34);
     expect(maxPoints(0, false)).toBe(10);
   });
 

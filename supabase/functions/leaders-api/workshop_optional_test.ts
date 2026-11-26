@@ -5,7 +5,7 @@
 // بحراسه. وتذكير الجلسة الجماعية الحضورية يذكر مكانها.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake, resendCalls, withNet } from './_fake_db.ts';
+import { installFake, resendCalls, withNet, placeOrgMembers } from './_fake_db.ts';
 const V = await import('./activities.ts');
 const { CONFIG, Fail } = await import('./core.ts');
 const { journeyFor } = await import('./participant.ts');
@@ -64,6 +64,7 @@ function world(o: { migrated?: boolean } = {}) {
     experts: [], cohort_experts: [], audit_log: [], mail_events: [], mail_queue: [],
   };
   // قبل الترحيل: كل قراءة أو كتابة تسمي العمود تُرفض كما يرفضها Postgres
+  placeOrgMembers(tables);
   const f = installFake(tables, migrated ? {} : {
     fail: (table, op) => (table === 'workshop_sessions' && ((op.kind === 'select' && /\boptional\b/.test(op.cols || '')) || (op.value && 'optional' in op.value))
       ? { code: '42703', message: 'column workshop_sessions.optional does not exist' } : null),

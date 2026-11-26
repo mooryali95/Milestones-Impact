@@ -21,6 +21,8 @@ export const EXPORT_TABLES = {
   cohort_group_members: [], cohort_roles: [], hall_presence: [],
   // سبب التسجيل اليدوي (note، 20261119110000) ملاحظة داخلية يكتبها المدير أو المدرب: لا تخرج، ويخرج الحضور وطريقته ووقته كما كان
   workshop_attendance: ['note'],
+  // التزاماته بعد الورش ومراجعتها (20261129200000، تصور المرحلة 3): ملك له كاملًا
+  workshop_commitments: [],
   sponsor_requests: ['decided_by'],
   // التذكيرات التي وصلته (nudges.ts): نصها ومرسلها ومرحلتها. بريد المدير المرسل ولقطة القياس الداخلية لا يخرجان
   nudges: ['sender_ref', 'snapshot'],
@@ -42,6 +44,10 @@ export const EXPORT_TABLES = {
   participant_track_history: ['decided_by'], participant_new_items: [],
   // سجل الدمج (participant_merges وparticipant_merge_rows) ونسخة الترحيل backup_20261128_account_merge لا تُصدَّر (داخلية)، ويمحوها
   // حذف المشارك: السجل بمفتاحه الأجنبي، والنسخة والحساب المدموج فيه بمشغّل participant_merge_erase قبل الحذف (erasure_purge وغيرها)
+  // ونسخة ترحيل تنظيف المجموعات backup_20261129_group_members_cleanup (20261129250000): عضويات مجموعات قديمة حُذفت بعد النقل،
+  // داخلية لا تُصدَّر، وتُمحى مع حذف المشارك بمفتاحها الأجنبي (on delete cascade)
+  // ونسخة ترحيل الدفعة الواحدة backup_20261129_single_cohort (20261129230000): إلحاقات سُحبت لأنها ثانية، ومن أُلحق بالتعبئة،
+  // داخلية لا تُصدَّر، وتُمحى مع حذف المشارك بمفتاحها الأجنبي (on delete cascade)
 };
 // أعمدة ترحيلات لم تُطبَّق بعد فليست في المخطط المرجعي (baseline.sql): تُحجب من الآن، وتنتقل إلى EXPORT_TABLES
 // حين يلتقطها المخطط. تقييم 360 (20261111130000): الأسئلة المفتوحة وسؤال الصلة وحجب الإدارة سرية لأصحابها

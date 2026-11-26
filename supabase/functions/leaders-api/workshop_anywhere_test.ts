@@ -4,7 +4,7 @@
 // تظهر في كل ما يقرأ الجلسات، وأن الورشة الإضافية تُحسب لمن ينقصه يوم ولا تزيد المطلوب (القرار 6). بقاعدة في الذاكرة (_fake_db.ts)
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake, resendCalls, withNet } from './_fake_db.ts';
+import { installFake, resendCalls, withNet, placeOrgMembers } from './_fake_db.ts';
 const V = await import('./activities.ts');
 const { CONFIG, Fail, MAIL_GALLERY } = await import('./core.ts');
 const { journeyTimeline, outsideSessions, timelineAxis } = await import('./journey-timeline.js');
@@ -48,6 +48,7 @@ function world() {
     workshop_attendance: [],
     audit_log: [], mail_events: [], mail_queue: [],
   };
+  placeOrgMembers(tables);
   const f = installFake(tables);
   return { ps, tables, f };
 }

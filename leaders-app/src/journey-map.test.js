@@ -125,7 +125,8 @@ describe('الربط بلوحة الجهة', () => {
   });
   it('الواجهة تعرض الخريطة مكان أعمدة القمع، وتبقيها لمن لا خريطة له', () => {
     const o = read('leaders-app/src/screens/OrgPortal.jsx');
-    expect(o).toContain('{d.journey_map && <JourneyMap map={d.journey_map} />}');
+    // ولجهة بأكثر من دفعة حالية محوّل يعرض خريطة كل دفعة (تصور المرحلة 4، م5)
+    expect(o).toContain('{d.journey_map && (d.journey_maps?.length > 1 ? <CohortMaps maps={d.journey_maps} /> : <JourneyMap map={d.journey_map} />)}');
     expect(o).toContain('{!d.journey_map && <section className="card"><h3>مراحل الرحلة</h3>');
   });
 });

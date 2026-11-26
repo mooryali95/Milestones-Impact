@@ -3,7 +3,7 @@
 // والسبب في سجل التدقيق (لا عمود له قبل المرحلة 2). بقاعدة في الذاكرة (_fake_db.ts)
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake } from './_fake_db.ts';
+import { installFake, placeOrgMembers } from './_fake_db.ts';
 const V = await import('./activities.ts');
 const { Fail } = await import('./core.ts');
 
@@ -24,7 +24,9 @@ function world() {
         { id: COHORT, name: 'دفعة الجهة', is_default: false, organization_id: ORG, status: 'running', program_id: 'prog', starts_on: '2026-11-01', created_at: '2026-10-01', delivery: {} },
         { id: OTHER, name: 'دفعة أخرى', is_default: false, organization_id: null, status: 'running', program_id: 'prog', starts_on: '2026-11-01', created_at: '2026-10-02', delivery: {} },
       ],
-      enrollments: [{ participant_id: ps[2].id, cohort_id: OTHER, status: 'active', created_at: '2026-10-06T08:00:00Z' }],
+      // أعضاء الجهة ملحقون بدفعتها صراحة (تصور المرحلة 4: لا استنتاج بالجهة)
+      enrollments: [...ps.filter((p) => p.organization_id === ORG).map((p) => ({ participant_id: p.id, cohort_id: COHORT, status: 'active', created_at: '2026-10-05T08:00:00Z' })),
+        { participant_id: ps[2].id, cohort_id: OTHER, status: 'active', created_at: '2026-10-06T08:00:00Z' }],
       placements: [...ps.slice(0, 4).flatMap((p) => placed(p)), ...placed(ps[4], 2)],
       stage_requirements: [
         { id: REQ_W, program_id: 'prog', stage_key: 'training', code: 'T-ATTEND', kind: 'workshop', dimension: null, level: null, sort: 1, required: true, title_ar: 'الأيام التدريبية', config: { verify: 'qr' }, active: true },
@@ -51,6 +53,7 @@ const rejects = async (fn: () => Promise<unknown>, code: string, status: number)
 
 Deno.test('التسجيل اليدوي: عضو دفعة الجلسة يُسجَّل بطريقة «يدوي» ومن سجّله، والسبب الاختياري في السجل', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     assertEquals(await V.workshopMark(ADMIN, { session_id: DAY1, participant_id: w.ps[0].id, present: true, reason: '  تعطل الرمز  ' }), { success: true });
@@ -69,6 +72,7 @@ Deno.test('التسجيل اليدوي: عضو دفعة الجلسة يُسجَ�
 
 Deno.test('التحقق: من ليس من متوقعي الجلسة يُرفض ولا يُكتب له حضور ولا سطر في السجل', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     // عضو دفعة أخرى في جلسة دفعة الجهة
@@ -88,6 +92,7 @@ Deno.test('التحقق: من ليس من متوقعي الجلسة يُرفض �
 
 Deno.test('التحقق بقاعدة القائمة نفسها: كل من تعرضه قائمة الحضور غائبًا يُقبل، ومن لا تعرضه يُرفض، والجلسة العامة لكل من ينطبق عليه المتطلب', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     for (const sid of [DAY1, GEN, ADV]) {
@@ -106,6 +111,7 @@ Deno.test('التحقق بقاعدة القائمة نفسها: كل من تعر
 Deno.test('لا يكتب فوق حضور المشارك لنفسه: الطريقة والوقت كما هما، ولا سطر جديد في السجل', async () => {
   const w = world();
   w.tables.workshop_attendance.push({ session_id: DAY1, participant_id: w.ps[0].id, method: 'qr', checked_in_at: '2026-11-10T06:05:00Z', recorded_by: null });
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     assertEquals(await V.workshopMark(ADMIN, { session_id: DAY1, participant_id: w.ps[0].id, present: true, reason: 'سُجل لاحقًا' }), { success: true, already: true });
@@ -118,6 +124,7 @@ Deno.test('إلغاء حضور سجّله المشارك بنفسه: يُرفض 
   for (const method of ['qr', 'code', 'join', 'hall', 'remote']) {
     const w = world();
     w.tables.workshop_attendance.push({ session_id: DAY1, participant_id: w.ps[0].id, method, checked_in_at: '2026-11-10T06:05:00Z', recorded_by: null });
+    placeOrgMembers(w.tables);
     const f = installFake(w.tables);
     try {
       for (const reason of [undefined, '', '   ']) {
@@ -135,6 +142,7 @@ Deno.test('إلغاء حضور سجّله المشارك بنفسه: يُرفض 
 
 Deno.test('إلغاء حضور يدوي: بنقرة بلا سبب، والحالة السابقة (من سجّله) في السجل، وإلغاء ما ليس مسجلًا لا يكتب شيئًا', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     await V.workshopMark(ADMIN, { session_id: DAY1, participant_id: w.ps[0].id, present: true });
