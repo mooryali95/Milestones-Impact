@@ -22,7 +22,7 @@ import { attentionRows, deskNote, exceptionRows, greetingAr, HEALTH_HREF, PROGRA
 import { IDLE_DAYS, IDLE_HREF, idleCount } from '../matrix.js';
 
 // ── الأرقام الأربعة: من الصندوق والنظرة العامة المحمّلين أصلًا، وكل رقم يفتح عرضه في الصندوق حيث وُجد ──
-// البطاقة زر: سهم ووجهة في التلميح، وaria-current للعرض النشط في الصندوق. الرابعة تفتح المشاركين بمرشح «في البرنامج»
+// البطاقة زر: سهم ووجهة في التلميح، وaria-pressed للبطاقات التي تبدّل عرض الصندوق (زر تبديل)، والرابعة تنقل فلا تحمله. الرابعة تفتح المشاركين بمرشح «في البرنامج»
 // (PROGRAM_VIEW، الحالتان IN_PROGRAM نفساهما اللتان حُسب بهما رقمها)
 export const PROGRAM_HREF = `#/leaders/participants?view=${PROGRAM_VIEW}`;
 function TodayNumbers({ nums, view, onView, loading }) {
@@ -42,7 +42,7 @@ function TodayNumbers({ nums, view, onView, loading }) {
     <div className="stats-grid today-nums" role="group" aria-label="أرقام اليوم">
       {cells.map((c) => (
         <button key={c.key} type="button" className={`stat-card today-n${c.tone ? ` ${c.tone}` : ''}`} data-k={c.key} onClick={c.go} title={c.hint}
-          aria-current={c.pressed ? 'true' : undefined}>
+          aria-pressed={c.pressed === undefined ? undefined : !!c.pressed}>
           <span className="stat-label">{c.label}<span className="today-n-go" aria-hidden="true">←</span></span><span className="stat-value">{c.value == null ? <><span aria-hidden="true">·</span><span className="sr-only">غير مقروء</span></> : typeof c.value === 'string' ? <bdi dir="ltr">{c.value}</bdi> : c.value}</span><span className="stat-sub">{c.sub}</span>
         </button>
       ))}
