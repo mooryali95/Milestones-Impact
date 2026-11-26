@@ -163,3 +163,16 @@ describe('المراجعة الثانية: الاحتياطي ومكوّنات �
     expect(missingMessage(institutionalReport(yahyaDoc()).missing)).toContain('املأ سجل المخاطر');
   });
 });
+
+describe('الغلاف الفاخر في النسخة المؤسسية (المرحلة 25)', () => {
+  it('صف رسمي واحد بلا الحالة والتاريخ والإصدار، وشريط ضبط لاتيني، والختم العربي بجانبه في الحالتين', () => {
+    const { meta } = institutionalReport(completeDoc());
+    expect(meta.rows.map(([l]) => l).every((l) => ['الجهة', 'الراعي', 'قائد المبادرة'].includes(l))).toBe(true);
+    expect(meta.control).toMatch(/^[A-Z0-9-]+ · V\d+ · \d{4}-\d{2}-\d{2} · (DRAFT|APPROVED)$/);
+    expect(meta.stamp).toBeTruthy();
+    expect(meta.controlLabel).toMatch(/^رمز الوثيقة /);
+    const html = documentHtml(meta, '');
+    expect(html).toMatch(/class="ctlrow">.*aria-label="رمز الوثيقة .*class="stamp">/);
+    expect(html).not.toMatch(/<span>الحالة<\/span>/);
+  });
+});
