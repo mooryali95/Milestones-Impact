@@ -440,6 +440,7 @@ export async function adminCancelRequest(a: Admin, b: Body) {
   if (!LIVE.includes(r.status)) throw new Fail('الطلب مغلق أصلًا');
   await db.from('expert_requests').update({ status: 'cancelled', offer_token_hash: null, updated_at: new Date().toISOString() }).eq('id', r.id);
   await audit('admin', a.email, 'expert-request.cancel', 'expert_requests', r.id, { status: r.status }, { reason: b.reason || null });
+  await resolveNotes(`offer:${r.id}`);
   return { success: true };
 }
 

@@ -243,3 +243,10 @@ describe('«ينتظرك» في صندوق الخبير (المرحلة 2ج)', (
     expect(mc).toMatch(/m\.resolved_at \? ` · \$\{T\.resolved\}`/);
   });
 });
+
+describe('إغلاق «ينتظرك» في كل موضع إنجاز', () => {
+  const src = (f) => readFileSync(join(API, f), 'utf8');
+  it('إلغاء الإدارة للطلب يغلق عرضه في صندوق الخبير', () => {
+    expect(src('experts.ts')).toMatch(/export async function adminCancelRequest[\s\S]{0,600}'expert-request\.cancel'[\s\S]{0,200}await resolveNotes\(`offer:\$\{r\.id\}`\)/);
+  });
+});
