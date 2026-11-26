@@ -11,7 +11,7 @@
 //   • نوع المبادرة (مشروع، برنامج، محفظة) من نطاق عمل المشارك في ملفه،
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
-import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor, workMinutes } from './logic.js';
+import { DIMENSIONS, fieldsFor, keptModel, overallLevel, latinDigits, missingFields, modelsFor, workMinutes } from './logic.js';
 import { BEGINNER_CHAPTER_TITLES, CLOSING_LOCKED_AR } from './labels.js';
 
 export const CHARTER_KEY = 'initiative-charter';
@@ -148,6 +148,23 @@ export function chapterLevel(model, fields, state, content, levels) {
     kept_fields: kept ? 0 : (fields || []).filter((f) => f.kept).length,
     criteria: levelCriteria(model.dimension, levels),
   };
+}
+
+// ملحق المراجع (المرحلة 24): لكل إطار مستواه ومعياره مرة واحدة (frameworks)، ولكل فصل مرجع لإطاره (dimension) وموقعه وعدد حقوله الباقية.
+// المعيار يتبع الإطار لا الفصل، فلا يُنسخ في كل فصل. مصدره levelCriteria وحده (عبر chapterLevel)
+// live: الوثيقة معتمدة تُعرض من لقطتها، والملحق من حالتها الآن
+/** @param {any} d حالة الوثيقة (capstoneState) @param {boolean} [live] */
+export function levelsView(d, live = false) {
+  const frameworks = []; const seen = new Map();
+  const chapters = (d?.sections || []).map((/** @type {any} */ s) => {
+    const dimension = s.model.dimension || null;
+    if (dimension && !seen.has(dimension)) {
+      const fw = { dimension, level: s.chapter?.level || null, criteria: s.chapter?.criteria || [] };
+      seen.set(dimension, fw); frameworks.push(fw);
+    }
+    return { key: s.model.key, title: s.model.title_ar, dimension, standing: s.chapter?.standing || null, kept_fields: s.chapter?.kept_fields || 0 };
+  });
+  return { level: overallLevel(d?.levels), live, frameworks, chapters };
 }
 
 // ── تخفيف القراءة للتأسيسي: فصلان قصيران في صفحة عرض واحدة (المصفوفة، «ملاحظة صادقة»، المرحلة 5) ──

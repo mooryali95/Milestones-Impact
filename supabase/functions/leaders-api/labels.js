@@ -469,3 +469,15 @@ export const CLOSING_LOCKED_AR = 'هذا الفصل يُكتب بعد التنف
 // جولات التحسين بعد ملاحظات المستشار (MAX_REVISIONS في capstone.js): سطر يراه المشارك قبل التقديم
 export const revisionRoundAr = (/** @type {number} */ n) => (n === 1 ? 'لك جولة تحسين واحدة بعد ملاحظات المستشار.'
   : n === 2 ? 'لك جولتا تحسين بعد ملاحظات المستشار.' : `لك ${n} جولات تحسين بعد ملاحظات المستشار.`);
+
+// ملحق المراجع (المرحلة 24): شرح موقع الفصل من مستواه في أسطورة الملحق، وعناوينه. عناوين المواقع نفسها في CHAPTER_STANDING_AR (capstone.js)
+export const CHAPTER_STANDING_NOTE_AR = Object.freeze({
+  required: 'يُحسب في الجاهزية.',
+  optional: 'لا يُعد فراغه نقصًا.',
+  kept: 'كتبه القائد قبل رفع مستوى الفصل، فيُحفظ ولا يُطلب.',
+});
+export const REVIEW_ANNEX_AR = Object.freeze({
+  title: 'ملحق المراجع',
+  internal: 'للمراجعة الداخلية، لا يُرسل للمشارك أو الراعي',
+  failed: 'تعذّر بناء ملحق المراجع',
+});

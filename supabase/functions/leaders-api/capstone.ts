@@ -11,13 +11,13 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor, programEndOf } from './programs.ts';
-import { answeredModels, approvalOf, viewTable, workMinutes, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
+import { answeredModels, approvalOf, viewTable, workMinutes, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, profileKey, rubricPriority, trackKey } from './logic.js';
 import { summaryFromCard } from './business-case.js';
 import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
-  capstoneListRows, capstoneState, chapterLevel, withoutReviewLevels, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
+  capstoneListRows, capstoneState, chapterLevel, levelsView, withoutReviewLevels, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { docFingerprint, freezeIssued, rejectionStats } from './doc-quality.js';
@@ -112,13 +112,7 @@ const sectionView = (s: any) => ({
   level: s.chapter.level, standing: s.chapter.standing, kept_fields: s.chapter.kept_fields, criteria: s.chapter.criteria,
 });
 
-// مستوى الوثيقة وموقع كل فصل منه، لملحق يقرؤه المستشار والخبير وحدهما (لا يدخل لقطة الاعتماد ولا ما يصل الراعي أو الجهة)
-// live: الوثيقة معتمدة تُعرض من لقطتها، والملحق من حالتها الآن، فيُعلَّم بذلك ولا يُنسب إلى النسخة المعتمدة
-export const levelsView = (d: any, live = false) => ({
-  level: overallLevel(d.levels), live,
-  chapters: d.sections.map((s: any) => ({ key: s.model.key, title: s.model.title_ar, level: s.chapter.level, standing: s.chapter.standing,
-    standing_title: (CHAPTER_STANDING_AR as Record<string, string>)[s.chapter.standing], kept_fields: s.chapter.kept_fields, criteria: s.chapter.criteria })),
-});
+// ملحق المراجع: levelsView في capstone.js (المرحلة 24، مصدر واحد قابل للاختبار)
 
 function reviewView(c: any, full = true) {
   if (!c || !['returned', 'accepted', 'approved'].includes(c.status) && !c.review_note) return null;
