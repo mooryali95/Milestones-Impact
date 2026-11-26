@@ -5,7 +5,7 @@
 // الدفعة والفريق، الجلسات والطلبات، طلبات الأقران، التقييم الختامي، وسطر «المطلوب منك الآن».
 // الخبير يرى مشاركي الدفعات التي هو مستشارها (كامل الصلاحية: الختامي والمعالم والقاعة)، ومن أُسند
 // إليه بطلب خدمة مقبول (قراءة الملف فقط). ما لا يحق له لا يُرسل أصلًا.
-import { audit, db, Fail } from './core.ts';
+import { allFor, audit, db, Fail } from './core.ts';
 import { awaitingFor, confirmRater } from './impact.ts';
 import { participant as adminParticipant, answersReview } from './admin.ts';
 import type { Actor } from './admin.ts';
@@ -17,7 +17,7 @@ import { participantMilestone } from './programs.ts';
 import { mePayload } from './participant.ts';
 import { guideCounts } from './guide.ts';
 import { forParticipant as peerFor, hallTeams } from './peer.ts';
-import { needsFor } from './peer.js';
+import { needsFor, pickRoster } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
 import { journeyApproved, trackKey } from './logic.js';
 import { stageNow } from './journey-map.js';
@@ -188,9 +188,23 @@ const actorOf = (e: any): Actor => ({ email: e.email, actor: 'system' });
 // قائمة مشاركي الخبير بموجز يُقرأ في لمحة؛ مصدره mePayload نفسه، على دفعات من خمسة
 export async function participants(e: any) {
   const scope = await expertScope(e);
-  const ids = [...new Set([...scope.advisor, ...scope.assigned.keys()])].slice(0, 60);
-  if (!ids.length) return { success: true, items: [], cohorts: await advisorCohorts(e.id), raters_pending: [] };
-  const { data: ps } = await listed(db.from('participants').select('*').in('id', ids)).order('full_name');
+  const every = [...new Set([...scope.advisor, ...scope.assigned.keys()])];
+  if (!every.length) return { success: true, items: [], total: 0, truncated: false, cohorts: await advisorCohorts(e.id), raters_pending: [] };
+  // الترتيب قبل القطع (pickRoster): من ينتظره عمل أولًا ثم بالاسم، والعدد الكلي يُرجَع. «ينتظره عمل» بقراءات مجمّعة
+  // لما يعدّه needsFor بلا حساب الرحلة: تسليم بانتظار التقييم، وتقييم ختامي بانتظار الاعتماد أو أُعيد، وإجابة زميل
+  const msg = 'تعذّر قراءة مشاركيك الآن، حاول بعد قليل';
+  const [people, subsW, finW, peerW] = await Promise.all([
+    allFor(every, () => listed(db.from('participants').select('id, full_name')).order('id'), 'id'),
+    allFor(every, () => db.from('model_submissions').select('participant_id').eq('status', 'submitted').order('participant_id')),
+    allFor(every, () => db.from('final_evaluations').select('participant_id').in('status', ['pending', 'returned']).order('participant_id')),
+    allFor(every, () => db.from('peer_requests').select('participant_id').eq('status', 'answered').order('participant_id')),
+  ]).catch(() => { throw new Fail(msg, 503, 'busy'); });
+  const pending = new Set([...subsW, ...finW, ...peerW].map((x: any) => x.participant_id));
+  const roster = pickRoster(people, pending);
+  const ids = roster.ids;
+  const order = new Map(ids.map((id, i) => [id, i]));
+  const { data: ps0 } = ids.length ? await listed(db.from('participants').select('*').in('id', ids)) : { data: [] as any[] };
+  const ps = [...(ps0 || [])].sort((a: any, b: any) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   const items: any[] = [];
   for (let i = 0; i < (ps || []).length; i += 5) {
     const chunk = (ps || []).slice(i, i + 5);
@@ -220,7 +234,7 @@ export async function participants(e: any) {
     items.push(...got);
   }
   // D19: مقيّمو مشاركي المستشار بانتظار تأكيده قبل إرسال دعواتهم
-  return { success: true, items, cohorts: (await advisorCohorts(e.id)).map((c: any) => ({ id: c.id, name: c.name, supervision: c.supervision })),
+  return { success: true, items, total: roster.total, truncated: roster.truncated, cohorts: (await advisorCohorts(e.id)).map((c: any) => ({ id: c.id, name: c.name, supervision: c.supervision })),
     raters_pending: await awaitingFor([...scope.advisor]) };
 }
 
