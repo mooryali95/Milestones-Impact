@@ -577,8 +577,10 @@ export async function weeklyReports() {
     if (c.last_report_at && isoWeek(new Date(c.last_report_at)) === week) continue;
     try {
       const d = await dashboardFor(c);
+      // مقيّمو 360 بانتظار تأكيده: من اللوحة نفسها (awaitingFor بشرط القائمة ومفتاح 360)، فما في البريد هو ما في اللوحة
+      const raters = (d as any).raters_pending || [];
       await db.from('org_coordinators').update({ last_report_at: new Date().toISOString() }).eq('id', c.id);
-      await sendMail(c.email, `ملخص ${c.organizations.name} الأسبوعي`, coordinatorWeeklyMail(c.full_name, c.organizations.name, d.kpis, (d as any).raters_pending), [], { category: 'coord_digest', kind: 'bulk', ref: `coordinator:${c.id}`, recipient: { kind: 'coordinator', id: c.id }, expiresAt: new Date(Date.now() + 7 * 864e5).toISOString() });
+      await sendMail(c.email, `ملخص ${c.organizations.name} الأسبوعي`, coordinatorWeeklyMail(c.full_name, c.organizations.name, d.kpis, raters), [], { category: 'coord_digest', kind: 'bulk', ref: `coordinator:${c.id}`, recipient: { kind: 'coordinator', id: c.id }, expiresAt: new Date(Date.now() + 7 * 864e5).toISOString() });
       await audit('system', null, 'coordinator.weekly-report', 'org_coordinators', c.id);
       sent += 1;
     } catch (e) { console.error('weekly report', c.id, e); }
