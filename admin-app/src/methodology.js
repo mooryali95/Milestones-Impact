@@ -40,7 +40,7 @@ export const COACH_MODE = SESSION_MODE_AR;
 // أنواع يحسم النظام إكمالها بدليل، لا بنقرة المشارك: القائمة نفسها التي يحتسب بها الخادم
 export const VERIFIED = new Set(VERIFIED_KINDS);
 const ACCEPT = { reviewed: 'حين يقرؤه المستشار', submitted: 'بمجرد تقديمه' };
-const READ_SCOPE = { all: 'كل أبواب مسار المشارك', first: 'الباب الأول من كل إطار', dimension: 'أبواب إطار واحد' };
+const READ_SCOPE = { all: 'كل أبواب مسار المشارك', track: 'أبواب محور المسار وأول باب من كل إطار، والبقية اختيارية', first: 'الباب الأول من كل إطار', dimension: 'أبواب إطار واحد' };
 export const MODE = MODE_AR;
 export const ROMAN = { beginner: 'I', intermediate: 'II', advanced: 'III' };
 

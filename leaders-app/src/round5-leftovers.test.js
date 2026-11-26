@@ -144,7 +144,8 @@ describe('mapLanes وخريطة الجهة', () => {
   it('لوحة الجهة تمرر الموقوفة والتوازي كملف الدفعة، من دالة واحدة', () => {
     const c = read('supabase/functions/leaders-api/coordinator.ts');
     expect(c.match(/off: def\.stages_off \|\| \[\],/g)).toHaveLength(2);
-    expect(c.match(/journey_map\.lanes = mapLanes\(mapStages\);/g)).toHaveLength(2);
+    // خريطة كل دفعة للجهة (map) وخريطة ملف الدفعة (journey_map)، تصور المرحلة 4 م5
+    expect(c.match(/(journey_map|map)\.lanes = mapLanes\(mapStages\);/g)).toHaveLength(2);
   });
   it('JourneyMap يعرض السطر تحت المرحلة والموقوفة باهتة، وخريطة بلا lanes كما كانت', () => {
     const stages = STAGES_WITH.filter((s) => ['training', 'ojt_coaching', 'support'].includes(s.key));

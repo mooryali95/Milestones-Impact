@@ -1,6 +1,7 @@
 // حراس المشاركين الأحياء في cohortSave: دفعة جهة ثانية على برنامج آخر تُرفض بلا confirm_move وتُقبل به، وعلى البرنامج
 // نفسه تمر بلا تأكيد، وإخفاء آخر بند إلزامي في مرحلة تكتمل بإلزاميتها يُرفض، وبرنامج دفعة لأعضائها تقدم لا يتغير.
 // قاعدة في الذاكرة بنمط program_gate_test.ts، بلا شبكة.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
@@ -10,6 +11,7 @@ const { cohortPlanAction } = await import('./cohort-plan.ts');
 type Row = Record<string, any>;
 const MAX_ROWS = 1000;
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   let seq = 0;
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
@@ -47,8 +49,10 @@ function install(tables: Record<string, Row[]>) {
     });
     return q;
   };
-  const prev = { from: (db as any).from };
-  Object.assign(db as any, { from });
+  const prev = { from: (db as any).from, rpc: (db as any).rpc };
+  // لا دوال قاعدة هنا: النقل الذري (transfer_participant) يُقرأ كما قبل ترحيله، فتمضي الخطوات المتتابعة
+  const rpc = () => Promise.resolve({ data: null, error: { code: 'PGRST202', message: 'no rpc' } });
+  Object.assign(db as any, { from, rpc });
   return { tables, restore: () => Object.assign(db as any, prev) };
 }
 
@@ -77,16 +81,13 @@ function world() {
 const failOf = async (fn: () => Promise<unknown>) => (await assertRejects(fn, Fail)) as InstanceType<typeof Fail>;
 const second = (program_id: string) => ({ name: 'دفعة 2027', organization_id: ORG, program_id, status: 'open', starts_on: '2027-01-01' });
 
-Deno.test('دفعة جهة ثانية على برنامج آخر تُرفض بلا تأكيد وتسمي العدد، ولا يُكتب شيء', async () => {
+// تصور المرحلة 4: الدفعة إلحاق صريح، فدفعة جهة ثانية لا تنقل أحدًا: تُحفظ بلا سؤال، وأعضاء الأولى باقون فيها
+Deno.test('دفعة جهة ثانية على برنامج آخر لا تنقل أحدًا: تُحفظ بلا تأكيد ويبقى الأعضاء في دفعتهم', async () => {
   const w = world();
   try {
-    const e = await failOf(() => cohortSave(admin, second(PB)));
-    assertEquals(e.code, 'confirm_move');
-    assertEquals(e.status, 409);
-    assertEquals(e.extra.affected, 1);
-    assertEquals((e.extra.from as any[])[0].name, 'سفراء 2026');
-    assertEquals(w.tables.cohorts.length, 1);
-    assertEquals(w.tables.audit_log.length, 0);
+    assertEquals(((await cohortSave(admin, second(PB))) as any).success, true);
+    assertEquals(w.tables.cohorts.length, 2);
+    assertEquals(w.tables.enrollments.filter((e: any) => e.status !== 'withdrawn').map((e: any) => e.cohort_id), [C1, C1]);
   } finally { w.restore(); }
 });
 
@@ -133,16 +134,12 @@ Deno.test('تغيير برنامج دفعة لأعضائها تقدم يُرفض
 const DEF = U(20), C2 = U(21), ORG2 = U(22);
 const openDefault = { id: DEF, name: 'الدفعة المفتوحة', is_default: true, organization_id: null, program_id: PA, program_version_id: null, status: 'open', starts_on: null, created_at: '2026-01-01T00:00:00Z', hidden_requirements: [] };
 
-Deno.test('أول دفعة للجهة على برنامج آخر تنقل أعضاءها من الدفعة المفتوحة فتسأل', async () => {
+Deno.test('أول دفعة للجهة على برنامج آخر لا تنقل من على الدفعة المفتوحة بلا إلحاق: تُحفظ بلا تأكيد', async () => {
   const w = world();
   w.tables.cohorts = [openDefault];
+  w.tables.enrollments = [];
   try {
-    const e = await failOf(() => cohortSave(admin, second(PB)));
-    assertEquals(e.code, 'confirm_move');
-    assertEquals(e.extra.affected, 1);
-    assertEquals((e.extra.from as any[])[0].name, 'الدفعة المفتوحة');
-    assertEquals(e.message.includes('مشارك واحد'), true);
-    assertEquals(((await cohortSave(admin, { ...second(PB), confirm_move: true })) as any).success, true);
+    assertEquals(((await cohortSave(admin, second(PB))) as any).success, true);
   } finally { w.restore(); }
 });
 
@@ -160,18 +157,15 @@ Deno.test('تغيير برنامج الدفعة المفتوحة يُرفض وم
   } finally { w.restore(); }
 });
 
-Deno.test('إغلاق دفعة الجهة ينقل أعضاءها إلى دفعة سابقة على برنامج آخر فيسأل، والتأكيد يمضي', async () => {
+// القرار 5: الإغلاق لا يسحب الإلحاقات، فأعضاء الدفعة باقون عليها حتى يُنقلوا صراحة
+Deno.test('إغلاق دفعة الجهة أو نقلها لجهة أخرى لا يُخرج أعضاءها: بلا تأكيد، وإلحاقهم باقٍ', async () => {
   const w = world();
   w.tables.cohorts.push({ id: C2, name: 'دفعة 2027', organization_id: ORG, program_id: PB, program_version_id: null, status: 'running', starts_on: '2027-01-01', created_at: '2027-01-01T00:00:00Z', hidden_requirements: [] });
+  w.tables.enrollments = [{ participant_id: P1, cohort_id: C2, status: 'active', created_at: '2027-01-02' }];
   try {
-    const e = await failOf(() => cohortSave(admin, { id: C2, status: 'closed' }));
-    assertEquals(e.code, 'confirm_move');
-    assertEquals(e.extra.affected, 1);
-    assertEquals((e.extra.from as any[])[0].name, 'دفعة 2027');
-    assertEquals((e.extra.to as any[])[0].name, 'سفراء 2026');
-    // نقلها إلى جهة أخرى يُخرج أعضاء الجهة منها كذلك
-    assertEquals((await failOf(() => cohortSave(admin, { id: C2, organization_id: ORG2 }))).code, 'confirm_move');
-    assertEquals(((await cohortSave(admin, { id: C2, status: 'closed', confirm_move: true })) as any).success, true);
+    assertEquals(((await cohortSave(admin, { id: C2, organization_id: ORG2 })) as any).success, true);
+    assertEquals(((await cohortSave(admin, { id: C2, status: 'closed' })) as any).success, true);
+    assertEquals(w.tables.enrollments.map((e: any) => [e.cohort_id, e.status]), [[C2, 'active']]);
   } finally { w.restore(); }
 });
 
@@ -197,10 +191,13 @@ Deno.test('عالم الحارس يُقرأ بصفحات: ما بعد الألف
   w.tables.participants = [...stay.map((id) => ({ id, organization_id: ORG, is_demo: false })), { id: P1, organization_id: ORG, is_demo: false }];
   w.tables.enrollments = stay.map((id, i) => ({ id: `en${i}`, participant_id: id, cohort_id: C1, status: 'active', created_at: '2026-09-02' }));
   w.tables.participant_requirements = [...stay.flatMap((id) => Array.from({ length: 30 }, (_, j) => ({ participant_id: id, requirement_id: `r${j}` }))), { participant_id: P1, requirement_id: R1 }];
+  w.tables.cohorts.push({ id: U(30), name: 'أفراد ب', organization_id: null, program_id: PB, program_version_id: null, status: 'open', starts_on: '2026-10-01', created_at: '2026-10-01T00:00:00Z', hidden_requirements: [] });
+  w.tables.enrollments.push({ id: 'enp1', participant_id: P1, cohort_id: C1, status: 'active', created_at: '2026-09-02' });
   try {
-    const e = await failOf(() => cohortSave(admin, second(PB)));
+    // نقل الإحدى والأربعين صراحة إلى دفعة على برنامج آخر: كلهم لهم تقدم، وصفوف تقدمهم تتجاوز الألف
+    const e = await failOf(() => cohortEnroll(admin, { cohort_id: U(30), participant_ids: [...stay, P1] }));
     assertEquals(e.code, 'confirm_move');
-    assertEquals(e.extra.affected, 1);
+    assertEquals(e.extra.affected, 41);
   } finally { w.restore(); }
 });
 
@@ -219,7 +216,7 @@ Deno.test('الإلحاق بدفعة على برنامج آخر لمن له تق
     assertEquals(e.extra.affected, 1);
     assertEquals((e.extra.from as any[])[0].name, 'سفراء 2026');
     assertEquals((e.extra.to as any[])[0].name, 'أفراد ب');
-    assertEquals(w.tables.enrollments.length, 0);
+    assertEquals(w.tables.enrollments.map((x: any) => [x.cohort_id, x.status]), [[C1, 'active'], [C1, 'active']]);
   } finally { w.restore(); }
 });
 Deno.test('الإلحاق المؤكد يمر، وعلى البرنامج نفسه أو بلا تقدم لا يُسأل', async () => {
@@ -331,5 +328,20 @@ Deno.test('إخفاء بند من المحرر يحفظ hidden_requirements نف
     // تعريف الدفعة للمحرر يبقيه بعلامته
     const d: any = await cohortDefinitionFor({ cohort_id: C1 });
     assertEquals(d.requirements.find((r: any) => r.code === 'A-TWO').hidden, true);
+  } finally { w.restore(); }
+});
+
+// تصور المرحلة 4، م6 (القرار 7): الإلحاق الصريح بدفعة بلا نسخة يعطي رحلة غير ثابتة، فلا تُفتح دفعة بلا نسخة
+Deno.test('فتح دفعة غير مثبتة على نسخة يُرد version_required، وتعديل اسمها وحده يمر', async () => {
+  const w = world();
+  w.tables.cohorts[0].status = 'planned';
+  try {
+    for (const status of ['open', 'running']) {
+      const e = await failOf(() => cohortSave(admin, { id: C1, status }));
+      assertEquals([e.status, e.code], [400, 'version_required']);
+      assertEquals(w.tables.cohorts[0].status, 'planned');
+    }
+    assertEquals(((await cohortSave(admin, { id: C1, name: 'سفراء 2026 أ' })) as any).success, true);
+    assertEquals(((await cohortSave(admin, { id: C1, status: 'closed' })) as any).success, true);
   } finally { w.restore(); }
 });

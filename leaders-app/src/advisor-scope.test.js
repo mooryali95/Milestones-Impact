@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { advisorCohortParticipantIds, pickCohort } from '../../supabase/functions/leaders-api/logic.js';
+import { currentGroupLinks, advisorCohortParticipantIds, pickCohort } from '../../supabase/functions/leaders-api/logic.js';
 
 const root = join(__dirname, '../..');
 
@@ -13,7 +13,8 @@ function before(expertId, { cohorts, enrollments, participants }) {
   const mine = cohorts.filter((c) => c.advisor_expert_id === expertId);
   const ids = new Set();
   for (const c of mine) {
-    enrollments.filter((e) => e.cohort_id === c.id).forEach((x) => ids.add(x.participant_id));
+    // المنسحب لا يبقى بتسجيله القديم (تصور المرحلة 1، البند 1): الوصول يتبع العلاقة الحالية
+    enrollments.filter((e) => e.cohort_id === c.id && e.status !== 'withdrawn').forEach((x) => ids.add(x.participant_id));
     const base = c.organization_id
       ? participants.filter((p) => p.organization_id === c.organization_id && !p.is_demo)
       : c.is_default ? participants.filter((p) => !p.is_demo) : [];
@@ -43,7 +44,7 @@ const COHORTS = [
 ];
 
 describe('نطاق مستشار الدفعة بلا قراءة لكل مشارك', () => {
-  it('حالات حدية: التسجيل بأي حالة، والتبعية بالجهة والمفتوحة، وحساب العرض، والدفعة بلا جهة', () => {
+  it('حالات حدية: التسجيل غير المنسحب، والتبعية بالجهة والمفتوحة، وحساب العرض، والدفعة بلا جهة', () => {
     const data = {
       cohorts: COHORTS,
       participants: [
@@ -53,7 +54,7 @@ describe('نطاق مستشار الدفعة بلا قراءة لكل مشارك
       ],
       enrollments: [
         { participant_id: 'p-A-enrolled-free', cohort_id: 'free', status: 'active', created_at: '2026-11-02' },
-        // المنسحب من دفعة المستشار: يبقى في نطاقه كما كان (القديمة تقرأ التسجيل بلا حالة)
+        // المنسحب من دفعة المستشار: يخرج من نطاقه، ويتبع دفعته الفعلية (دفعة جهته A الأحدث، مستشارها x1)
         { participant_id: 'p-withdrawn', cohort_id: 'orgA0', status: 'withdrawn', created_at: '2026-11-02' },
         { participant_id: 'demo-enrolled', cohort_id: 'open', status: 'active', created_at: '2026-11-03' },
       ],
@@ -61,8 +62,43 @@ describe('نطاق مستشار الدفعة بلا قراءة لكل مشارك
     for (const x of ['x1', 'x2', 'x3', 'none']) expect(after(x, data), x).toEqual(before(x, data));
     // x1: المفتوحة (من لا جهة له، ودفعة جهة B مغلقة فيتبعها p-B، ومن سُجّل فيها ولو كان حساب العرض) ودفعة الجهة A الأحدث
     expect(after('x1', data)).toEqual(['demo-enrolled', 'p-A', 'p-B', 'p-open', 'p-withdrawn'].sort());
-    expect(after('x2', data)).toEqual(['p-withdrawn']);
+    expect(after('x2', data)).toEqual([]);
     expect(after('x3', data)).toEqual(['p-A-enrolled-free']);
+  });
+
+  it('المنقول إلى دفعة أخرى لا يبقى عند مستشار دفعته القديمة، والحالي يراه', () => {
+    const cohorts = [
+      { id: 'old', organization_id: 'A', status: 'running', advisor_expert_id: 'prev', starts_on: '2026-10-01' },
+      { id: 'new', organization_id: 'A', status: 'running', advisor_expert_id: 'cur', starts_on: '2026-09-01' },
+    ];
+    const data = {
+      cohorts,
+      participants: [{ id: 'moved', organization_id: 'A' }],
+      enrollments: [
+        { participant_id: 'moved', cohort_id: 'old', status: 'withdrawn', created_at: '2026-10-02' },
+        { participant_id: 'moved', cohort_id: 'new', status: 'active', created_at: '2026-11-02' },
+      ],
+    };
+    expect(after('prev', data)).toEqual([]);
+    expect(after('cur', data)).toEqual(['moved']);
+  });
+
+  it('عضو مجموعة دفعته الفعلية غيرها لا يُحسب لخبيرها، ولا العضو بالجهة بلا إلحاق (currentGroupLinks، تصور المرحلة 4)', () => {
+    const cohorts = [
+      { id: 'c1', organization_id: 'A', status: 'running', starts_on: '2026-10-01' },
+      { id: 'c2', organization_id: 'B', status: 'running', starts_on: '2026-10-01' },
+    ];
+    const links = ['stay', 'left', 'implicit', 'moved-org'].map((participant_id) => ({ participant_id, cohort_id: 'c1', group_id: 'g1' }));
+    const participants = [
+      { id: 'stay', organization_id: 'A' }, { id: 'left', organization_id: 'A' },
+      { id: 'implicit', organization_id: 'A' }, { id: 'moved-org', organization_id: 'B' },
+    ];
+    const enrollments = [
+      { participant_id: 'stay', cohort_id: 'c1', status: 'active', created_at: '2026-10-02' },
+      { participant_id: 'left', cohort_id: 'c1', status: 'withdrawn', created_at: '2026-10-02' },
+      { participant_id: 'left', cohort_id: 'c2', status: 'active', created_at: '2026-11-02' },
+    ];
+    expect(currentGroupLinks(links, { enrollments, cohorts, participants }).map((l) => l.participant_id)).toEqual(['stay']);
   });
 
   it('مطابق للخوارزمية القديمة على 400 حالة عشوائية', () => {

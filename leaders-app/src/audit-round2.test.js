@@ -52,7 +52,7 @@ describe('7.5 رئيسية المشارك', () => {
 describe('9.13 حزمة الإدارة', () => {
   it('شريط البحث لا يجرّ الأقسام، وكل قسم كسول', () => {
     // من الوحدة الخفيفة leaders-tabs.js لا من Leaders.jsx (وOWNER_TABS منها لإخفاء تبويب المالك عن غيره)
-    expect(read('admin-app/src/Palette.jsx')).toMatch(/import \{ (AI_TABS, )?(GROUP_OF, )?(OWNER_TABS, )?(TAB_KEYWORDS, )?TABS \} from '\.\/leaders-tabs\.js';/);
+    expect(read('admin-app/src/Palette.jsx')).toMatch(/import \{ (AI_TABS, )?(FEATURE_TABS, )?(GROUP_OF, )?(groupOf, )?(OWNER_TABS, )?(TAB_KEYWORDS, )?TABS \} from '\.\/leaders-tabs\.js';/);
     const l = read('admin-app/src/screens/Leaders.jsx');
     expect(l).not.toMatch(/^import \w+ from '\.\/\w+\.jsx';/m);
     // lazyRetry: الكسول نفسه بإعادة تحميل واحدة إن حذف نشر أحدث ملف القسم (admin-app/src/lazy-retry.js)

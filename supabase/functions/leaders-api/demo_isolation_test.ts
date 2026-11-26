@@ -1,6 +1,7 @@
 // حساب العرض لا يشارك الدفعة المفتوحة الحقيقية (server-sec-5): بلا تسجيل ولا جهة فدفعته الافتراضية هي المفتوحة،
 // والجولة الحية في الورش ترفع منه طلب توجيه. على قاعدة مزيفة تطبّق المرشحات والتضمين: طلبه لا يراه مشارك ولا خبير
 // ولا الإدارة ولا يصل مستشارها بريد عنه، ولا يرى هو طلباتهم ولا قاعتهم، وإجاباته لا تدخل إحصاء كاتون. ويبقى يرى طلبه.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
@@ -16,6 +17,7 @@ const get = (r: Row, path: string) => path.split('.').reduce((v: any, k) => (v =
 // جداول في الذاكرة: eq وneq وin وnot(is null) وlimit وrange وmaybeSingle وsingle والعدّ، والإدراج والتحديث،
 // وتضمين participants (بـ participant_id أو author_id) وexperts، فمرشح participants.is_demo يعمل كما في PostgREST
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   const reads: string[] = [];
   let seq = 0;
   const embed = (_table: string, r: Row): Row => {

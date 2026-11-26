@@ -67,6 +67,8 @@ export const DEMO_ROW_RESET = Object.freeze({
   full_name: DEMO_FULL_NAME, name_en: null, phone: null, job_title: null, organization_name: null, sector: null, years_experience: null, bio: null, cv_path: null,
   linkedin_url: null, work_scope: null, status: 'registered', profile_completed_at: null, passkey_prompted_at: null, passkey_dismissed_at: null, reminded_at: null,
   name_locked_at: null, name_confirmed_at: null, consented_at: null, consent_version: null, org_share_consented_at: null,
+  // «لا يوجد مدير متاح» (تصور المرحلة 3، 20261129210000)
+  no_manager: null, no_manager_at: null,
 });
 /** وأعمدته التي تبقى: هويته وعلامتاه ومصدره وأوقاته. organization_id فارغ دائمًا بقيد participants_demo_no_org */
 export const DEMO_ROW_KEEP = Object.freeze(['id', 'email', 'is_demo', 'is_test', 'source', 'created_at', 'updated_at', 'last_login_at', 'email_verified_at',
