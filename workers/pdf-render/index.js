@@ -7,7 +7,7 @@
 // الحماية: تذكرة HMAC من leaders-api (supabase/functions/_shared/pdf-ticket.js)، وسكربت الصفحة معطّل، والشبكة محصورة في أصل
 // التطبيق (الخطوط والصور) وصور data:، وحد للحجم. بلا العامل أو عند تعذّره يبني المتصفح الملف (src/lib/brand/pdf.js).
 import puppeteer from '@cloudflare/puppeteer';
-import { verifyTicket } from '../../supabase/functions/_shared/pdf-ticket.js';
+import { fingerprintAllowed, ticketClaims } from '../../supabase/functions/_shared/pdf-ticket.js';
 import { allowedRequest, appOrigins, limitKey, PDF_OPTIONS } from './policy.js';
 
 const MAX_HTML = 6 * 1024 * 1024;
@@ -29,8 +29,9 @@ export default {
     if (req.method !== 'POST' || url.pathname !== '/pdf') return json(404, { success: false }, h);
     let b;
     try { b = await req.json(); } catch { return json(400, { success: false, message: 'طلب غير صالح' }, h); }
-    const sub = await verifyTicket(env.PDF_RENDER_SECRET, b?.ticket);
-    if (!sub) return json(401, { success: false, code: 'ticket' }, h);
+    const claims = await ticketClaims(env.PDF_RENDER_SECRET, b?.ticket);
+    if (!claims) return json(401, { success: false, code: 'ticket' }, h);
+    const { sub } = claims;
     // سقف لكل صاحب تذكرة (Workers Rate Limiting، PDF_LIMIT في wrangler.toml). بلا الربط يمر الطلب كما كان، والتطبيق يرجع
     // عند 429 إلى بناء المتصفح (downloadBest)
     if (env.PDF_LIMIT?.limit) {
@@ -39,6 +40,9 @@ export default {
     }
     const html = String(b?.html || '');
     if (!html.startsWith('<!doctype html>') || html.length > MAX_HTML) return json(413, { success: false, code: 'html' }, h);
+    // ربط التذكرة ببصمة الوثيقة (المرحلة 21): HTML يدّعي بصمةً لا يُطبع إلا بتذكرة صدرت لتلك البصمة نفسها من وثيقة الخادم.
+    // الرفض هنا يرجع بالتطبيق إلى بناء المتصفح (downloadBest)، فلا يصير العامل مصنعًا لوثيقة «معتمدة» مختلقة
+    if (!fingerprintAllowed(html, claims.fp)) return json(403, { success: false, code: 'fingerprint' }, h);
     // أصول التطبيقات كلها (القادة والإدارة، المرحلة 3ب): documentHtml يبني base من location.origin لمن طلب الوثيقة
     const origins = appOrigins(env);
     const browser = await puppeteer.launch(env.BROWSER);

@@ -5,7 +5,7 @@
 // participant_observations وحده. الواجهة تعرض ولا تحسب.
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, dateOnly, L } from '../leaders.js';
-import { ChapterLevel, openDoc } from './Capstones.jsx';
+import { ChapterLevel, FinalDocExport, openDoc } from './Capstones.jsx';
 import { Submission } from './Handbook.jsx';
 import { useUI } from '../ui.jsx';
 import { OBS_KIND_AR, OBS_SOURCE_AR } from '../../../supabase/functions/leaders-api/observations.js';
@@ -134,7 +134,8 @@ export function InitiativePanel({ participantId, canWrite = false, onChanged }) 
       <div className="la-row between">
         <h3 id="pf-cap-h">{d.doc?.meta?.initiative || 'مبادرة بلا اسم بعد'}</h3>
         <span className="la-row">
-          <button type="button" className="btn-sm primary" onClick={() => openDoc(d.doc, toast)}>اقرأ الوثيقة كما هي الآن</button>
+          <FinalDocExport participantId={participantId} approved={c.status === 'approved'} />
+          <button type="button" className="btn-sm ghost" onClick={() => openDoc(d.doc, toast)}>اقرأ الوثيقة كما هي الآن</button>
           {/* صفحة المراجعة متاحة دائمًا: تُبنى من حالته الآن ولو لم يُنشأ له صف (admin.capstone لا يكتب عند القراءة) */}
           <a className="btn-sm ghost" href={`#/leaders/capstones/${encodeURIComponent(participantId)}`}>صفحة المراجعة</a>
         </span>

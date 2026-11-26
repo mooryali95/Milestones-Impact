@@ -76,10 +76,11 @@ function Meter({ value, min }) {
 // (رابط الراعي) يتركها فتُفتح هنا متزامنة أيضًا
 // keepReadiness: قراءة داخلية (الخبير) تبقي الجاهزية
 // kind: 'working' ملف العمل الكامل، أو 'institutional' الوثيقة المؤسسية؛ المحجوبة تعيد { blocked, message }
-export async function openCapstoneDoc(doc, win = window.open('', '_blank'), { keepReadiness = false, kind = 'working' } = {}) {
+// annex: ملحق المراجع بطلب صريح (المرحلة 21)، تمرره شاشة الخبير وحدها. دونه لا يُرسم ولو حملت الوثيقة الحقل
+export async function openCapstoneDoc(doc, win = window.open('', '_blank'), { keepReadiness = false, kind = 'working', annex = false } = {}) {
   const [{ writeDocument }, { withoutReadiness }, { renderInitiative }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/institutional.js')]);
   // نسخة تخرج من المنصة (طباعة المشارك، ورابط الراعي): بلا نسبة الجاهزية (قرار المالك 2026-11-24)
-  const r = renderInitiative(keepReadiness ? doc : withoutReadiness(doc), kind);
+  const r = renderInitiative(keepReadiness ? doc : withoutReadiness(doc), kind, { annex });
   if (r.blocked) { win?.close(); return r; }
   return writeDocument(win, r.meta, r.body);
 }

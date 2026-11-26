@@ -9,13 +9,13 @@
 // المصدر واحد: وثيقة الخادم (capstone.doc أو لقطة الاعتماد)؛ ملف العمل الكامل من المصدر نفسه في capstone.js capstoneReport.
 // المسودة الحية تُعلَّم بتاريخ بنائها وبصمتها، والمعتمدة بتاريخ اعتمادها وبصمتها المجمّدة ورابط تحققها.
 import QR from 'qrcode';
-import { esc, kpis, section, SEAL, structuralAccent } from './doc.js';
-import { cleanDoc, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
+import { esc, isRaw, kpis, raw, section, SEAL, structuralAccent } from './doc.js';
+import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
 import { DOC_LIVE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
 import { SLICES, termsAt, trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
-import { capstoneReport, heatmap, levelAnnex, pdfFileName, paras, STYLE, tableOf } from './capstone.js';
+import { capstoneReport, heatmap, levelAnnex, pdfFileName, paras, STYLE, tableOf, withoutReadiness } from './capstone.js';
 import { costLabel, dateAr, parseNumber, RISK_HIGH, RISK_MID } from '../../../supabase/functions/leaders-api/capstone.js';
 import { costBarsSvg, ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
@@ -117,7 +117,7 @@ function field(doc, k, f, label) {
 }
 const grid = (pairs) => {
   const ok = pairs.filter(([, v]) => has(v));
-  return ok.length ? `<div class="in-grid">${ok.map(([k, v]) => `<div><span>${esc(k)}</span><p>${v && typeof v === 'object' && 'html' in v ? v.html : esc(v)}</p></div>`).join('')}</div>` : '';
+  return ok.length ? `<div class="in-grid">${ok.map(([k, v]) => `<div><span>${esc(k)}</span><p>${isRaw(v) ? v.html : esc(v)}</p></div>`).join('')}</div>` : '';
 };
 
 // ── المخاطر مرتبة بالدرجة (الاحتمال × الأثر)، أعلاها أولًا، من سجل المخاطر كما كُتب ──
@@ -181,7 +181,8 @@ export function identityOf(m) {
  * النسخة المؤسسية من وثيقة الخادم (docFor أو لقطة الاعتماد).
  * يعيد { blocked: true, missing } إن لم تكتمل الأسئلة العشرة، وإلا { meta, body, fingerprint, form }
  */
-export function institutionalReport(input) {
+export function institutionalReport(input, options = {}) {
+  const opt = docOptions(options, 'institutional');
   // المعتمدة: محتواها النظيف وبصمتها وشكلها مجمّدة في اللقطة لحظة الاعتماد (capstone.ts approve: snapshot.issued)،
   // فلا يغيّر تعديل لاحق ولا تحسين في قواعد الجودة ولا تغيّر مسار المشارك وثيقةً صدرت. غير المعتمدة تُبنى لحظة العرض
   const frozen = input?.meta?.status === 'approved' && input?.issued?.sections ? input.issued : null;
@@ -191,11 +192,11 @@ export function institutionalReport(input) {
   const m = doc.meta || {};
   const form = formOfDoc(frozen ? input : doc);
   const approved = m.status === 'approved';
-  const fp = frozen?.fingerprint || fingerprint(input);
+  const fp = docFingerprint(input);
   const cost = doc.cost?.withContingency > 0 ? doc.cost : null;
   const c = charterData(doc);
   const duration = durationAr(m.start, m.end);
-  const durationHtml = duration && { html: [m.start && `من ${esc(dateAr(m.start))}`, m.end && `${m.start ? 'إلى' : 'حتى'} ${esc(dateAr(m.end))}`].filter(Boolean).join(' ') };
+  const durationHtml = duration && raw([m.start && `من ${esc(dateAr(m.start))}`, m.end && `${m.start ? 'إلى' : 'حتى'} ${esc(dateAr(m.end))}`].filter(Boolean).join(' '));
   const funding = val(doc, 'cost-plan', 'funding');
   const parts = [];
   const add = (en, ar, body, note) => { if (body && body.replace(/<[^>]+>/g, '').trim()) parts.push([en, ar, body, note]); };
@@ -347,17 +348,17 @@ export function institutionalReport(input) {
     ['تاريخ الاعتماد', approved ? fmt(m.approved_at) : 'لم تُعتمد بعد', null],
   ];
   const built = fmtAt(m.generated_at) || fmtAt(new Date());
-  const url = approved ? verifyUrl(fp, m.app_url) : null;
+  const url = approved && opt.qr ? verifyUrl(fp, m.app_url) : null;
   add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">معتمدة · ${esc(fmt(m.approved_at) || '')}</span>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
     <div class="in-sign">${signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('')}</div>
     <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span><span>FINGERPRINT <b>${esc(fp)}</b></span></p>
-    ${url ? `<div class="in-verify">${qrSvg(url)}<p>امسح الرمز أو افتح الرابط لتتحقق أن هذه النسخة المعتمدة كما صدرت: يعرض رقمها وتاريخ اعتمادها وبصمتها.<br><a href="${esc(url)}">${esc(url)}</a></p>${SEAL()}</div>` : '<div class="in-verify"><p>نسخة حية تُبنى من بيانات المبادرة لحظة طلبها، فتعكس آخر ما كُتب. لا تصلح للتحقق قبل الاعتماد.</p></div>'}</div>`,
+    ${url ? `<div class="in-verify">${qrSvg(url)}<p>امسح الرمز أو افتح الرابط لتتحقق أن هذه النسخة المعتمدة كما صدرت: يعرض رقمها وتاريخ اعتمادها وبصمتها.<br><a href="${esc(url)}">${esc(url)}</a></p>${SEAL()}</div>` : approved ? `<div class="in-verify">${SEAL()}</div>` : '<div class="in-verify"><p>نسخة حية تُبنى من بيانات المبادرة لحظة طلبها، فتعكس آخر ما كُتب. لا تصلح للتحقق قبل الاعتماد.</p></div>'}</div>`,
   approved ? 'بصمة النسخة تتغير بأي تعديل في محتواها: تطابقها مع صفحة التحقق يثبت أن ما بين يديك هو النسخة المعتمدة.' : null);
 
   const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
   const { brand, accent } = identityOf(m);
-  const decisionPage = decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">Decision</span><h2>ما المطلوب منك</h2><p>صفحة واحدة لصاحب القرار، والتفصيل في الأبواب بعدها.</p></div></header>${decision}</section>` : '';
-  const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; }</style>` + decisionPage + parts.map(opener).join('');
+  const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">Decision</span><h2>ما المطلوب منك</h2><p>صفحة واحدة لصاحب القرار، والتفصيل في الأبواب بعدها.</p></div></header>${decision}</section>` : '';
+  const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; }</style>` + (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) : '');
   // بلا اسم للمبادرة: العنوان اسم الوثيقة وحده، فلا يتكرر في العنوان الفرعي
   const title = m.initiative || form.name;
   const subtitle = [m.initiative ? form.name : null, m.scope_title].filter(Boolean).join(' · ') || null;
@@ -380,18 +381,67 @@ export function institutionalReport(input) {
   };
 }
 
+/**
+ * معامل الخيارات الموحد للوثيقة (المرحلة 21): { annex, decision, appendix, qr }
+ *   annex: ملحق المراجع (مستوى الوثيقة وموقع كل فصل منه). لا يُرسم إلا بطلب صريح من شاشة مراجع (الخبير والإدارة)،
+ *     ولو وصل الحقل review_levels، فللحماية حاجزان: الخادم والعارض
+ *   decision: صفحة «ما المطلوب منك» في المؤسسية. appendix: ملحق «ما ينقص» في ملف العمل. qr: رمز التحقق في المعتمدة
+ * والأنواع الأربعة إعدادات مسبقة له لا قوالب موازية. ما لا يُمرَّر يأخذ قيمة النوع
+ */
+export const DOC_PRESETS = Object.freeze({
+  working: Object.freeze({ annex: false, decision: true, appendix: true, qr: true }),
+  institutional: Object.freeze({ annex: false, decision: true, appendix: true, qr: true }),
+  external: Object.freeze({ annex: false, decision: true, appendix: false, qr: true }),
+  reader: Object.freeze({ annex: false, decision: true, appendix: false, qr: true }),
+});
+// نسختا تحميل الأدمن للوثيقة النهائية: «للإرسال» (الافتراض المعتمد) بلا ملحق المراجع ولا صفحة القرار ولا ملحق ما ينقص، و«كاملة» بكل الأقسام
+export const EXPORT_PRESETS = Object.freeze({
+  send: Object.freeze({ annex: false, decision: false, appendix: false, qr: true }),
+  full: Object.freeze({ annex: true, decision: true, appendix: true, qr: true }),
+});
+export const DOC_OPTION_KEYS = ['annex', 'decision', 'appendix', 'qr'];
+/** الخيارات بعد دمجها بإعداد النوع: قيم منطقية وحدها، وما سواها يُهمل */
+export function docOptions(options = {}, kind = 'working') {
+  const base = DOC_PRESETS[kind] || DOC_PRESETS.working;
+  const o = options && typeof options === 'object' ? options : {};
+  return Object.fromEntries(DOC_OPTION_KEYS.map((k) => [k, typeof o[k] === 'boolean' ? o[k] : base[k]]));
+}
+
 /** الوثيقتان من مصدر واحد: 'institutional' (النسخة المؤسسية) أو 'working' (ملف العمل الكامل). يعيد { meta, body } أو { blocked, message } */
-// 'external': لمن هو خارج العمل (الراعي، الجهة، رابط المشاركة، الخبير): المؤسسية إن اكتملت، وإلا صفحة «قيد الإعداد» مهذبة، ولا ملحق ولا ختم مسودة
-export function renderInitiative(doc, kind = 'working') {
-  // 'reader': من يراجع قبل الاعتماد (الراعي ليؤيد، والخبير): المؤسسية إن اكتملت، وإلا ملف العمل بلا ملحق ولا ختم
+// 'external': لمن هو خارج العمل (الراعي، الجهة، رابط المشاركة): المؤسسية إن اكتملت، وإلا صفحة «قيد الإعداد» مهذبة، ولا ملحق ولا ختم مسودة،
+// ولا ملحق مراجع أبدًا مهما مُرِّر
+// 'reader': من يقرأ قبل الاعتماد (الراعي ليؤيد، والخبير بوضع القارئ): المؤسسية إن اكتملت، وإلا ملف العمل بلا ملحق «ما ينقص» ولا ختم.
+// ملحق المراجع لا يُلحق إلا بـ { annex: true } صريح، تمرره شاشة الخبير (ExpertFile) وشاشات الإدارة وحدها
+export function renderInitiative(doc, kind = 'working', options = {}) {
+  const opt = docOptions(kind === 'external' ? { ...options, annex: false } : options, kind);
   if (kind === 'external' || kind === 'reader') {
-    const r = institutionalReport(doc);
-    if (!r.blocked) return kind === 'reader' && doc?.review_levels ? { ...r, body: r.body + levelAnnex(doc) } : r;
-    return kind === 'reader' ? capstoneReport(doc, { appendix: false }) : pendingReport(doc);
+    const r = institutionalReport(doc, opt);
+    if (!r.blocked) return r;
+    return kind === 'reader' ? capstoneReport(doc, { ...opt, appendix: false }) : pendingReport(doc);
   }
-  if (kind !== 'institutional') return capstoneReport(doc);
-  const r = institutionalReport(doc);
+  if (kind !== 'institutional') return capstoneReport(doc, opt);
+  const r = institutionalReport(doc, opt);
   return r.blocked ? { blocked: true, missing: r.missing, message: missingMessage(r.missing, formOfDoc(doc).name) } : r;
+}
+
+/**
+ * الوثيقة النهائية كما يحمّلها الأدمن (المرحلة 21): المؤسسية بالخيارات، وإن لم تكتمل فملف العمل بالخيارات نفسها.
+ * بلا نسبة الجاهزية دائمًا (withoutReadiness)، وغير المعتمدة بختم ظاهر «نسخة حية غير معتمدة» فلا تُرسل على أنها نهائية
+ */
+export function finalDocument(doc, options = EXPORT_PRESETS.send) {
+  const src = withoutReadiness(doc);
+  const opt = docOptions(options, 'institutional');
+  const inst = institutionalReport(src, opt);
+  const out = inst.blocked ? capstoneReport(src, { ...opt, final: true }) : inst;
+  return { ...out, kind: inst.blocked ? 'working' : 'institutional' };
+}
+
+/** وصف ما سيحويه الملف في سطر، للوح التحميل */
+export function exportSummary(options = EXPORT_PRESETS.send, { approved = false } = {}) {
+  const o = docOptions(options, 'institutional');
+  const has = [o.decision && 'صفحة القرار', o.appendix && 'ملحق ما ينقص', o.annex && 'ملحق المراجع', approved && o.qr && 'رمز التحقق'].filter(Boolean);
+  const not = [!o.decision && 'صفحة القرار', !o.appendix && 'ملحق ما ينقص', !o.annex && 'ملحق المراجع', approved && !o.qr && 'رمز التحقق'].filter(Boolean);
+  return [`الوثيقة${has.length ? ` مع ${has.join(' و')}` : ''}`, not.length ? `بلا ${not.join(' ولا ')}` : '', 'وبلا نسبة الجاهزية', approved ? '' : 'وبختم «غير معتمدة»'].filter(Boolean).join('، ') + '.';
 }
 
 /** رسالة ما ينقص لإصدار النسخة المؤسسية، بلغة المشارك */

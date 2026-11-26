@@ -249,10 +249,19 @@ export const initiativeOf = (charterAnswers) => String(charterAnswers?.title || 
 // D18: الوثيقة كما تصل الجهة أو راعي المبادرة: ملف تعريفها (ومستواها العام في اللقطات القديمة) ومسارها (بمحور أولويته) مشتقان من المستويات،
 // فلا يبقيان إلا بموافقة المشارك، ومع صلاحية المستويات حين يطّلع منسق الجهة
 // وبلا إذن تُحذف دفاعًا أي إشارة مستوى في الفصول: level، وتلميح التجميع joins (لا يجمع إلا التأسيسي، فيدل عليه)
-export const docLevelsFor = (/** @type {any} */ doc, /** @type {boolean} */ show) => (show || !doc?.meta ? doc : {
-  ...doc, meta: { ...doc.meta, level: null, profile: null, track: null },
-  sections: Array.isArray(doc.sections) ? doc.sections.map((/** @type {any} */ x) => { const { level: _l, joins: _j, ...rest } = x || {}; return rest; }) : doc.sections,
-});
+// وملحق المراجع (review_levels) لا يعبر هذا الحد أبدًا، بإذن أو بغيره (المرحلة 21): هو للمستشار والخبير والإدارة وحدهم
+export const withoutReviewLevels = (/** @type {any} */ doc) => {
+  if (!doc || typeof doc !== 'object' || !('review_levels' in doc)) return doc;
+  const { review_levels: _r, ...rest } = doc;
+  return rest;
+};
+export const docLevelsFor = (/** @type {any} */ doc, /** @type {boolean} */ show) => {
+  const d = withoutReviewLevels(doc);
+  return show || !d?.meta ? d : {
+    ...d, meta: { ...d.meta, level: null, profile: null, track: null },
+    sections: Array.isArray(d.sections) ? d.sections.map((/** @type {any} */ x) => { const { level: _l, joins: _j, ...rest } = x || {}; return rest; }) : d.sections,
+  };
+};
 
 import { depAr, scheduleOf } from './schedule.js';
 

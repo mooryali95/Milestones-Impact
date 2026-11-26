@@ -321,6 +321,13 @@ export function fingerprint(doc) {
   return (a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')).toUpperCase().match(/.{4}/g).join('-');
 }
 
+/** بصمة الوثيقة كما تُطبع: المجمّدة في issued للمعتمدة، وإلا المحسوبة من محتواها الآن. مصدر واحد للعارض (institutional.js)
+ * وللخادم حين يربط تذكرة PDF بالوثيقة (pdf-ticket.ts، المرحلة 21) */
+export function docFingerprint(doc) {
+  const frozen = doc?.meta?.status === 'approved' && doc?.issued?.sections ? doc.issued : null;
+  return frozen?.fingerprint || fingerprint(doc);
+}
+
 /** ما يُجمَّد في snapshot.issued لحظة الاعتماد: المحتوى النظيف (strict) وبصمة الخام */
 export function freezeIssued(snapshot) {
   const { doc } = cleanDoc(snapshot, { strict: true });
