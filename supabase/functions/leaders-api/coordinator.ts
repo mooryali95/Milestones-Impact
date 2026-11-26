@@ -5,17 +5,18 @@
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
 import { cohortMemberIds, journeyDefinition, orgCohortSetups } from './programs.ts';
-import { journeyMap, mapLanes, rosterAgrees, stageNow } from './journey-map.js';
+import { journeyMap, mapLanes, orgMapCohorts, rosterAgrees, stageNow } from './journey-map.js';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, orgJoinUrl, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
-import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
+import { orgCohort, coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 // لصفوف «المتابعة» في ملف الدفعة (rosterRows): القراءتان نفساهما اللتان في قائمة المشاركين
 import { baselineProgress, lastActiveFor } from './admin.ts';
 import { onboardingOf, STUCK_STEPS } from './onboarding.js';
 import { adminReport as impactReport, awaitingFor, confirmRater } from './impact.ts';
+import { orgRaterView } from './manager-rating.js';
 import { orgList as initiativesFor } from './capstone.ts';
 import { portfolioOutcomes } from './tracking.js';
 import { coordTeam } from './team.ts';
@@ -204,18 +205,30 @@ export async function dashboardFor(c: any) {
   const waiting = counted(pending);
   // خريطة الرحلة (قرار المالك 2026-11-11): مراحل برنامج دفعة الجهة، ومن يقف عند كل منها من الرحلات المحسوبة أعلاه نفسها.
   // الأسماء لصلاحية «القائمة»، وما ينقص كل شخص لصلاحية «النشاط»، وإلا أسباب مجمّعة بلا أسماء
-  const def: any = await journeyDefinition({ organization_id: c.organization_id });
-  const program = def.program_id ? (await db.from('programs').select('name').eq('id', def.program_id).maybeSingle()).data : null;
-  const mapStages = (def.stages || []).filter((s: any) => s.active !== false).sort((a: any, b: any) => a.sort - b.sort);
-  const journey_map: any = journeyMap({
-    stages: mapStages,
-    people: mapPeople(rows as any[], journeys),
-    cohort: def.cohort, program, list: perms.list !== false, activity: perms.activity === true,
-    // الموقوفة في دفعة الجهة (R2b) في مكانها باهتة بلا أعداد، كما في خريطة ملف الدفعة
-    off: def.stages_off || [],
-  });
-  // التوازي والمسار كما في ملف الدفعة (mapLanes)
-  journey_map.lanes = mapLanes(mapStages);
+  // خريطة لكل دفعة حالية للجهة (تصور المرحلة 4، م5): الأعضاء بإلحاقهم لا بجهتهم، والأكبر عددًا أولًا (الافتراضية في المحوّل).
+  // ولا دفعة حالية فيها أعضاء من الجهة: خريطة دفعة الجهة الواحدة (orgCohort) بكل أعضائها كما كانت
+  const orgCohortRows = [...(must(await db.from('cohorts').select('*').eq('organization_id', c.organization_id)) as any[] || []), ...(must(await db.from('cohorts').select('*').eq('is_default', true)) as any[] || [])];
+  const enrolled = await allFor((rows as any[]).map((r: any) => r.id), () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('participant_id').order('cohort_id'));
+  const groups: { cohort: any; ids: string[] | null }[] = orgMapCohorts({ cohorts: orgCohortRows, orgId: c.organization_id, ids: (rows as any[]).map((r: any) => r.id), enrollments: enrolled as any[] });
+  if (!groups.length) groups.push({ cohort: orgCohort(orgCohortRows, c.organization_id).cohort, ids: null });
+  const journey_maps: any[] = [];
+  for (const g of groups.slice(0, 8)) {
+    const def: any = await journeyDefinition({}, g.cohort);
+    const program = def.program_id ? (await db.from('programs').select('name').eq('id', def.program_id).maybeSingle()).data : null;
+    const mapStages = (def.stages || []).filter((s: any) => s.active !== false).sort((a: any, b: any) => a.sort - b.sort);
+    const inIt = g.ids ? new Set(g.ids) : null;
+    const map: any = journeyMap({
+      stages: mapStages,
+      people: mapPeople((rows as any[]).filter((r: any) => !inIt || inIt.has(r.id)), journeys),
+      cohort: def.cohort, program, list: perms.list !== false, activity: perms.activity === true,
+      // الموقوفة في دفعة الجهة (R2b) في مكانها باهتة بلا أعداد، كما في خريطة ملف الدفعة
+      off: def.stages_off || [],
+    });
+    // التوازي والمسار كما في ملف الدفعة (mapLanes)
+    map.lanes = mapLanes(mapStages);
+    journey_maps.push({ cohort_id: g.cohort?.id || null, name: g.cohort?.name || '', members: g.ids ? g.ids.length : (rows as any[]).length, map });
+  }
+  const journey_map = journey_maps[0]?.map || null;
   return {
     success: true,
     // رابط تسجيل الموظفين (org-6): هو نفسه الذي تحمله رسالة دعوة المنسق (sendInvite) وبشرطها، لجهة نشطة وحدها،
@@ -234,6 +247,8 @@ export async function dashboardFor(c: any) {
     },
     participants,
     journey_map,
+    // خريطة لكل دفعة حالية (م5): المحوّل في البوابة يعرضها حين تكون أكثر من واحدة
+    journey_maps: journey_maps.length > 1 ? journey_maps.map(({ cohort_id, name, members, map }) => ({ cohort_id, name, members, map })) : null,
     // «فريق البرنامج» (تصور ربط الخبراء بالجهة، قرار المالك 2026-11-11): أسماء وأدوار بلا وسائل تواصل، بصلاحية «الفريق».
     // تعذّر قراءته يُقال في بطاقته ولا يُسقط اللوحة
     program_team: perms.team ? await coordTeam(c.organization_id, perms).catch((e) => { console.error('coord team', e); return { error: 'تعذّر قراءة فريق البرنامج الآن، حاول بعد قليل' }; }) : null,
@@ -254,9 +269,11 @@ export async function impactFor(c: any) {
   const paired = r.participants.filter((p: any) => p.dimensions);
   const hidden = paired.filter((p: any) => !shared.has(p.id)).length;
   const named = scores && (hidden === 0 || hidden >= MIN_COHORT);
+  // تقييم المدير (تصور المرحلة 3، القرار 4): مؤشر مجمع لخمسة فأكثر لكل بُعد، ولا تقدير مدير بعينه في صفوف الأسماء
+  const view = orgRaterView(r.cohort, named ? paired.filter((p: any) => shared.has(p.id)).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [], MIN_COHORT);
   return {
-    counts: r.counts, cohort: r.cohort, transfer: r.transfer, caution: r.caution,
-    participants: named ? paired.filter((p: any) => shared.has(p.id)).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [],
+    counts: r.counts, cohort: view.cohort, transfer: r.transfer, caution: r.caution,
+    participants: view.participants,
     ...(scores && !named ? { rows_withheld: true } : {}),
   };
 }
@@ -577,8 +594,10 @@ export async function weeklyReports() {
     if (c.last_report_at && isoWeek(new Date(c.last_report_at)) === week) continue;
     try {
       const d = await dashboardFor(c);
+      // مقيّمو 360 بانتظار تأكيده: من اللوحة نفسها (awaitingFor بشرط القائمة ومفتاح 360)، فما في البريد هو ما في اللوحة
+      const raters = (d as any).raters_pending || [];
       await db.from('org_coordinators').update({ last_report_at: new Date().toISOString() }).eq('id', c.id);
-      await sendMail(c.email, `ملخص ${c.organizations.name} الأسبوعي`, coordinatorWeeklyMail(c.full_name, c.organizations.name, d.kpis), [], { category: 'coord_digest', kind: 'bulk', ref: `coordinator:${c.id}`, recipient: { kind: 'coordinator', id: c.id }, expiresAt: new Date(Date.now() + 7 * 864e5).toISOString() });
+      await sendMail(c.email, `ملخص ${c.organizations.name} الأسبوعي`, coordinatorWeeklyMail(c.full_name, c.organizations.name, d.kpis, raters), [], { category: 'coord_digest', kind: 'bulk', ref: `coordinator:${c.id}`, recipient: { kind: 'coordinator', id: c.id }, expiresAt: new Date(Date.now() + 7 * 864e5).toISOString() });
       await audit('system', null, 'coordinator.weekly-report', 'org_coordinators', c.id);
       sent += 1;
     } catch (e) { console.error('weekly report', c.id, e); }

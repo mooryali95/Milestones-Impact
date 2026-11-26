@@ -30,18 +30,22 @@ const groupBtn = (nav, g) => nav.getByRole('button', { name: new RegExp(`^مجم
 
 test('خمس مجموعات بترتيبها وبنودها، والإعداد في الأسفل مطوي افتراضيًا', async ({ page }) => {
   const nav = await open(page, '#/leaders/overview');
-  await expect(nav.getByRole('group')).toHaveCount(5);
+  // الميزات مطفأة في هذه الخلفية: مجموعة «تجريبي» سادسة أخيرة (المرحلة 7)
+  await expect(nav.getByRole('group')).toHaveCount(6);
   for (const [i, g] of GROUPS.entries()) await expect(nav.getByRole('group').nth(i)).toHaveAttribute('aria-label', g);
+  await expect(nav.getByRole('group').nth(5)).toHaveAttribute('aria-label', 'تجريبي');
   const items = (g) => nav.getByRole('group', { name: g }).locator('button:not(.la-tab-group-label)');
-  await expect(items('العمل')).toHaveText([/نظرة عامة/, /المشاركون/, /الجهات/, /البرامج والدفعات/, /الحضور والجلسات/, /المبادرات/, /القاعة الحية/]);
+  await expect(items('العمل')).toHaveText([/نظرة عامة/, /المشاركون/, /الجهات/, /البرامج والدفعات/, /الحضور والجلسات/, /المبادرات/]);
   await expect(items('الأشخاص')).toHaveText([/الخبراء/]);
-  await expect(items('المنهج والمحتوى')).toHaveText([/الرحلة والمتطلبات/, /الكتاب الأم/, /كتاب القائد/, /بنك المحتوى/, /مختبر القائد/, /أسئلة القياس/, /المستويات والتسكين/, /المسارات الـ27/, /بنك كاتون/]);
-  // الأقسام المخفية عن المستخدمين (الميزات مطفأة في هذه الخلفية) آخر مجموعتها تحت «تجريبي» وبنقطتها
-  for (const [g, k] of [['العمل', 'القاعة الحية'], ['المنهج والمحتوى', 'بنك كاتون'], ['التقارير', 'تقييم 360']]) {
-    await expect(nav.getByRole('group', { name: g }).locator('.la-tab-trial')).toHaveText('تجريبي');
-    await expect(nav.getByRole('group', { name: g }).getByRole('button', { name: new RegExp(k) }).locator('.ft-hidden-dot')).toHaveCount(1);
-  }
-  await expect(items('التقارير')).toHaveText([/الرؤية الشاملة/, /قياس الأثر/, /تقييم 360/]);
+  await expect(items('المنهج والمحتوى')).toHaveText([/الرحلة والمتطلبات/, /الكتاب الأم/, /كتاب القائد/, /بنك المحتوى/, /مختبر القائد/, /أسئلة القياس/, /المستويات والتسكين/, /المسارات الـ27/]);
+  // الأقسام المخفية عن المستخدمين في مجموعة «تجريبي» أخيرة مطوية، بشارة باهتة ونقطة كل قسم
+  await expect(items('التقارير')).toHaveText([/الرؤية الشاملة/, /قياس الأثر/]);
+  await expect(groupBtn(nav, 'تجريبي')).toHaveAttribute('aria-expanded', 'false');
+  await expect(groupBtn(nav, 'تجريبي').locator('.la-trial-chip')).toHaveText('تجريبي');
+  await groupBtn(nav, 'تجريبي').click();
+  await expect(items('تجريبي')).toHaveText([/القاعة الحية/, /بنك كاتون/, /تقييم 360/]);
+  await expect(items('تجريبي').locator('.ft-hidden-dot')).toHaveCount(3);
+  await groupBtn(nav, 'تجريبي').click();
   await expect(groupBtn(nav, 'الإعداد')).toHaveAttribute('aria-expanded', 'false');
   await expect(items('الإعداد').first()).toBeHidden();
   for (const g of GROUPS.slice(0, 4)) await expect(groupBtn(nav, g)).toHaveAttribute('aria-expanded', 'true');

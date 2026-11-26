@@ -83,14 +83,15 @@ describe('تصفية التحليل بالدفعة (الرؤية الشاملة�
   ];
   // كما في insight.ts: دفعة المشارك من pickCohort، ومن بلا دفعة في «بلا دفعة»
   const grouped = pipelineBy(rows, (p) => { const c = pickCohort({ enrollments: enr[p.id] || [], cohorts, organizationId: p.organization_id || null }).cohort; return c ? { key: c.id, name: c.name } : { key: 'none', name: 'بلا دفعة' }; });
-  it('كل مشارك في دفعة واحدة: المنسحب من دفعة يُحسب في دفعة جهته، ومن بلا قيد ولا جهة في الافتراضية', () => {
+  // تصور المرحلة 4: لا استنتاج بالجهة، فمن لا إلحاق قائم له (المنسحب ومن بلا قيد) على الاحتياط العام
+  it('كل مشارك في دفعة واحدة: المنسحب من دفعة ومن بلا قيد في الافتراضية، لا في دفعة جهته', () => {
     const by = Object.fromEntries(grouped.groups.map((g) => [g.key, g.total]));
-    expect(by).toEqual({ c1: 1, c2: 2, d0: 1 });
+    expect(by).toEqual({ c1: 1, c2: 1, d0: 2 });
     expect(grouped.total.total).toBe(rows.length);
   });
   it('الدفعة المختارة: صفها وحده في الجدول والبطاقات، وغيرها لا يتسرب', () => {
     const f = focusedGroup(grouped, 'c2');
-    expect([f.key, f.total]).toEqual(['c2', 2]);
+    expect([f.key, f.total]).toEqual(['c2', 1]);
     expect(pipelineRows(grouped.groups, 'c2').map((g) => g.key)).toEqual(['c2']);
     expect(pipelineRows(grouped.groups, null)).toHaveLength(grouped.groups.length);
   });

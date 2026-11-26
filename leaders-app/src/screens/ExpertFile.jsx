@@ -252,7 +252,9 @@ function MentorNudge({ pid }) {
 
 // الرحلة بعين الخبير كما يراها المشارك (التوازي 2): المراحل التي تسير معًا كتلة واحدة «تسير معًا»، ثم المسارات المستمرة
 // والخدمات لمن يريد، فلا تُقرأ مرحلتان متوازيتان كأنهما متتاليتان
-const stageRow = (s) => <li key={s.key}><span>{s.title_ar}</span><small className="muted">{STAGE_STATUS_AR[s.status]}{s.total ? ` · ${s.done}/${s.total}` : ''}</small></li>;
+// وسم البند التلقائي غير القابل للتجاوز (auto_note، مثل «اكتمل بعدد أقل» في E-360، تصور المرحلة 1 البند 6) يراه المرشد بجانب مرحلته
+const autoNotes = (s) => (s.items || []).filter((i) => i.auto_note && !i.override_ok).map((i) => `${i.title_ar}: ${i.auto_note}`);
+const stageRow = (s) => <li key={s.key}><span>{s.title_ar}</span><small className="muted">{STAGE_STATUS_AR[s.status]}{s.total ? ` · ${s.done}/${s.total}` : ''}{autoNotes(s).map((t) => ` · ${t}`).join('')}</small></li>;
 function JourneyShape({ shape }) {
   return (
     <>
@@ -382,10 +384,48 @@ export default function ExpertFile({ id, onBack }) {
           <p className="muted small">المحادثة نفسها خاصة به ولا تظهر لك.</p>
         </section>
       )}
+      {d.commitments && <CoachCommitments c={d.commitments} />}
+      {d.manager_rating && <CoachManagerRating list={d.manager_rating} />}
       {d.mentor && <MentorNudge pid={p.id} />}
       <PeerPending peer={d.peer} advisor={advisor} reload={load} />
       <FinalEval pid={p.id} f={d.final} advisor={advisor} reload={load} />
       {answers && advisor && <ExpertAnswers participant={p} onClose={() => setAnswers(false)} />}
     </div>
+  );
+}
+
+// التزامات ما بعد الورش للمستشار (تصور المرحلة 3 §5.2): من طبّق ومن لم يطبق ومن ينتظر، لاختيار حديث الجلسة
+function CoachCommitments({ c }) {
+  const groups = [['طبّق', c.applied], ['لم يطبق', c.not_applied], ['ينتظر المراجعة', c.pending]].filter(([, l]) => l.length);
+  if (!groups.length) return null;
+  return (
+    <section className="card stack" aria-label="الالتزامات بعد الورش">
+      <h3>الالتزامات بعد الورش</h3>
+      {groups.map(([title, list]) => (
+        <div key={title} className="stack">
+          <b className="small">{title} ({list.length})</b>
+          <ul className="small">
+            {list.map((x) => <li key={x.id}>«{x.action}»{x.session ? ` · ${x.session}` : ''}{x.outcome_ar ? ` · ${x.outcome_ar}` : ''}{x.learned ? `: ${x.learned}` : ''}</li>)}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// فقرات تقدير خانة المدير بنصها وإجاباتها، للمستشار وحده (تصور المرحلة 3، القرار 4)
+function CoachManagerRating({ list }) {
+  return (
+    <section className="card stack" aria-label="تقدير المدير">
+      <h3>تقدير المدير</h3>
+      {list.map((r) => (
+        <div key={r.phase} className="stack">
+          <b className="small">{r.phase === 'pre' ? 'قبل البرنامج' : 'بعد البرنامج'}</b>
+          <ul className="small">
+            {r.items.map((x, i) => <li key={i}>{x.text}: {x.now}{x.before ? ` (قبل: ${x.before})` : ''}</li>)}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }

@@ -58,7 +58,7 @@ describe('مشاريع التخرج: «قيد البناء» و«الكل» ور
   const caps = [{ status: 'draft' }, { status: 'draft' }, { status: 'submitted' }, { status: 'approved' }];
 
   it('للمسودات تصفية، و«الكل» يعرض كل الحالات', () => {
-    expect(CAP_PRESETS.map((p) => p.label)).toEqual(['بانتظار مراجعتك', 'بانتظار الراعي', 'أُعيد للتحسين', 'معتمد', 'قيد البناء', 'الكل']);
+    expect(CAP_PRESETS.map((p) => p.label)).toEqual(['بانتظار مراجعتك', 'بانتظار الراعي', 'انتهت مهلة الراعي', 'أُعيد للتحسين', 'معتمد', 'قيد البناء', 'الكل']);
     expect(presetCounts(caps, CAP_PRESETS)).toMatchObject({ draft: 2, submitted: 1, all: 4 });
     expect(applyFilters(caps, { presets: CAP_PRESETS }, { view: 'all' })).toHaveLength(4);
   });
