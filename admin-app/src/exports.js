@@ -23,12 +23,16 @@ export function subtitleFor(which, n, total, noun = 'سجل') {
 }
 
 // ── أي أعمدة ──
-/** الأعمدة المختارة بترتيب تعريفها. بلا اختيار محفوظ أو باختيار لا يطابق شيئًا: الكل */
+/** الأعمدة المختارة بترتيب تعريفها. بلا اختيار محفوظ أو باختيار لا يطابق شيئًا: الكل عدا الحساس.
+ *  عمود { sensitive: true } (بريد، جوال، نص حر) لا يُختار افتراضيًا، ويُصدَّر إن اختاره المدير صراحة. */
 export function chosenColumns(columns, keys) {
-  if (!Array.isArray(keys)) return columns;
+  const base = columns.some((c) => c.sensitive) ? columns.filter((c) => !c.sensitive) : columns;
+  if (!Array.isArray(keys)) return base.length ? base : columns;
   const picked = columns.filter((c) => keys.includes(c.key));
-  return picked.length ? picked : columns;
+  return picked.length ? picked : (base.length ? base : columns);
 }
+/** الأعمدة الحساسة بين المختارة (للتنبيه في نافذة التصدير) */
+export const sensitivePicked = (columns, keys) => columns.filter((c) => c.sensitive && keys.includes(c.key));
 const colsKey = (scope) => `mi_admin_cols_${scope}`;
 export function loadColumns(scope) {
   try { const v = JSON.parse(localStorage.getItem(colsKey(scope))); return Array.isArray(v) ? v : null; } catch { return null; }

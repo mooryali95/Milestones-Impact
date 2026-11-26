@@ -32,6 +32,8 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
   const [views, setViews] = useState(() => loadViews(scope));
   const [more, setMore] = useState(false);
   const chips = activeChips(state, fields);
+  // حقل { hidden: true } يُرشِّح ويظهر رقاقةً ويُحفظ في الرابط، ولا قائمة له هنا (تكتبه بطاقات FilterCards مثلًا)
+  const visible = fields.filter((f) => !f.hidden);
   const filtered = isFiltered(state);
 
   const save = () => {
@@ -45,13 +47,13 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
         <div className="search-wrap flt-search">
           <input className="search-input" type="search" aria-label="بحث" placeholder={placeholder || 'ابحث'} value={state.q || ''} {...ltrDigits(state.q)} onChange={(e) => set({ q: e.target.value })} />
         </div>
-        {fields.slice(0, more ? fields.length : 3).map((f) => (
+        {visible.slice(0, more ? visible.length : 3).map((f) => (
           <select key={f.key} className={`filter-select${state[f.key] ? ' on' : ''}`} aria-label={f.aria || f.label} value={state[f.key] || ''} onChange={(e) => set({ [f.key]: e.target.value })}>
             <option value="">{f.all || `كل ${f.label}`}</option>
             {(f.type === 'period' ? PERIODS : f.options || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         ))}
-        {fields.length > 3 && <button type="button" className="flt-more" aria-expanded={more} onClick={() => setMore(!more)}>{more ? 'فلاتر أقل' : `+ ${fields.length - 3} فلاتر`}</button>}
+        {visible.length > 3 && <button type="button" className="flt-more" aria-expanded={more} onClick={() => setMore(!more)}>{more ? 'فلاتر أقل' : `+ ${visible.length - 3} فلاتر`}</button>}
         {sorts && (
           <select className={`filter-select${state.sort ? ' on' : ''}`} aria-label="الترتيب" value={state.sort || ''} onChange={(e) => set({ sort: e.target.value })}>
             {sorts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -97,6 +99,29 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
           {capped.onSearch && !(state.q || '').trim() && <span> اكتب في البحث ثم اختر «ابحث في الكل».</span>}
         </div>
       )}
+    </div>
+  );
+}
+
+// بطاقات الرأس المرشِّحة (مشتركة): كل بطاقة زر يكتب قيمته في حقل واحد من useFilters (state[field])، فلا مصدر ترشيح ثانٍ:
+// الرابط والرقاقة والتصدير يرون الشيء نفسه. ضغطة ثانية على البطاقة المختارة تلغيها. counts من القائمة كلها لا المرشَّحة.
+// cards: [{ key, label, sub?, tone? }] · clearLabel: رابط «الكل» الصغير (يظهر حين تكون بطاقة مختارة)
+export function FilterCards({ cards, field, state, set, counts = {}, loading = false, label = 'ترشيح سريع', clearLabel = 'الكل', total }) {
+  const cur = state[field] || '';
+  return (
+    <div className="fcards" role="group" aria-label={label}>
+      {cards.map((c) => {
+        const on = cur === c.key;
+        return (
+          <button key={c.key} type="button" className={`fcard${c.tone ? ` t-${c.tone}` : ''}${on ? ' on' : ''}`} aria-pressed={on}
+            onClick={() => set({ [field]: on ? '' : c.key })}>
+            <span className="fcard-l">{c.label}</span>
+            <span className="fcard-v">{loading ? '—' : (counts[c.key] ?? 0)}</span>
+            {c.sub && <span className="fcard-s">{c.sub}</span>}
+          </button>
+        );
+      })}
+      {cur && <button type="button" className="flt-link fcards-all" onClick={() => set({ [field]: '' })}>{clearLabel}{total != null ? ` (${total})` : ''}</button>}
     </div>
   );
 }

@@ -292,14 +292,14 @@ test.describe('المرحلة 3', () => {
   test('طلبات التواصل على الشاشة العريضة: النقر يعرض الرسالة في لوحة جانبية غير حاجبة', async ({ page }) => {
     await setup(page, '#/contacts');
     const pane = page.locator('aside.ct-pane');
-    await expect(pane).toContainText('اختر طلبًا من القائمة');
+    await expect(pane).toHaveCount(0);   // الجدول بالعرض كله حتى يُختار طلب
     await page.getByText('ريم السالم').first().click();
     await expect(page.getByRole('complementary', { name: 'معاينة طلب ريم السالم' })).toContainText('نرغب في تسجيل عشرين من قادتنا');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByText('فهد العتيبي').first().click();
     await expect(page.getByRole('complementary', { name: 'معاينة طلب فهد العتيبي' })).toContainText('سؤال عن مقياس الجاهزية');
     await page.getByRole('button', { name: 'إغلاق المعاينة' }).click();
-    await expect(pane).toContainText('اختر طلبًا من القائمة');
+    await expect(pane).toHaveCount(0);
     await shot(page, 'contacts-pane');
   });
 
