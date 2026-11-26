@@ -148,10 +148,8 @@ for (const form of ['card', 'charter', 'case']) {
       const r = inspect(buf);
       const [min, max] = FORMS[form].pages;
       expect(r.pages, `صفحات ${form}/${state}`).toBeGreaterThanOrEqual(min);
-      // معروف (المرحلة 30): البطاقة بالوثيقة المرجعية الكاملة تخرج 6 صفحات ومداها 3 إلى 5 (باب «المعالم» وصفحة الاعتماد كلٌّ في صفحة).
-      // يُستثنى حد الصفحات الأعلى للبطاقة وحده بملاحظة ظاهرة، وتبقى بقية الفحوص واللقطات صارمة. يُرفع الاستثناء مع مرحلة إصلاح تخطيط البطاقة
-      if (form === 'card' && r.pages > max) test.info().annotations.push({ type: 'known-gap', description: `البطاقة ${r.pages} صفحات ومداها ${min} إلى ${max}: متابَع في مرحلة تخطيط البطاقة` });
-      else expect(r.pages, `صفحات ${form}/${state}`).toBeLessThanOrEqual(max);
+      // المرحلة 30 (إكمال): الحد الأعلى مفروض على الأشكال الثلاثة، والبطاقة منها بلا استثناء
+      expect(r.pages, `صفحات ${form}/${state}`).toBeLessThanOrEqual(max);
       // صورة صفحة في كل صفحة، والعلامة في كل صفحة من الحية ولا في صفحة من المعتمدة
       expect(r.draws.every((n) => n.length >= 1)).toBe(true);
       expect(r.marks).toEqual(Array(r.pages).fill(state === 'live'));

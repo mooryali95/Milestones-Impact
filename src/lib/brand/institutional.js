@@ -122,6 +122,32 @@ body { font-weight: 400; }
 .in-chart text { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; }
 </style>`;
 
+// المرحلة 30 (إكمال): بطاقة المبادرة ضمن 3 إلى 5 صفحات (الغلاف، القرار، البطاقة وخطة 90 يومًا، الاعتماد).
+// تكثيف للبطاقة وحدها بلا حذف محتوى ولا نزول عن السلم الطباعي (متن 10.5pt، وجداول 9pt): أبواب متصلة بفاصل أقصر،
+// وخلايا البطاقة بقدر محتواها، وصفحة القرار بمسافات أضيق لتبقى صفحة واحدة
+export const LEAN_STYLE = `<style>
+.in-lean-doc .in-sec { margin-top: 8mm; }
+.in-lean-doc .in-sec:first-child { margin-top: 0; }
+.in-lean-doc .in-open { margin-bottom: 4mm; padding-top: 3.5mm; padding-bottom: 3mm; }
+.in-lean-doc .in-lean { grid-template-columns: 1fr 1fr; grid-auto-flow: row; gap: 2.5mm; margin-bottom: 4mm; }
+.in-lean-doc .in-lean > div { min-height: 0; padding: 2.5mm 3mm; }
+.in-lean-doc .in-lean p { line-height: 1.6; }
+.in-lean-doc .in-lead { margin-bottom: 4mm; }
+.in-lean-doc .in-90 { margin-bottom: 4mm; }
+.in-lean-doc .in-dec .q { padding: 3mm 4mm; margin-bottom: 4mm; }
+.in-lean-doc .in-dec .in-grid { gap: 3mm 8mm; margin-bottom: 3mm; }
+.in-lean-doc .in-dec h3 { margin: 2mm 0 2mm; }
+.in-lean-doc .in-dec .in-cards { margin-bottom: 3mm; }
+.in-lean-doc .in-dec .q p { font-size: 11pt; line-height: 1.6; }
+.in-lean-doc .in-dec .in-strip { margin-top: 2.5mm; }
+.in-lean-doc .in-dec .q .in-choices { margin-top: 2.5mm; }
+.in-lean-doc .in-dec .in-grid p { line-height: 1.65; margin-top: .4mm; }
+.in-lean-doc .in-dec .in-card { padding: 2.5mm 3mm; }
+.in-lean-doc .in-dec .in-card p { line-height: 1.55; }
+.in-lean-doc .in-dec .in-grid > div { padding-top: 1.5mm; }
+.in-lean-doc .in-dec > .in-open p { margin-top: 1mm; }
+</style>`;
+
 export { fingerprint };
 
 const sec = (doc, k) => (doc.sections || []).find((s) => s.key === k) || null;
@@ -459,7 +485,8 @@ export function institutionalReport(input, options = {}) {
   const toc = lean ? '' : `<nav class="in-toc" aria-labelledby="in-toc-h"><span id="in-toc-h">${esc(DOC_DOORS_AR.toc)}</span><ol>${parts.map(([en, ar], i) => `<li><a href="#${doorId(en)}">${doorNo(en, i)} ${esc(ar)}</a><span class="cp-pgno" data-ref="#${doorId(en)}"></span></li>`).join('')}</ol></nav>`;
   const { brand, accent } = identityOf(m);
   const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">${esc(DOC_DECISION_AR.eyebrow)}</span><h2>${esc(DOC_DECISION_AR.title)}</h2><p>${esc(DOC_DECISION_AR.lead)}</p></div></header>${decision}${toc}</section>` : '';
-  const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; --acc-text: ${accentText(accent)}; }</style>` + (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
+  const inner = (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
+  const body = STYLE + IN_STYLE + (lean ? LEAN_STYLE : '') + `<style>:root { --acc: ${accent}; --acc-text: ${accentText(accent)}; }</style>` + (lean ? `<div class="in-lean-doc">${inner}</div>` : inner);
   // بلا اسم للمبادرة: العنوان اسم الوثيقة وحده، فلا يتكرر في العنوان الفرعي
   const title = m.initiative || form.name;
   const subtitle = [m.initiative ? form.name : null, m.scope_title].filter(Boolean).join(' · ') || null;
