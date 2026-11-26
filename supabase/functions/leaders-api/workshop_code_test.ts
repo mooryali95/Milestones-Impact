@@ -1,6 +1,7 @@
 // الأرقام الستة وعرض الخبير (W2، تصور الحضور 2026-11-18 ب5.5 البنود 1 و4 و5 و8): من تعذّر عليه المسح يكتب الأرقام الستة
 // تحت الرمز المتغير فيُسجَّل حضوره بطريقة code، بحد للمحاولات الخاطئة، ولا تطابق الأرقام إلا جلسة مفتوحة له. والخبير المكلف
 // بدفعة الجلسة وحده يعرض الرمز من بوابته. على الموجّه الحقيقي (index.ts) بقاعدة في الذاكرة كما في workshop_scan_test.ts
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 
@@ -17,6 +18,7 @@ const get = (r: Row, path: string) => path.split('.').reduce((v: any, k) => (v =
 // جداول في الذاكرة بنمط seat_return_test.ts: eq وneq وin وis وnot(is null) وlimit وrange وmaybeSingle وsingle والعدّ،
 // والإدراج والتحديث والحذف. مرشحات الجداول المضمّنة (participants.is_demo) والنص (or وilike) والترتيب لا تغيّر النتيجة
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   let seq = 0;
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];

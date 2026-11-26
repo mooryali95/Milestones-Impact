@@ -11,7 +11,7 @@ import { counted, listed, simulated } from './counting.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { cohortMemberIds, cohortMembers, contentLevelsFor, defOf, extraWorkshopReq, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
-import { journeyFor } from './participant.ts';
+import { journeyFor, participantPriority } from './participant.ts';
 import { bdi, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
@@ -110,6 +110,8 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     // D02: بند القراءة على أبواب إصدار الدفعة، فلا يتغير مطلوبها بباب يُضاف أثناءها
     chapters: handbookModulesFor((mods.data || []).filter((m: any) => !inRelease || inRelease.has(m.id)).map((m: any) => ({ ...m, body_md: '1' })), levels),
     reading: Object.fromEntries((reading.data || []).map((r: any) => [r.module_id, r])),
+    // محور أولوية المسار لنطاق القراءة track (تصور المرحلة 3، 3.4). تعذّر قراءته يُبقي الإلزام كاملًا
+    priority: kinds.has('reading') && approved ? await participantPriority(p.id, levels).catch(() => null) : null,
     quizzes: Object.fromEntries((quiz.data || []).map((r: any) => [r.module_id, true])),
     video: Object.fromEntries((video.data || []).map((r: any) => [r.requirement_id, r])),
     workshops: (patch || ((x: any[]) => x))((ws.data || []).filter((s: any) => !s.cohort_id || s.cohort_id === cohortId)),
@@ -294,7 +296,7 @@ const DUP = (e: any) => String(e?.code) === '23505';
 async function recordAttendance(p: any, s: any, r: any, ctx: Ctx, method: 'qr' | 'code', after: Body | null) {
   // حساب العرض يُحاكى حضوره (تصور الحساب التجريبي 2026-11-19، المرحلة 0): يرى شاشة «سُجّل حضورك» نفسها، ولا يُكتب صف
   // حضور ولا سطر سجل، فلا يدخل «حضر» في شاشة القاعة ولا نظرة الأنشطة ولا بطاقة الدفعة، ولو مسح رمز جلسة حقيقية
-  if (simulated(p)) return { success: true, already: false, method, simulated: true, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: new Date().toISOString() };
+  if (simulated(p)) return { success: true, already: false, method, simulated: true, session: { id: s.id, title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: new Date().toISOString() };
   const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
   let already = !!prev;
   if (!prev) {
@@ -307,7 +309,7 @@ async function recordAttendance(p: any, s: any, r: any, ctx: Ctx, method: 'qr' |
       await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id, null, after);
     }
   }
-  return { success: true, already, method, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
+  return { success: true, already, method, session: { id: s.id, title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
 }
 
 // ── تسجيل الحضور بالأرقام الستة (W2، تصور الحضور 2026-11-18 ب5.5 البند 4) ──

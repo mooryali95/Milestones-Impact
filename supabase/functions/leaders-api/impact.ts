@@ -7,7 +7,8 @@ import { actionDeadline, all, allFor, audit, CONFIG, db, Fail, hash, logConsent,
 import { RATER_FLAG_AR, RATER_VERIFICATION_AR, raterVerification } from './domains.js';
 import { advisorOf } from './advisor.ts';
 import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.ts';
-import { requirementIdByCode } from './programs.ts';
+import { cohortOf, requirementIdByCode } from './programs.ts';
+import { managerItems, managerPreAllowed, managerView, NO_MANAGER, NO_MANAGER_AR, NO_PRE_RUNNING_AR, SELF_ONLY_AR } from './manager-rating.js';
 import { scopeOrg } from './admin.ts';
 import {
   compareAssessments, compositeReliability, coordPermissions, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
@@ -239,13 +240,10 @@ export function participantSummary(row: any) {
 }
 
 // ── المشارك: ملخصه بعد القياس البعدي، ودعوة مقيّميه ──
+// مفتاح 360 مطفأ: تقييم المدير قياسي بخانة واحدة (تصور المرحلة 3، القرار 2، manager_only)، ودعوة الزملاء مع 360.
+// المشارك يرى متوسط المدير لكل بُعد (manager) لا إجاباته (القرار 4)، و«ذاتي فقط» لمن اختاره (self_only)
 export async function mine(p: any) {
-  // مفتاح 360 مطفأ: تقدير المدير والزملاء مؤجل معه، فلا دعوة ولا قائمة (PreManager وبطاقة الدعوة تختفيان بهذه الإشارة).
-  // الملخص باقٍ، وما أُرسل من تقديرات يدخل حسابه كما هو
-  if (!(await features()).f360) {
-    const { rows } = await compareFor([p.id]);
-    return { success: true, summary: participantSummary(rows[p.id]), raters: [], limit: RATER_LIMIT, pre_available: false, invite: false };
-  }
+  const on = (await features()).f360;
   const [{ rows }, raters, pre] = await Promise.all([
     compareFor([p.id]),
     // كل الأعمدة حتى لا يُفشل عمود لم يُرحَّل القراءة (D19)، ثم ما يحق للمشارك رؤيته وحده
@@ -253,7 +251,34 @@ export async function mine(p: any) {
       .then((r: any) => ((must(r) ?? []) as any[]).map(raterView)),
     preRating(p),
   ]);
-  return { success: true, summary: participantSummary(rows[p.id]), raters, limit: RATER_LIMIT, pre_available: !!pre.ok, invite: true };
+  const nm = noManagerOf(p);
+  const list = on ? raters : raters.filter((r: any) => r.relation === 'manager');
+  return {
+    success: true, summary: participantSummary(rows[p.id]), manager: managerView(rows[p.id]?.dimensions), self_only: nm === 'self',
+    raters: list, limit: on ? RATER_LIMIT : 1, pre_available: !!pre.ok && nm !== 'self', pre_reason: pre.ok ? null : pre.reason,
+    invite: nm !== 'self', manager_only: !on, no_manager: nm, no_manager_options: NO_MANAGER_AR,
+  };
+}
+const noManagerOf = (p: any): string | null => (NO_MANAGER.includes(p?.no_manager) ? p.no_manager : null);
+
+// «لا يوجد مدير متاح» (القرار 3): زميل أعلى يختاره في خانة المدير (senior)، أو «ذاتي فقط» (self) يكمل بندي المدير بلا حبس.
+// null يعيد خانة المدير. لا يُحبس المشارك في أي حال
+export async function noManager(p: any, b: Body) {
+  const choice = b.choice == null || b.choice === '' ? null : String(b.choice);
+  if (choice !== null && !NO_MANAGER.includes(choice)) throw new Fail('اختر: زميل أعلى أو ذاتي فقط');
+  const { error } = await db.from('participants').update({ no_manager: choice, no_manager_at: choice ? new Date().toISOString() : null }).eq('id', p.id);
+  if (missingColumn(error)) throw new Fail('هذا غير متاح الآن.', 503, 'not_migrated');
+  must({ data: null, error });
+  if (choice === 'self') {
+    // إفادة المدير بعد البرنامج تكتمل «ذاتي فقط»، وT-360 يكتمل من الحالة نفسها (AUTO_CHECKS selfOnly)
+    const reqId = await requirementIdByCode(p, 'E-MGR');
+    if (reqId) {
+      const { data: prev } = await db.from('participant_requirements').select('status').eq('participant_id', p.id).eq('requirement_id', reqId).maybeSingle();
+      if (prev?.status !== 'done') await db.from('participant_requirements').upsert({ participant_id: p.id, requirement_id: reqId, status: 'done', note: SELF_ONLY_AR, completed_at: new Date().toISOString() });
+    }
+  }
+  await audit('participant', p.id, 'rater.no-manager', 'participants', p.id, null, { choice });
+  return mine({ ...p, no_manager: choice });
 }
 
 async function postInstrument(p: any) {
@@ -265,6 +290,8 @@ async function postInstrument(p: any) {
 // تقدير المدير قبل البرنامج: بعد القياس المبدئي وقبل البعدي، وبأداة فيها
 // صيغة الغائب لعبارات الممارسة (baseline-v4 فما بعد).
 async function preRating(p: any) {
+  // القبلي للدفعات الجديدة وحدها (تصور المرحلة 3، القرار 2): الجارية يأتيها البعدي الاسترجاعي
+  if (!managerPreAllowed((await cohortOf(p)).cohort)) return { ok: false, reason: NO_PRE_RUNNING_AR };
   const base = await lastBaseline(p.id);
   if (!base) return { ok: false, reason: 'أرسل قياسك المبدئي أولًا' };
   const { count: posts } = await db.from('assessments').select('id, instruments!inner(kind)', { count: 'exact', head: true })
@@ -304,20 +331,23 @@ async function notifyConfirmers(p: any, flags: string[], raterId: string) {
   return to.length;
 }
 
-// حارس ثانٍ داخل الفعل لمسارات لا تمر بالحارس المركزي (تأكيد المنسق، والدفعات): رمز المفتاح ورسالته نفسها
-async function require360() {
-  if (!(await features()).f360) throw new Fail(FEATURE_OFF_AR, 404, 'f360_off');
+// حارس ثانٍ داخل الفعل لمسارات لا تمر بالحارس المركزي (تأكيد المنسق، والدفعات): مقيّم 360 وحده خلف مفتاحه،
+// ومقيّمو الأثر (pre وpost) خرجوا منه (تصور المرحلة 3، القرار 2)
+async function require360For(phase: string | null | undefined) {
+  if (!IMPACT_PHASES.includes(String(phase)) && !(await features()).f360) throw new Fail(FEATURE_OFF_AR, 404, 'f360_off');
 }
 
 export async function invite(p: any, b: Body) {
-  await require360();
+  if (noManagerOf(p) === 'self') throw new Fail('اخترت «ذاتي فقط». لتدعو مديرك أو زميلًا أعلى أعد خانة المدير أولًا', 409, 'self_only');
+  const managerOnly = !(await features()).f360;
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد غير صحيح');
   const check = await raterCheck(p, email);
   if (check.verdict === 'reject') throw new Fail('ادعُ مديرك أو زميلك، لا بريدك');
   const phase = b.phase === 'pre' ? 'pre' : 'post';
   // قبل البرنامج: المدير المباشر وحده، فهو من يُعاد تقديره بعد البرنامج
-  const relation = phase === 'pre' ? 'manager' : ['manager', 'peer', 'report'].includes(b.relation) ? b.relation : 'manager';
+  // والمفتاح مطفأ: خانة المدير وحدها في البعدي أيضًا (الزميل الأعلى لمن لا مدير له يشغلها)
+  const relation = phase === 'pre' || managerOnly ? 'manager' : ['manager', 'peer', 'report'].includes(b.relation) ? b.relation : 'manager';
   const name = String(b.full_name || '').trim().slice(0, 120) || null;
   let instrumentId: string;
   if (phase === 'pre') {
@@ -332,8 +362,9 @@ export async function invite(p: any, b: Body) {
   const { count: invitedToday } = await db.from('audit_log').select('id', { count: 'exact', head: true })
     .eq('actor_type', 'participant').eq('actor', p.id).eq('action', 'rater.invite').gte('created_at', new Date(Date.now() - 864e5).toISOString());
   if ((invitedToday ?? 0) >= RATER_INVITES_PER_DAY) throw new Fail('بلغت حد دعوات اليوم. أعد المحاولة غدًا.', 429, 'rate');
-  const limit = phase === 'pre' ? 1 : RATER_LIMIT;
-  const existing = must(await db.from('raters').select('id, email, status').eq('participant_id', p.id).eq('phase', phase).neq('status', 'revoked')) as any[] ?? [];
+  const limit = phase === 'pre' || managerOnly ? 1 : RATER_LIMIT;
+  const existing = (must(await db.from('raters').select('id, email, status, relation').eq('participant_id', p.id).eq('phase', phase).neq('status', 'revoked')) as any[] ?? [])
+    .filter((r: any) => !managerOnly || r.relation === 'manager');
   if (!existing.some((r: any) => r.email === email) && existing.length >= limit) throw new Fail(limit === 1 ? 'دعوت مديرك من قبل' : `الحد ${limit} مقيّمين`);
   const token = randomToken();
   // D19: من نطاق الجهة يُرسل فورًا، وما سواه awaiting حتى يؤكده المستشار أو المنسق. العلامات من أول دعوة
@@ -363,7 +394,6 @@ export async function invite(p: any, b: Body) {
 }
 
 export async function revoke(p: any, b: Body) {
-  await require360();
   must(await db.from('raters').update({ status: 'revoked' }).eq('id', String(b.id || '')).eq('participant_id', p.id).in('phase', IMPACT_PHASES).in('status', ['invited', 'awaiting']));
   return mine(p);
 }
@@ -372,10 +402,12 @@ export async function revoke(p: any, b: Body) {
 // القائمة لمشاركين بأعينهم (مشاركو المستشار، أو مشاركو جهة المنسق). تعذّر القراءة يرمي، فلا تظهر قائمة فارغة بصمت
 export async function awaitingFor(ids: string[]) {
   // مفتاح 360 مطفأ: لا تأكيد الآن، فالقائمة فارغة عند المستشار والمنسق (المنتظر باقٍ ويعود حين يُظهَر)
-  if (!ids.length || !(await features()).f360) return [];
+  // ومقيّمو الأثر (pre وpost) خارجه: يُؤكَّدون والمفتاح مطفأ
+  if (!ids.length) return [];
+  const on = (await features()).f360;
   const data = must(await db.from('raters').select('id, participant_id, email, full_name, relation, phase, verification_flags, invited_at, participants(full_name)')
     .in('participant_id', ids).eq('status', 'awaiting').order('invited_at')) as any[];
-  return (data || []).map((r: any) => ({ id: r.id, participant_id: r.participant_id, participant: r.participants?.full_name || null, email: r.email, full_name: r.full_name,
+  return (data || []).filter((r: any) => on || IMPACT_PHASES.includes(r.phase)).map((r: any) => ({ id: r.id, participant_id: r.participant_id, participant: r.participants?.full_name || null, email: r.email, full_name: r.full_name,
     relation_ar: RELATION_AR[r.relation] || r.relation, phase: r.phase, invited_at: r.invited_at,
     flags_ar: (r.verification_flags || []).map((f: string) => (RATER_FLAG_AR as Record<string, string>)[f] || f) }));
 }
@@ -383,9 +415,9 @@ export async function awaitingFor(ids: string[]) {
 // التأكيد يرسل الدعوة برابط جديد (الرمز لا يُستعاد من بصمته)، وعدم الاعتماد بسبب يُبلَّغ به المشارك.
 // allowed يحصر الصلاحية في نطاق المؤكِّد؛ وكل قرار في السجل بمن اتخذه
 export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: string }, b: Body, allowed: (participantId: string) => Promise<boolean>) {
-  await require360();
   const id = String(b.id || '');
   const r = must(await db.from('raters').select('*, participants(full_name, email)').eq('id', id).maybeSingle()) as any;
+  await require360For(r?.phase);
   if (!r || r.status !== 'awaiting') throw new Fail('لا مقيّم بانتظار التأكيد بهذا المعرّف', 404, 'not_found');
   if (!(await allowed(r.participant_id))) throw new Fail('هذا المقيّم لمشارك ليس من نطاقك', 403, 'forbidden');
   const who = `${by.kind}:${by.email}`;
@@ -454,11 +486,17 @@ async function raterQuestions(instrumentId: string, relation: string) {
     .eq('instrument_id', instrumentId).eq('active', true).eq('tier', 'behavior').order('sort')) as any[] ?? [];
   return raterItems(qs, relation);
 }
+// ومدير قياس الأثر (pre وpost): ثماني فقرات من فقرات المرحلة نفسها (تصور المرحلة 3 §5.1، managerItems). العرض والتحقق بها معًا
+async function raterForm(r: any) {
+  const qs = await raterQuestions(r.instrument_id, r.relation);
+  return r.relation === 'manager' && IMPACT_PHASES.includes(String(r.phase || 'post')) ? managerItems(qs) : qs;
+}
 
 
-// كل مقيّم برابطه حين يُخفى 360 (feedback360.enabled): مقيّم 360 (الدورة متجمدة)، ومقيّمو الأثر قبل البرنامج وبعده
-// (pre وpost، مؤجلون مع 360 بقرار المالك 2026-11-16). لا نموذج ولا إرسال، ورده «متوقف مؤقتًا» بلا اسم الميزة، وصفه باقٍ
+// مقيّم 360 برابطه حين يُخفى 360 (feedback360.enabled): الدورة متجمدة، لا نموذج ولا إرسال، ورده «متوقف مؤقتًا» بلا اسم
+// الميزة، وصفه باقٍ. ومقيّمو الأثر (pre وpost) خرجوا من المفتاح (تصور المرحلة 3، القرار 2) فيعملون والمفتاح مطفأ
 async function raterPaused(r: any) {
+  if (IMPACT_PHASES.includes(String(r?.phase || 'post'))) return;
   if ((await features()).f360) return;
   throw new Fail(RATER_PAUSED_AR, 409, 'f360_off', { paused: true, phase: r.phase || 'post' });
 }
@@ -466,7 +504,7 @@ async function raterPaused(r: any) {
 export async function raterGet(b: Body) {
   const r = await raterFrom(b.t, raterPaused);
   if (!r.opened_at) await db.from('raters').update({ opened_at: new Date().toISOString() }).eq('id', r.id);
-  const qs = await raterQuestions(r.instrument_id, r.relation);
+  const qs = await raterForm(r);
   // تقييم 360: مراسي السلم ووعد الإخفاء من الإعدادات العامة (scale_labels وmin_group)، بحسب مجموعة المقيّم
   const f360 = r.phase === 'f360' ? (await appSettings()).feedback360 : null;
   const label = (o: any) => (o.score < 0 ? 'لا أستطيع الحكم' : f360 ? f360.scale_labels[Number(o.score)] ?? o.label : o.label);
@@ -489,7 +527,7 @@ export async function raterSubmit(b: Body) {
     const { data: cyc } = await db.from('feedback_cycles').select('status, closes_at').eq('id', r.cycle_id).maybeSingle();
     if (!cyc || cyc.status !== 'open' || (cyc.closes_at && Date.parse(cyc.closes_at) <= Date.now())) throw new Fail('أُغلقت دورة التقييم. شكرًا لاستعدادك.', 409, 'closed');
   }
-  const qs = await raterQuestions(r.instrument_id, r.relation);
+  const qs = await raterForm(r);
   const input = b.answers || {};
   // سؤال الصلة في أول النموذج: إلزامي بنقرة واحدة
   const contact_freq = CONTACT_FREQ.includes(b.contact_freq) ? b.contact_freq : null;
@@ -631,4 +669,23 @@ async function transferStats(ids: string[]) {
   }
   return Object.values(by).sort((a, b) => a.sort - b.sort)
     .map((x) => ({ code: x.code, text: x.text, n: x.n, agree_pct: Math.round((x.agree / x.n) * 100), mean: Math.round((x.sum / x.n) * 100) / 100 }));
+}
+
+// ما يراه المستشار وحده (تصور المرحلة 3، القرار 4): فقرات تقدير خانة المدير بنصها وإجاباتها، مادةً لحديث الجلسة.
+// لا يصل المشارك ولا الجهة. تعذّر القراءة يعيد null فلا يسقط ملف المشارك
+export async function managerItemsFor(participantId: string) {
+  const { data, error } = await db.from('raters').select('phase, relation, answers, submitted_at, instrument_id')
+    .eq('participant_id', participantId).eq('status', 'submitted').eq('relation', 'manager').in('phase', IMPACT_PHASES);
+  if (error || !data?.length) return null;
+  const ids = [...new Set(data.flatMap((r: any) => Object.keys(r.answers || {})))];
+  const { data: qs } = ids.length ? await db.from('questions').select('id, dimension, text_rater_ar, text_ar, options').in('id', ids) : { data: [] as any[] };
+  const byId = new Map((qs || []).map((q: any) => [q.id, q]));
+  const label = (q: any, k: unknown) => (k == null ? null : (q?.options || [])[Number(k)]?.label ?? null);
+  return data.map((r: any) => ({
+    phase: r.phase, submitted_at: r.submitted_at,
+    items: Object.entries(r.answers || {}).map(([id, a]: [string, any]) => {
+      const q = byId.get(id);
+      return { dimension: q?.dimension || null, text: q?.text_rater_ar || q?.text_ar || '', now: label(q, a?.now), before: label(q, a?.before) };
+    }),
+  }));
 }

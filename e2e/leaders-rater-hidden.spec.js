@@ -90,9 +90,9 @@ test('مُظهَرًا: دعوة المدير قبل البرنامج كما ك�
   await expect(page.getByText(PRE_INVITE)).toBeVisible();
 });
 
-// القياس البعدي قبل إرساله: نص الإرسال يذكر دعوة المدير بمفتاح 360 من me.features وحده
+// القياس البعدي قبل إرساله: نص الإرسال يذكر دعوة المدير مطفأ ومُظهَرًا (تقييم المدير خارج المفتاح، تصور المرحلة 3، القرار 2)
 for (const on of [false, true]) {
-  test(`القياس البعدي قبل الإرسال ${on ? 'مُظهَرًا: يذكر دعوة المدير' : 'مطفأ: بلا «ادعُ مديرك»'}`, async ({ page }) => {
+  test(`القياس البعدي قبل الإرسال ${on ? 'مُظهَرًا' : 'مطفأ'}: يذكر دعوة المدير`, async ({ page }) => {
     const srv = createMockServer();
     Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true, features: { hall: true, katon: false, f360: on } });
     await page.route(/functions\/v1\/leaders-api/, async (route) => {
@@ -117,7 +117,7 @@ for (const on of [false, true]) {
     await page.getByRole('button', { name: /^تابع/ }).click();
     await page.getByRole('button', { name: 'التالي' }).click();
     await expect(page.getByText('أرسل إجاباتك لترى ما تغيّر بين بداية رحلتك ونهايتها', { exact: false })).toBeVisible();
-    await expect(page.getByText('ادعُ مديرك ليقدّر التغير من موقعه', { exact: false })).toHaveCount(on ? 1 : 0);
+    await expect(page.getByText('ادعُ مديرك ليقدّر التغير من موقعه', { exact: false })).toHaveCount(1);
   });
 }
 

@@ -5,7 +5,9 @@ import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 const { CONFIG } = await import('./core.ts');
 const S = await import('./system.ts');
-const { MIGRATIONS } = await import('./migrations.js');
+const { MIGRATIONS, MIGRATION_GATES } = await import('./migrations.js');
+// آخر ترحيل حاجب (لا مؤجل ولا متسامح): غيابه وحده يجعل فحص الترحيلات أحمر، أيًا كان آخر ترحيل في المجلد
+const LAST_BLOCKING = [...MIGRATIONS].reverse().find((n: string) => !(n in MIGRATION_GATES)) as string;
 const { platformChecks, platformLevel, DIGEST_STALE_HOURS } = await import('./platform-health.js');
 const { LEADERS_ADMIN_READS } = await import('../_shared/action-kinds.js');
 
@@ -48,11 +50,11 @@ Deno.test('admin.platform-health قراءة للإدارة، والفحوص ال
 Deno.test('الخلل والتعذّر: ترحيل ناقص وبريد غير مضبوط أحمران، والمهمة الموقوفة حمراء، وغياب الدالة أو الجدول «غير معروف»', async () => {
   const saved = CONFIG.alertEmail;
   Object.assign(CONFIG, { alertEmail: '' });
-  const w = world({ tables: { schema_migrations: MIGRATIONS.slice(0, -1).map((name: string) => ({ name })) }, cron: { data: [{ job_exists: true, job_active: false }], error: null } });
+  const w = world({ tables: { schema_migrations: MIGRATIONS.filter((n: string) => n !== LAST_BLOCKING).map((name: string) => ({ name })) }, cron: { data: [{ job_exists: true, job_active: false }], error: null } });
   try {
     const r: any = await S.platformHealth(NOW);
     assertEquals(levels(r), { migrations: 'bad', alert_email: 'bad', cron: 'bad', digest: 'ok', sponsor_codes: 'warn' });
-    assert(r.checks[0].line.includes(MIGRATIONS.at(-1)));
+    assert(r.checks[0].line.includes(LAST_BLOCKING));
     assertEquals(r.level, 'bad');
   } finally { w.restore(); }
   const v = world({ cron: { data: null, error: { code: 'PGRST202', message: 'missing' } }, fail: ['sponsor_codes', 'audit_log'] });

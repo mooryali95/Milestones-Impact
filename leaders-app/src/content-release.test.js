@@ -172,7 +172,9 @@ describe('الخادم والواجهة', () => {
     for (const s of [p, lab]) expect(s).not.toMatch(/releaseOf\(p\)\.catch/);
     const prog = api('programs.ts');
     expect(prog).toMatch(/const \{ cohort \} = await cohortOf\(p, \{ strict: true \}\);/);
-    expect(prog).toMatch(/if \(strict\) \{ must\(enr\); must\(cohorts\); \}/);
+    // قراءتا الإلحاق والدفعة كلتاهما ترمي في الوضع الصارم (cohortOf بلا مسح كامل، تصور المرحلة 4)
+    expect(prog).toMatch(/if \(strict\) must\(enr\);/);
+    expect(prog).toMatch(/if \(strict\) \{ must\(own\); must\(def\); \}/);
   });
   it('بند القراءة على أبواب إصدار الدفعة، والإصدار في الشهادة وملف المشارك', () => {
     expect(api('programs.ts')).toMatch(/export async function releaseOf\(p: \{ id\?: string \| null; organization_id\?: string \| null \}\)/);

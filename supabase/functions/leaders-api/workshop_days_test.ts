@@ -3,7 +3,7 @@
 // وadmin.cohort-workshops يقرأ أيام الدفعة بطريقتها الفعلية والمتوقع والحاضر كما تعدّها شاشة الرمز. بقاعدة في الذاكرة (_fake_db.ts)
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake } from './_fake_db.ts';
+import { installFake, placeOrgMembers } from './_fake_db.ts';
 const V = await import('./activities.ts');
 
 type Row = Record<string, any>;
@@ -24,7 +24,9 @@ function world() {
         { id: COHORT, name: 'دفعة الجهة', is_default: false, organization_id: ORG, status: 'running', program_id: 'prog', starts_on: '2026-11-01', created_at: '2026-10-01', delivery: {} },
         { id: OTHER, name: 'دفعة أخرى', is_default: false, organization_id: null, status: 'running', program_id: 'prog', starts_on: '2026-11-01', created_at: '2026-10-02', delivery: {} },
       ],
-      enrollments: [{ participant_id: ps[3].id, cohort_id: OTHER, status: 'active', created_at: '2026-10-06T08:00:00Z' }],
+      // أعضاء الجهة ملحقون بدفعتها صراحة (تصور المرحلة 4: لا استنتاج بالجهة)
+      enrollments: [...ps.filter((p) => p.organization_id === ORG).map((p) => ({ participant_id: p.id, cohort_id: COHORT, status: 'active', created_at: '2026-10-05T08:00:00Z' })),
+        { participant_id: ps[3].id, cohort_id: OTHER, status: 'active', created_at: '2026-10-06T08:00:00Z' }],
       placements: ps.flatMap(placed),
       stage_requirements: [
         { id: REQ_W, program_id: 'prog', stage_key: 'training', code: 'T-ATTEND', kind: 'workshop', dimension: null, level: null, sort: 1, required: true, title_ar: 'الأيام التدريبية', config: { verify: 'qr', sessions_required: 4 }, active: true },
@@ -57,6 +59,7 @@ const newDay = (extra: Row = {}) => ({
 
 Deno.test('يوم من البطاقة: يُحفظ بالمسار نفسه لهذه الدفعة وبنده، ويظهر في «الحضور والجلسات» وللمشارك، بسعته', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     const r: any = await V.workshopSave(ADMIN, { row: newDay({ capacity: '20' }) });
@@ -94,6 +97,7 @@ Deno.test('يوم من البطاقة: يُحفظ بالمسار نفسه لهذ
 
 Deno.test('قبل ترحيل السعة: اللوحة تخفيها، والحفظ ينجح بلاها ويقول إنها لم تُحفظ، والتحرير بلا سعة كما كان', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables, { fail: noCapacity });
   try {
     assertEquals(await V.capacityReady(), false);
@@ -117,6 +121,7 @@ Deno.test('قبل ترحيل السعة: اللوحة تخفيها، والحف�
 
 Deno.test('admin.cohort-workshops: أيام الدفعة والعامة لا غيرها، بطريقتها الفعلية والمتوقع والحاضر، وبرنامج آخر لا يُقرأ', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     w.tables.workshop_sessions.find((s) => s.id === OLD)!.capacity = 2;
