@@ -20,7 +20,8 @@ const active = (e) => e && e.status !== 'withdrawn';
 
 // ترتيب place_participant نفسه: coalesce(starts_on::timestamptz, created_at) تنازليًا
 const stamp = (c) => { const t = Date.parse(c?.starts_on || c?.created_at || ''); return Number.isNaN(t) ? -Infinity : t; };
-/** دفعة الجهة الضمنية كما يختارها pickCohort وplace_participant: أحدث دفعة مفتوحة أو جارية، لا المفتوحة العامة ولا الاستقبال */
+/** دفعة الجهة الجارية كما يختارها place_participant للمسجل الجديد (وorgCohort في logic.js): أحدث دفعة مفتوحة أو جارية، لا المفتوحة العامة ولا الاستقبال
+ * @param {any[]} cohorts @param {string|null} orgId */
 export function orgCurrentCohort(cohorts = [], orgId = null) {
   if (!orgId) return null;
   return (cohorts || []).filter((c) => c.organization_id === orgId && !c.is_default && !c.is_intake && (c.status === 'open' || c.status === 'running'))

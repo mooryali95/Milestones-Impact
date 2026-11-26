@@ -1,6 +1,7 @@
 // مفاتيح الميزات قيد البناء (P1): القاعة وكاتون و360 مطفأة افتراضيًا، ويرفضها الخادم برمز كل منها، والمدير مستثنى
 // إلا فتح القاعة، والمهمة الساعية لا تذكّر ولا تغلق، وبريد 360 في الطابور يُمسك، ومقيّم 360 يرى «متوقف مؤقتًا» ومثله مقيّم
 // الأثر قبل البرنامج وبعده (مؤجل مع 360 بقرار المالك 2026-11-16)، ورسائل الورشة بلا القاعة، وبطاقة المنسق null، وقفل القاعة مغلق، والدرجة لا تتغير.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail, hash, workshopMail, WORKSHOP_MAIL, FEEDBACK_MAIL, drainMailQueue, stuckQueueAlert } = await import('./core.ts');
@@ -15,6 +16,7 @@ const { coordFeedbackShown, featureFlags, featureGate, FEATURE_ACTIONS, FEATURE_
 type Row = Record<string, any>;
 // قاعدة في الذاكرة: eq وneq وin وis وcontains وlimit والعدّ، والإدراج والتحديث، وكل كتابة تُسجَّل
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   const writes: { table: string; kind: string; value: any }[] = [];
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
@@ -69,11 +71,11 @@ Deno.test('المفاتيح: الثلاثة مطفأة افتراضيًا، وم
 Deno.test('الحارس: كل فعل برمز ميزته ورسالة لا تسمّيها، وقراءات تُجاب بلا شيء، والمدير مستثنى إلا فتح القاعة', () => {
   const off = { hall: false, katon: false, f360: false };
   for (const [a, code] of [['hall.state', 'hall_off'], ['hall.join', 'hall_off'], ['xp.hall-open', 'hall_off'], ['xp.hall-close', 'hall_off'], ['katon.mine', 'katon_off'],
-    ['f360.start', 'f360_off'], ['f360.submit', 'f360_off'], ['f360.report', 'f360_off'], ['xp.f360-decide', 'f360_off'], ['xp.f360-release', 'f360_off'],
-    // تقدير المدير والزملاء مؤجل مع 360: دعوة مقيّمي الأثر وإعادة إرسالها (rater.invite) وإلغاؤها وتأكيد المستشار
-    ['rater.invite', 'f360_off'], ['rater.revoke', 'f360_off'], ['xp.rater-confirm', 'f360_off']]) {
+    ['f360.start', 'f360_off'], ['f360.submit', 'f360_off'], ['f360.report', 'f360_off'], ['xp.f360-decide', 'f360_off'], ['xp.f360-release', 'f360_off']]) {
     assertEquals([a, featureGate(a, off)?.fail?.code, featureGate(a, off)?.fail?.status, featureGate(a, off)?.fail?.message], [a, code, 404, FEATURE_OFF_AR]);
   }
+  // تقييم المدير خرج من المفتاح (تصور المرحلة 3، القرار 2): دعوة مقيّم الأثر وإلغاؤه وتأكيده تمر، وخانة المدير وحدها في impact.ts
+  for (const a of ['rater.invite', 'rater.revoke', 'xp.rater-confirm']) assertEquals([a, featureGate(a, off)], [a, null]);
   assertEquals(featureGate('f360.mine', off), { soft: { success: true, enabled: false, ready: true } });
   assertEquals(featureGate('xp.f360', off), { soft: { success: true, approvals: [], reports: [] } });
   assertEquals(featureGate('xp.hall', off)?.soft?.off, true);
@@ -373,37 +375,25 @@ Deno.test('مقيّم 360 حين يُخفى: «متوقف مؤقتًا» بلا 
   } finally { w.restore(); }
 });
 
-Deno.test('مقيّمو الأثر قبل البرنامج وبعده (pre وpost) مؤجلون مع 360: مخفيًا «متوقف مؤقتًا» ولا إرسال وصفه باقٍ، ومُظهَرًا كما كانوا', async () => {
-  for (const phase of ['pre', 'post'] as const) {
-    let w = await raterWorld(phase, false);
-    try {
-      const e = await codeOf(() => raterGet({ t: TOKEN }));
-      assertEquals([phase, e.code, e.status, e.message, e.extra], [phase, 'f360_off', 409, RATER_PAUSED_AR, { paused: true, phase }]);
-      assertEquals((await codeOf(() => raterSubmit({ t: TOKEN, contact_freq: 'daily', answers: {} }))).code, 'f360_off');
-      assertEquals([w.writes, w.tables.raters.length, w.tables.raters[0].status, w.tables.raters[0].opened_at], [[], 1, 'invited', null]);
-    } finally { w.restore(); }
-    w = await raterWorld(phase, true);
+Deno.test('مقيّمو الأثر قبل البرنامج وبعده (pre وpost) خارج مفتاح 360 (تصور المرحلة 3، القرار 2): يعمل رابطهم مطفأ ومُظهَرًا', async () => {
+  for (const on of [false, true]) for (const phase of ['pre', 'post'] as const) {
+    const w = await raterWorld(phase, on);
     try {
       const r: any = await raterGet({ t: TOKEN });
-      assertEquals([phase, r.success, r.phase, r.done], [phase, true, phase, false]);
+      assertEquals([on, phase, r.success, r.phase, r.done], [on, phase, true, phase, false]);
       assertEquals(typeof w.tables.raters[0].opened_at, 'string');
     } finally { w.restore(); }
   }
 });
 
-Deno.test('رابط مقيّم أثر انقضت مهلته أثناء الإخفاء: «متوقف مؤقتًا» لا «انتهت الصلاحية»، ومُظهَرًا بلا مد يقول انتهى', async () => {
-  let w = await raterWorld('post', false);
-  w.tables.raters[0].expires_at = new Date(Date.now() - 864e5).toISOString();
-  try {
-    const e = await codeOf(() => raterGet({ t: TOKEN }));
-    assertEquals([e.code, e.status, e.message], ['f360_off', 409, RATER_PAUSED_AR]);
-    assertEquals((await codeOf(() => raterSubmit({ t: TOKEN, contact_freq: 'daily', answers: {} }))).code, 'f360_off');
-  } finally { w.restore(); }
-  w = await raterWorld('post', true);
-  w.tables.raters[0].expires_at = new Date(Date.now() - 864e5).toISOString();
-  try {
-    assertEquals((await codeOf(() => raterGet({ t: TOKEN }))).code, 'expired');
-  } finally { w.restore(); }
+Deno.test('رابط مقيّم أثر انقضت مهلته: «انتهت الصلاحية» مطفأ ومُظهَرًا، فلا يُقال «متوقف مؤقتًا» لما لا يتوقف', async () => {
+  for (const on of [false, true]) {
+    const w = await raterWorld('post', on);
+    w.tables.raters[0].expires_at = new Date(Date.now() - 864e5).toISOString();
+    try {
+      assertEquals([on, (await codeOf(() => raterGet({ t: TOKEN }))).code], [on, 'expired']);
+    } finally { w.restore(); }
+  }
 });
 
 Deno.test('رسائل الورشة والقاعة مخفية: ملاحظة بلا «القاعة» والحضور برمز QR، ومُظهَرة كما كانت', () => {

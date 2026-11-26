@@ -1,6 +1,7 @@
 // admin.cohort-plan (R2a في تصور محرر رحلة الدفعة): المعاينة لكل مدير والحفظ والتراجع للكاتب، والحراس (المغلقة والمفتوحة غير
 // المثبتة والمثبت والحدود والحقول اللاحقة والنسخة القديمة)، والسجل في audit_log بقيمته قبل وبعد، والأثر على عضو حي من رحلته
 // كما يراها، وadmin.cohort-save يرفض schedule وdistribute (كاتب واحد، القرار 23). قاعدة في الذاكرة بنمط cohort_guard_test.ts.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
@@ -11,6 +12,7 @@ const { R0_DATED_SINCE } = await import('./milestones.js');
 
 type Row = Record<string, any>;
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   let seq = 0;
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];

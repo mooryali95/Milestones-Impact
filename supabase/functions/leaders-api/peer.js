@@ -104,3 +104,13 @@ export function needsFor({ submissions = [], milestones = [], final = null, peer
   if (toRate) out.push({ key: 'rate', n: toRate, text: `${toRate} جلسة بانتظار تقديرك` });
   return out;
 }
+
+// قائمة مشاركي الخبير (تصور المرحلة 1، البند 4): حدها ستون، والترتيب قبل القطع: من ينتظره عمل أولًا ثم بالاسم، فلا يسقط
+// من القائمة من ينتظره عمل لأن اسمه آخر الأبجدية. ترقيم الصفحات مؤجل حتى يتجاوز مرشد فعلي الحد
+export const ROSTER_MAX = 60;
+/** @param {{ id: string, full_name?: string | null }[]} people @param {Set<string>} pending @param {number} [max] */
+export function pickRoster(people, pending, max = ROSTER_MAX) {
+  const list = [...(people || [])].sort((a, b) => (pending.has(b.id) ? 1 : 0) - (pending.has(a.id) ? 1 : 0) || String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ar'));
+  return { ids: list.slice(0, max).map((p) => p.id), total: list.length, truncated: list.length > max };
+}
+export const rosterLineAr = (d) => (d?.truncated ? `تظهر ${ROSTER_MAX} من ${d.total}، من لديهم عمل ينتظرك أولًا` : '');

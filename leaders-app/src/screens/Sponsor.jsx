@@ -9,6 +9,7 @@ import { openCapstoneDoc } from './Capstone.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { dateAr } from '../../../supabase/functions/leaders-api/capstone.js';
 import { linkToken } from '../link-token.js';
+import { LEGAL_PATH, SPONSOR_PRIVACY_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 export default function Sponsor() {
   const [t] = useState(() => linkToken());
@@ -66,6 +67,8 @@ export default function Sponsor() {
           <span>ملاحظتك (تصل إلى قائد المبادرة، وهي مطلوبة إن طلبت تعديلًا)</span>
           <textarea className="input" rows={4} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
+        {/* تصور المرحلة 2، 2.1: إشعار خصوصية الراعي عند نقطة الجمع، ويُسجَّل قبوله بالإرسال */}
+        <p className="small muted rater-privacy">{SPONSOR_PRIVACY_AR} <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>.</p>
         {error && <div className="alert err" role="alert">{error}</div>}
         <div className="row">
           <button className="btn gold" disabled={busy} onClick={() => send('endorse')}>أؤيد المبادرة</button>

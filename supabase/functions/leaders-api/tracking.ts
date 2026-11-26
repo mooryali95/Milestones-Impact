@@ -4,7 +4,7 @@
 // الخطة من لقطة الوثيقة المعتمدة، والمنطق في tracking.js (يُختبر في
 // vitest)، وهنا القراءة والكتابة والبريد فقط. كل شاشة وتقرير يقرأ
 // الملخص نفسه من trackingSummary، فلا يُحسب «على المسار» بطريقتين.
-import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail } from './core.ts';
+import { audit, CONFIG, db, Fail, hash, logConsent, mailButton, must, randomToken, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { award } from './participant.ts';
 import { simulated } from './counting.ts';
@@ -173,6 +173,8 @@ export async function verifySubmit(b: Body) {
   const note = String(b.note || '').trim().slice(0, 2000) || null;
   if (b.decision !== 'confirm' && b.decision !== 'dispute') throw new Fail('قرار غير صالح');
   if (b.decision === 'dispute' && !note) throw new Fail('اكتب للقائد ما الذي لا يطابق ما تراه');
+  // إشعار الخصوصية في الصفحة (تصور المرحلة 2، 2.1): القبول بالإرسال يُسجَّل قبل القرار
+  await logConsent('sponsor', u.id, 'accept');
   const now = new Date().toISOString();
   const status = b.decision === 'confirm' ? 'confirmed' : 'disputed';
   must(await db.from('capstone_updates').update({ verify_status: status, verify_note: note, verify_at: now }).eq('id', u.id));

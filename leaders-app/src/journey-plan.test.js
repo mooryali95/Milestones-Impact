@@ -6,9 +6,10 @@ import { renderJourney } from '../../supabase/functions/leaders-api/journey.js';
 const workshop = { id: 'r1', code: 'T-ATTEND', kind: 'workshop', title_ar: 'حضور الأيام التدريبية ({days:T-ATTEND})', config: { sessions_required: 4, verify: 'qr' } };
 
 describe('الكتاب بديلًا عن الأيام التدريبية', () => {
-  it('صيغة الكتاب تحوّل المتطلب نفسه إلى قراءة كل الأبواب باختباراتها، بمعرّفه ورمزه', () => {
+  it('صيغة الكتاب تحوّل المتطلب نفسه إلى قراءة أبواب المسار ومحوره باختباراتها، بمعرّفه ورمزه', () => {
     const r = applyDelivery(workshop, { format: 'handbook' });
-    expect(r).toMatchObject({ id: 'r1', code: 'T-ATTEND', kind: 'reading', config: { scope: 'all', quiz: true } });
+    // نطاق track (تصور المرحلة 3، القرار 6): البقية متاحة اختيارية، وبلا أولوية معروفة يبقى الإلزام كاملًا
+    expect(r).toMatchObject({ id: 'r1', code: 'T-ATTEND', kind: 'reading', config: { scope: 'track', quiz: true } });
     expect(renderJourney({ stages: [], requirements: [r] }).requirements[0].title_ar).not.toContain('{');
   });
   it('الصيغة الحضورية أو غياب الصيغة يُبقي الحضور كما هو', () => {

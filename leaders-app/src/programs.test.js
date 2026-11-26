@@ -22,12 +22,16 @@ describe('pickCohort', () => {
     ];
     expect(pickCohort({ enrollments, cohorts }).cohort.id).toBe('c-saf');
   });
-  it('organization falls to its newest running or open cohort', () => {
-    expect(pickCohort({ cohorts, organizationId: 'org-s' })).toEqual({ cohort: safaraa, via: 'organization' });
+  it('no enrollment: the organization is never used, the open default is a declared fallback', () => {
+    expect(pickCohort({ cohorts, organizationId: 'org-s' })).toEqual({ cohort: open, via: 'fallback' });
+    expect(pickCohort({ cohorts, organizationId: 'org-m' })).toEqual({ cohort: open, via: 'fallback' });
+    expect(pickCohort({ cohorts })).toEqual({ cohort: open, via: 'fallback' });
   });
-  it('organization with only closed cohorts, or no organization, gets the open default', () => {
-    expect(pickCohort({ cohorts, organizationId: 'org-m' })).toEqual({ cohort: open, via: 'default' });
-    expect(pickCohort({ cohorts })).toEqual({ cohort: open, via: 'default' });
+  it('a newer cohort for the organization moves nobody', () => {
+    const newer = { id: 'c-new', organization_id: 'org-s', status: 'open', starts_on: '2027-01-01', program_id: 'p2' };
+    const enrollments = [{ cohort_id: 'c-saf', status: 'active', created_at: '2026-11-02' }];
+    expect(pickCohort({ enrollments, cohorts: [...cohorts, newer], organizationId: 'org-s' }).cohort).toBe(safaraa);
+    expect(pickCohort({ cohorts: [...cohorts, newer], organizationId: 'org-s' }).cohort).toBe(open);
   });
   it('no cohorts at all', () => {
     expect(pickCohort({})).toEqual({ cohort: null, via: 'none' });
