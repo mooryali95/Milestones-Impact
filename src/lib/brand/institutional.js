@@ -9,7 +9,7 @@
 // المصدر واحد: وثيقة الخادم (capstone.doc أو لقطة الاعتماد)؛ ملف العمل الكامل من المصدر نفسه في capstone.js capstoneReport.
 // المسودة الحية تُعلَّم بتاريخ بنائها وبصمتها، والمعتمدة بتاريخ اعتمادها وبصمتها المجمّدة ورابط تحققها.
 import QR from 'qrcode';
-import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, SEAL, structuralAccent } from './doc.js';
+import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, LIVE_RING, structuralAccent } from './doc.js';
 // تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
@@ -106,7 +106,7 @@ body { font-weight: 400; }
 .in-verify .qr { width: 26mm; height: 26mm; flex: none; }
 .in-verify p { margin: 0; font-size: 9.5pt; line-height: 1.7; color: #2C4148; }
 .in-verify a { color: #0B272F; font: 400 8.5pt "Noto Sans", sans-serif; direction: ltr; unicode-bidi: isolate; word-break: break-all; }
-.in-verify .seal { width: 26mm; height: 26mm; margin-inline-start: auto; }
+.in-verify .ring { width: 18mm; height: 18mm; margin-inline-start: auto; flex: none; }
 .in-chart text { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; }
 </style>`;
 
@@ -406,7 +406,7 @@ export function institutionalReport(input, options = {}) {
   add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">${esc(DOC_APPROVED_AR)} · ${esc(fmt(m.approved_at) || '')}</span>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
     <div class="in-sign">${signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('')}</div>
     <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span><span>FINGERPRINT <b>${esc(fp)}</b></span></p>
-    ${url ? `<div class="in-verify">${qrSvg(url)}<p>${esc(DOC_VERIFY_AR.note)}<br><a href="${esc(url)}">${esc(url)}</a></p>${SEAL()}</div>` : approved ? `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.note)}</p>${SEAL()}</div>` : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p></div>`}</div>`,
+    ${url ? `<div class="in-verify">${qrSvg(url)}<p>${esc(DOC_VERIFY_AR.note)}<br><a href="${esc(url)}">${esc(url)}</a></p></div>` : approved ? `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.note)}</p></div>` : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p>${LIVE_RING()}</div>`}</div>`,
   url ? DOC_VERIFY_AR.lead : null);
 
   const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${en === 'Approval' ? '◆' : String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
@@ -429,6 +429,8 @@ export function institutionalReport(input, options = {}) {
       rows: [['الجهة', org?.name || m.host], ['الراعي', m.sponsor], ['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
       control: controlStrip([`${m.ref || 'MI-CP'}`, `V${m.version || 1}`, isoDay(approved ? m.approved_at : (m.generated_at || new Date())), approved ? 'APPROVED' : 'DRAFT']),
       stamp: approved ? DOC_APPROVED_AR : DOC_LIVE_AR,
+      // المرحلة 28: الحية بعلامة مائية في كل صفحة وترويسة DOC_LIVE_HEAD_AR، والختم الذهبي في إغلاق المعتمدة وحدها
+      live: !approved,
       controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${isoDay(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : DOC_LIVE_AR}`,
       confidential: CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR,
       closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', fp) : docClosingLiveAr(built),

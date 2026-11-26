@@ -9,7 +9,8 @@
 //   3. planPages (منطق خالص مختبر) يختار حد كل صفحة: لا عنوان وحده أسفل الصفحة، ولا صف جدول مقطوع، ولا سطر يتيم.
 //   4. تُرسم المقاطع (html-to-image) وتُركَّب صفحات A4 بهوامشها وترقيمها العربي، ويتكرر رأس الجدول المنقسم.
 //   5. jsPDF يجمعها ملفًا، وروابط الفهرس تقفز إلى صفحاتها، وأرقام صفحاتها تُكتب في الفهرس.
-import { documentHtml, docId, PAGE_MM, TYPE_SCALE, mmPx } from './doc.js';
+import { documentHtml, docId, PAGE_MM, TYPE_SCALE, mmPx, WATERMARK, isLiveDoc } from './doc.js';
+import { DOC_LIVE_HEAD_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 // A4 بدقة 96: 210×297 مم. الهوامش مشتقة من PAGE_MM في doc.js، وهو نفسه مصدر قاعدة @page، والغلاف يبدأ من حافة الورقة
 export const PAGE = Object.freeze({ w: mmPx(PAGE_MM.w), h: mmPx(PAGE_MM.h), top: mmPx(PAGE_MM.top), side: mmPx(PAGE_MM.side), bottom: mmPx(PAGE_MM.bottom) });
@@ -141,6 +142,38 @@ function chapterHead(ctx, text, scale) {
   ctx.restore();
 }
 
+// المرحلة 28: العلامة المائية للحية طبقةٌ بـ jsPDF فوق كل صفحة (الغلاف معها)، بشفافية GState لا بلون مخفف في الصورة.
+// النص العربي يُشكَّل في لوحة (jsPDF لا يصل الحروف العربية) ويُضاف صورة شفافة، والزاوية والحجم واللون من WATERMARK في doc.js
+const A4 = { w: 595.28, h: 841.89 };
+// اللوحة تُنشأ من مستند الإطار الذي حُمّلت فيه خطوط الوثيقة، وننتظر الخط بوزنه وحجمه قبل الرسم فلا يقع على الخط البديل
+export async function watermarkCanvas(scale = 2, doc = document) {
+  const font = `500 ${ptPx(WATERMARK.size) * scale}px "Noto Kufi Arabic"`;
+  try { await doc.fonts?.load?.(font, WATERMARK.text); } catch { /* الخط البديل أهون من فشل الملف */ }
+  const c = doc.createElement('canvas');
+  c.width = PAGE.w * scale; c.height = PAGE.h * scale;
+  const ctx = c.getContext('2d');
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate((-WATERMARK.angle * Math.PI) / 180);
+  ctx.fillStyle = WATERMARK.color;
+  ctx.direction = 'rtl';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `500 ${ptPx(WATERMARK.size) * scale}px "Noto Kufi Arabic", sans-serif`;
+  ctx.fillText(WATERMARK.text, 0, 0);
+  return c.toDataURL('image/png');
+}
+export function stampWatermark(pdf, png) {
+  const n = pdf.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    pdf.setPage(i);
+    pdf.saveGraphicsState();
+    pdf.setGState(new pdf.GState({ opacity: WATERMARK.opacity }));
+    pdf.addImage(png, 'PNG', 0, 0, A4.w, A4.h, 'mi-watermark', 'FAST');
+    pdf.restoreGraphicsState();
+  }
+  return n;
+}
+
 /**
  * يبني ملف PDF ويعيده Blob. meta وbody كما يبنيهما قالب الوثيقة (capstoneReport)
  * @param {{ onProgress?: (t: string) => void, scale?: number }} [opts]
@@ -220,7 +253,7 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, page.width, page.height);
         if (k > 0 && runHead) ctx.drawImage(runHead, 0, 0, page.width, PAGE.top * scale);
-        if (k > 0 && runHead) chapterHead(ctx, chapterAt(heads, p.start, p.end) || meta.title || '', scale);
+        if (k > 0 && runHead) chapterHead(ctx, isLiveDoc(meta) ? DOC_LIVE_HEAD_AR : (chapterAt(heads, p.start, p.end) || meta.title || ''), scale);
         let y = (k === 0 ? 0 : PAGE.top) * scale;
         const hc = p.head && theads.get(p.head.top);
         if (hc) { ctx.drawImage(hc, 0, y); y += hc.height; }
@@ -232,6 +265,7 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
         pdf.addImage(page.toDataURL('image/jpeg', 0.8), 'JPEG', 0, 0, 595.28, 841.89, undefined, 'FAST');
       }
     }
+    if (isLiveDoc(meta)) stampWatermark(pdf, await watermarkCanvas(scale, doc));
     // روابط الفهرس: تقفز إلى صفحة القسم داخل الملف
     for (const l of links) {
       const k = pageOf(l.top);
