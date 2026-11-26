@@ -22,7 +22,7 @@ import {
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
-import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
+import { beginnerTitle, bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { cardOnJourney, trackManifest, withBridges } from './track-manifest.js';
 import { trackHistory, unseenNew } from './track-history.ts';
 import { profileFor } from './profiles.ts';
@@ -1382,7 +1382,7 @@ async function myModel(p: any, id: unknown) {
   // الحقول كما تخص المشارك: بمستواه في بُعد النموذج ونطاق عمله
   const priority = await participantPriority(p.id, levels);
   // level: مستوى المشارك في بُعد النموذج، يحدد صورة دليل الحقل في الواجهة (leaders-app/src/guide.js)
-  return { ...m, level: levels[m.dimension] || null, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority, (sub as any)?.answers || null, keptModel(m, levels), since) };
+  return { ...beginnerTitle(m, levels[m.dimension]), level: levels[m.dimension] || null, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority, (sub as any)?.answers || null, keptModel(m, levels), since) };
 }
 
 // اسم المبادرة من مصدره الوحيد: بطاقة المبادرة في مكتبة النماذج

@@ -427,3 +427,10 @@ export const STAFF_MESSAGES_TEXT = Object.freeze({
     open: 'بريد الجهة',
   }),
 });
+
+// عناوين فصول بلغة التأسيسي (تخفيف وثيقة المبادرة للتأسيسي، المرحلة 3): الفصل نفسه بلا مصطلح لا يحتاجه المبتدئ.
+// تقرؤها capstone.js (beginnerTitle) للوثيقة وخطها وصفحة الفصل
+export const BEGINNER_CHAPTER_TITLES = Object.freeze({
+  schedule: 'الجدول الزمني',
+  raid: 'سجل المخاطر',
+});

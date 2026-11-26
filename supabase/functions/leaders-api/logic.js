@@ -862,6 +862,8 @@ export function fieldsFor(fields, level, scope = null, primary = false, answers 
     if (!byLevel && !(a && hasAnswer(a[f.key]))) continue;
     let g = f.min_rows_beginner && level === 'beginner' ? { ...f, min_rows: f.min_rows_beginner } : f;
     if (level === 'beginner' && f.type === 'table') g = beginnerColumns(g, a ? a[f.key] : null);
+    // عنوان سؤالًا مباشرًا وتلميح بلغة بسيطة للتأسيسي (label_beginner وhint_beginner، تخفيف المبادرة، المرحلة 3)
+    if (level === 'beginner' && (f.label_beginner || f.hint_beginner)) g = { ...g, ...(f.label_beginner ? { label: f.label_beginner } : {}), ...(f.hint_beginner ? { hint: f.hint_beginner } : {}) };
     if (!byLevel) g = { ...g, required: false, kept: true };
     // kept_req: كان مطلوبًا في الفصل لولا قاعدة «لا فقد»، فيُحسب الفصل مكتملًا في الجاهزية إن اكتمل به (sectionState)
     // optional-exempt: حقول نموذج لا أنشطة
@@ -3134,6 +3136,8 @@ export function cleanModelFieldsOf(input, fail = (m) => { throw new Error(m); })
     if (f?.track === true) out.track = true;
     // مطلوب من مستوى بعينه فأعلى، ظاهر لمن دونه اختياريًا (fieldsFor)، وعنوان مجموعة يسبق الحقل في ورقة العمل
     if (LEVELS.includes(f?.required_from) && f.required_from !== 'beginner') out.required_from = f.required_from;
+    // عنوان الحقل وتلميحه للتأسيسي (fieldsFor): يُحفظان كما كُتبا
+    for (const k of ['label_beginner', 'hint_beginner']) { const t = String(f?.[k] || '').trim().slice(0, k === 'label_beginner' ? 200 : 300); if (t) out[k] = t; }
     const group = String(f?.group || '').trim().slice(0, 60);
     if (group) out.group = group;
     // مطلوب لمن اعتُمد مساره بعد هذا الوقت (fieldsFor since): يبقى كما كتبه الترحيل

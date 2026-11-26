@@ -12,6 +12,7 @@ import { bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, mo
 const ROOT = join(__dirname, '../..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 export const LIGHTEN = '20261129140000_leaders_beginner_columns';
+const LANGUAGE = '20261129150000_leaders_beginner_language';
 const PRELUDE = `create role anon; create role authenticated; create role service_role; create schema auth; create schema extensions;
   create table auth.users (id uuid primary key, email text);
   create function auth.uid() returns uuid language sql as 'select null::uuid';
@@ -35,7 +36,7 @@ beforeAll(async () => {
     await db.exec('discard temp').catch(() => {});
   }
   before = await snap(db);
-  const sql = read(`supabase/migrations/${LIGHTEN}.sql`);
+  const sql = read(`supabase/migrations/${LIGHTEN}.sql`) + read(`supabase/migrations/${LANGUAGE}.sql`);
   await db.exec(sql); await db.exec('discard temp');
   after = await snap(db);
   await db.exec(sql); await db.exec('discard temp');
@@ -51,7 +52,7 @@ describe('ترحيل أعمدة التأسيسي', () => {
     for (const m of after) for (const lv of ['intermediate', 'advanced']) for (const scope of ['project', 'program', 'portfolio']) {
       for (const primary of [false, true]) {
         // الخاصيات الثلاث تُحمل مع الحقل ولا يقرؤها لغير التأسيسي إلا اللوحة، وما عداها مطابق
-        const strip = (fs) => fs.map(({ columns_beginner, labels_beginner, min_rows_beginner, ...f }) => f);
+        const strip = (fs) => fs.map(({ columns_beginner, labels_beginner, min_rows_beginner, label_beginner, hint_beginner, ...f }) => f);
         expect(strip(fieldsFor(m.fields, lv, scope, primary, null, false, NEW)), `${m.key} ${lv} ${scope}`).toEqual(strip(fieldsFor(by[m.key].fields, lv, scope, primary, null, false, NEW)));
       }
     }
@@ -60,7 +61,7 @@ describe('ترحيل أعمدة التأسيسي', () => {
     const by = Object.fromEntries(before.map((m) => [m.key, m]));
     let touched = 0;
     for (const m of after) {
-      const strip = (fs) => fs.map(({ columns_beginner, labels_beginner, min_rows_beginner, ...f }) => f);
+      const strip = (fs) => fs.map(({ columns_beginner, labels_beginner, min_rows_beginner, label_beginner, hint_beginner, ...f }) => f);
       expect(strip(m.fields), m.key).toEqual(strip(by[m.key].fields));
       touched += m.fields.filter((f) => f.columns_beginner).length;
     }
@@ -156,5 +157,37 @@ describe('قاعدة «لا فقد» في الأعمدة', () => {
     // الاحتمال والأثر مكتوبان (5 × 5) والمالك مخفي: لا فحص «خطر عالٍ بلا مالك» يحجب التأسيسي
     const c = capstoneChecks({ scope: 'project', models: { raid: { fields: [f] } }, answers: { raid: { items } } });
     expect(c.find((x) => x.blocking && !x.ok)).toBeUndefined();
+  });
+});
+
+import { BEGINNER_EXAMPLE } from '../../supabase/content/initiative-guide/v1/examples.js';
+describe('المرحلة 3: لغة التأسيسي', () => {
+  const mine = () => capstoneModels(after, BEGINNER, 'project').map((m) => ({ m, fields: modelFields(m, BEGINNER, 'project', null, null, NEW) }));
+  it('كل حقل مطلوب يكتبه التأسيسي عنوانه سؤال، ولكل حقل ظاهر تلميح', () => {
+    for (const { m, fields } of mine()) for (const f of fields.filter((x) => !x.bind)) {
+      expect(String(f.hint || '').trim(), `${m.key}.${f.key}`).not.toBe('');
+      if (f.required !== false) expect(f.label, `${m.key}.${f.key}`).toMatch(/؟/);
+    }
+  });
+  it('تلميح المعالم يطلب خمسة بأنواع بسيطة، لا ثمانية تعاقدية وحوكمية', () => {
+    const ms = mine().find((x) => x.m.key === 'milestone-register').fields.find((f) => f.key === 'milestones');
+    expect(ms.hint).toContain('خمسة معالم');
+    expect(ms.hint).not.toMatch(/ثمانية|تعاقدي|حوكمي/);
+  });
+  it('عنوان الفصل للتأسيسي بلا «المسار الحرج»، وللمتوسط كما هو', () => {
+    expect(mine().find((x) => x.m.key === 'schedule').m.title_ar).toBe('الجدول الزمني');
+    const mid = capstoneModels(after, { milestone: 'intermediate', impact: 'intermediate', leadership: 'intermediate' }, 'project').find((m) => m.key === 'schedule');
+    expect(mid.title_ar).toBe(after.find((m) => m.key === 'schedule').title_ar);
+  });
+  it('المثال التطوعي: فصول التأسيسي كلها، وصفوفه بعرض الجدول المخزن، ويكتمل به كل فصل ويُسمح بالتقديم', () => {
+    const ex = Object.fromEntries(BEGINNER_EXAMPLE.sections.map((s) => [s.key, Object.fromEntries(s.fields.map((f) => [f.key, f.value]))]));
+    const r = build(after, BEGINNER, (m) => ex[m.key] || {});
+    expect(Object.keys(ex).sort()).toEqual(r.sections.map((s) => s.model.key).sort());
+    for (const s of r.sections) for (const f of s.fields.filter((x) => x.type === 'table' && ex[s.model.key]?.[x.key])) {
+      for (const row of ex[s.model.key][f.key]) expect(row.length, `${s.model.key}.${f.key}`).toBe(f.columns.length);
+    }
+    expect(r.sections.filter((s) => !s.state.complete).map((s) => `${s.model.key}: ${s.state.missing}`)).toEqual([]);
+    expect(r.checks.filter((c) => !c.ok).map((c) => `${c.key}: ${c.detail}`)).toEqual([]);
+    expect(r.gate).toEqual({ ok: true });
   });
 });

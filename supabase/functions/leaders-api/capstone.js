@@ -12,6 +12,7 @@
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
 import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor } from './logic.js';
+import { BEGINNER_CHAPTER_TITLES } from './labels.js';
 
 export const CHARTER_KEY = 'initiative-charter';
 export const SCOPE_TITLES = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -113,8 +114,10 @@ export function cleanRubric(scores, notes) {
 /** @param {any[]} models @param {any} levels @param {any} scope @param {Set<string> | null} [kept] */
 export function capstoneModels(models, levels, scope, kept = null) {
   return modelsFor((models || []).filter((m) => m.capstone_sort != null), levels, scope, kept)
-    .sort((a, b) => a.capstone_sort - b.capstone_sort);
+    .sort((a, b) => a.capstone_sort - b.capstone_sort).map((m) => beginnerTitle(m, levels?.[m.dimension]));
 }
+/** عنوان الفصل بلغة التأسيسي (BEGINNER_CHAPTER_TITLES)، والنموذج كما هو لغيره */
+export const beginnerTitle = (/** @type {any} */ m, /** @type {string | null | undefined} */ level) => (level === 'beginner' && BEGINNER_CHAPTER_TITLES[m?.key] ? { ...m, title_ar: BEGINNER_CHAPTER_TITLES[m.key] } : m);
 
 // حقول نموذج للمشارك: بمستواه في بُعد النموذج ونطاقه، وحقول التعمق إن كان
 // بُعد النموذج محور الأولوية في مساره. answers: إجاباته، فيبقى ما كتبه في حقل رُفع مستواه
