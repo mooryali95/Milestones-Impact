@@ -106,15 +106,27 @@ export function structuralAccent(...candidates) {
 
 // ── قواعد التشارك (قرار المالك 2026-11-25): الجهة في الصدارة، والبرنامج (هوية الدفعة) سطر توقيع صغير، وMilestone علامة خافتة.
 // شعار الجهة: ارتفاع أقصى 18 مم وعرض أقصى 70 مم ومساحة أمان 3 مم حوله. شعار الدفعة: ارتفاع أقصى 9 مم. علامة Milestone: 6 مم
-function coBrand(b, id, kindLabel) {
+function coBrand(b, id, kindLabel, ctl) {
   const logo = safeLogo(b.logo);
   const org = logo ? `<img src="${esc(logo)}" alt="${esc(b.name || '')}">`
     : `<span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span>`;
   const plogo = safeLogo(b.programLogo);
   const program = b.program || plogo ? `<div class="prog">${plogo ? `<img src="${esc(plogo)}" alt="${esc(b.program || '')}">` : ''}${b.program ? `<span>${esc(b.program)}</span>` : ''}</div>` : '';
-  return `<div class="top"><div class="org">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>${program}
-    <div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
+  const ref = ctl ? '' : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
+  return `<div class="top"><div class="org${logo ? ' plate' : ''}">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>${program}${ref}`;
 }
+
+// ── المرحلة 25: خط لون الجهة أسفل الغلاف (1.6 مم موحدًا). يمر بـ structuralAccent، وإن لم يجتزه يُرسم بلون الجهة الخام
+// فلا تُطمس الهوية، ويُضاف تحته حد جرافيتي 0.3 مم إن قل تباينه عن 1.5:1 على mist فلا يختفي. لا يمس أي نص
+export const ACCENT_GUARD_MIN = 1.5;
+export function coverAccent(color) {
+  const raw = brandColor(color);
+  if (!raw) return null;
+  const passes = Boolean(structuralAccent(raw).source);
+  return { color: raw, passes, guard: !passes && contrastRatio(raw, C.mist) < ACCENT_GUARD_MIN };
+}
+// شريط الضبط الوثائقي: رمز · إصدار · تاريخ ISO · حالة لاتينية، والأجزاء تُنقّى فلا يدخلها إلا [A-Z0-9-.]
+export const controlStrip = (parts) => parts.map((x) => String(x ?? '').toUpperCase().replace(/[^A-Z0-9.\-]/g, '')).filter(Boolean).join(' · ');
 
 // ── الوثيقة ──
 // meta: { kind: 'ORG'|'PLAN'|..., eyebrow, title, subtitle?, for?, rows: [[label, value]], confidential?: نص, pageAr?: ترقيم الصفحات بالعربية,
@@ -125,6 +137,8 @@ function coBrand(b, id, kindLabel) {
 export function documentHtml(meta, body, opts = {}) {
   const id = meta.id || docId(meta.kind || 'DOC');
   const year = new Date().getFullYear();
+  const accent = meta.brand ? coverAccent(meta.brand.color) : null;
+  const rows = (meta.rows || []).slice(0, meta.brand ? (meta.control ? 3 : 6) : 4);
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
   // opts.print: الوثيقة نفسها لمولّد PDF على الخادم (workers/pdf-render): بلا شريط، وbase لخطوط المنصة وصورها
   return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
@@ -141,8 +155,8 @@ ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link re
 ${meta.brand ? `/* الغلاف صفحة كاملة بلا هامش ولا ترويسة (الطباعة ومولّد الخادم)، والمحتوى يبدأ الصفحة الثانية */
 @page :first { margin: 0; @top-right { content: none; } @top-left { content: none; } @bottom-right { content: none; } @bottom-left { content: none; } }
 @media print { html:not(.pdf) .mast.co { height: 296.5mm; overflow: hidden; display: flex; flex-direction: column; padding: 18mm 18mm 16mm; break-after: page; margin: 0; }
-  html:not(.pdf) .mast.co .eyebrow { margin-top: auto; } html:not(.pdf) .mast.co h1 { font-size: 34pt; } html:not(.pdf) .mast.co .meta { margin-top: auto; }
-  html:not(.pdf) .mast.co .accent { bottom: 0; height: 2.4mm; } html:not(.pdf) .mast.co .thesis { margin-bottom: 4mm; } }` : ''}
+  html:not(.pdf) .mast.co .eyebrow { margin-top: auto; } html:not(.pdf) .mast.co .meta { margin-top: auto; }
+  html:not(.pdf) .mast.co .accent { bottom: 0; } }` : ''}
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 /* الوثيقة فاتحة فقط (المرحلة 22): الإعلان في الجذر والرأس، ووسم قفل Dark Reader لأن الإعلان وحده لا يوقف الإضافة */
 :root { color-scheme: light; }
@@ -230,47 +244,56 @@ h2, h3 { break-after: avoid; }
 .rights { margin-top: 8mm; font-size: 7.2pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; }
 .rights b { font-weight: 400; color: ${C.slate}; }
 .dm { display: inline-block; vertical-align: middle; }
-.mast .stamp { position: absolute; top: 6mm; inset-inline-start: 50%; transform: translateX(50%) rotate(-2deg); border: 1px solid ${C.muted}; color: ${C.muted}; padding: .6mm 4mm; border-radius: 2px; font-size: 8pt; letter-spacing: .05em; background: ${C.paper}; }
+.mast .stamp { display: inline-block; border: 1px solid ${C.gold}; color: ${C.goldText}; padding: .5mm 3mm; border-radius: 2px; font-size: 9pt; font-weight: 500; letter-spacing: 0; background: ${C.paper}; line-height: 1.6; }
+.mast > .stamp { position: absolute; top: 6mm; inset-inline-end: 18mm; }
+.mast .ctlrow { display: flex; align-items: center; justify-content: space-between; gap: 4mm; margin-top: 3mm; flex-wrap: wrap; }
+.mast .ctl { font: 400 7.5pt "Noto Sans", sans-serif; letter-spacing: .14em; color: ${C.muted}; direction: ltr; unicode-bidi: isolate; }
 .mast.co .top { direction: rtl; align-items: center; }
 .mast.co .org { padding: 3mm; margin: -3mm; }
-.mast.co .org img { max-height: 18mm; max-width: 70mm; display: block; object-fit: contain; }
+.mast.co .org.plate { background: ${C.paper}; background-color: ${C.paper}; margin: 0; border-radius: 1mm; }
+.mast.co .org img { max-height: 18mm; min-width: 30mm; max-width: 70mm; display: block; object-fit: contain; }
 .mast.co .prog { display: flex; align-items: center; gap: 2.5mm; margin-top: 6mm; direction: rtl; font-size: 9pt; font-weight: 400; color: ${C.slate}; }
 .mast.co .prog img { max-height: 9mm; max-width: 40mm; object-fit: contain; display: block; }
-.mast.co .meta { grid-template-columns: repeat(3, 1fr); row-gap: 4mm; }
-.mast.co .meta div:nth-child(3n+1) { border-inline-start: 0; padding-inline-start: 0; }
+.mast.co .meta { grid-template-columns: repeat(var(--n, 3), 1fr); row-gap: 4mm; }
+.mast.co .meta div:first-child { border-inline-start: 0; padding-inline-start: 0; }
 .mast.co .org .nm { font-weight: 400; font-size: 17pt; line-height: 1.3; color: ${C.graphite}; display: block; }
 .mast.co .org .nm small { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.muted}; text-transform: uppercase; }
 .mast.co .by { display: flex; align-items: center; gap: 2mm; direction: rtl; font-size: 7.5pt; color: ${C.muted}; }
 .mast.co .by svg { height: 6mm; width: auto; display: block; }
-.mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.2mm; }
+.mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.6mm; }
+.mast .accent.guard { box-shadow: 0 .3mm 0 ${C.graphite}; }
 .mast.co { padding: 14mm 18mm 12mm; }
 .mast.co .eyebrow { margin-top: 14mm; }
-.mast.co h1 { font-size: 30pt; font-weight: 500; line-height: 1.2; margin: 3mm 0 2mm; }
+.mast.co h1 { font-size: 30pt; font-weight: 500; line-height: 1.25; margin: 3mm 0 0; text-wrap: balance; max-width: 150mm; }
+.mast.co .rule { display: block; width: 16mm; height: .6mm; background: ${C.gold}; margin: 4mm 0 3mm; }
 .mast.co .sub { font-size: 11.5pt; color: ${C.slate}; }
 .mast.co .meta { margin-top: 12mm; }
-.mast.co .meta b { font-size: 10pt; }
+.mast.co .meta b { font-size: 10.5pt; font-weight: 500; }
+.mast.co { border-bottom: 0; }
+.close .thesis { margin: 0 0 3mm; flex-basis: 100%; }
+.close { flex-wrap: wrap; }
 /* ملف PDF: الغلاف صفحة كاملة وحده (حتى هامش التذييل، 1047 بكسل = PAGE.h - PAGE.bottom في pdf.js)، والعنوان في ثلثه الأوسط،
    وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
 html.pdf .mast.co { min-height: 1047px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
 html.pdf .mast.co .eyebrow { margin-top: auto; }
-html.pdf .mast.co h1 { font-size: 34pt; }
 html.pdf .mast.co .meta { margin-top: auto; }
-html.pdf .mast.co .accent { bottom: 0; height: 2.4mm; }
+html.pdf .mast.co .accent { bottom: 0; }
 </style></head><body>
 <div class="toolbar">${meta.pdfName ? '<button class="pri" data-act="pdf">تحميل PDF</button><button data-act="print">طباعة</button>' : '<button class="pri" data-act="print">طباعة أو حفظ PDF</button>'}<button data-act="close">إغلاق</button></div>
 <article class="sheet">
   <header class="mast${meta.brand ? ' co' : ''}">
-    ${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}
-    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
-    ${meta.brand && brandColor(meta.brand.color) ? `<i class="accent" style="background:${brandColor(meta.brand.color)}"></i>` : ''}
+    ${meta.stamp && !(meta.brand && meta.control) ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}
+    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel, meta.control) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
+    ${accent ? `<i class="accent${accent.guard ? ' guard' : ''}" style="background:${accent.color}"></i>` : ''}
     <span class="eyebrow">${esc(meta.eyebrow || 'Milestone Impact · Report')}</span>
-    <h1>${esc(meta.title)}</h1>
+    <h1>${esc(meta.title)}</h1>${meta.brand ? '<i class="rule" aria-hidden="true"></i>' : ''}
     ${meta.subtitle ? `<p class="sub">${esc(meta.subtitle)}</p>` : ''}
-    ${meta.rows?.length ? `<div class="meta">${meta.rows.slice(0, meta.brand ? 6 : 4).map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
-    <p class="thesis">من النية… إلى الأثر</p>
+    ${rows.length ? `<div class="meta"${meta.brand ? ` style="--n:${rows.length}"` : ''}>${rows.map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
+    ${meta.brand && meta.control ? `<div class="ctlrow"><bdi class="ctl" dir="ltr"${meta.controlLabel ? ` role="note" aria-label="${esc(meta.controlLabel)}"` : ''}>${esc(meta.control)}</bdi>${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}</div>` : ''}
   </header>
   ${body}
   <div class="close">
+    <p class="thesis">من النية… إلى الأثر</p>
     <p>${esc(meta.closing || 'أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.')}</p>
     ${SEAL()}
   </div>
