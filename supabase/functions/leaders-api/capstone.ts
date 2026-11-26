@@ -9,7 +9,6 @@
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
 import { audit, CONFIG, db, Fail, hash, logConsent, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
-import { missingColumn } from './missing-column.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor, programEndOf } from './programs.ts';
 import { emailsOf } from './account-emails.ts';
@@ -545,7 +544,6 @@ export function sponsorReminderMail(sponsor: string | null, who: string, initiat
 const SPONSOR_REMIND_COLS = 'participant_id, status, sponsor_status, sponsor_token_hash, sponsor_email, sponsor_name, sponsor_invited_at, sponsor_expires_at, sponsor_reminded_at, participants!inner(id, full_name, is_demo, is_test, status)';
 export async function sponsorReminders() {
   const { data, error } = await db.from('capstones').select(SPONSOR_REMIND_COLS).eq('status', 'accepted').eq('sponsor_status', 'pending').limit(500);
-  if (missingColumn(error)) return { reminded: 0, failed: 0, expired: 0, skipped: 'sponsor_reminded_at' };
   if (error) throw error;
   const rows = (data || []) as any[];
   const now = Date.now();

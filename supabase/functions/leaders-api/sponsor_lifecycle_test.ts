@@ -1,7 +1,7 @@
 // تصور المرحلة 2 (docs/content/2026-11-26-تصور-المرحلة-2-الحلقة-الأخيرة-وجودة-الاعتماد-v1.md): دورة حياة رابط الراعي.
 // 2.1: الراعي يقرأ إشعار الخصوصية في صفحتي التأييد وتأكيد الأثر، ويُسجَّل قبوله بالإرسال كما في صفحة المقيّم. بقاعدة في الذاكرة (_fake_db.ts)
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake, withNet } from './_fake_db.ts';
 const X = await import('./capstone.ts');
 const T = await import('./tracking.ts');
@@ -43,14 +43,15 @@ Deno.test('2.1 تأكيد الأثر من الراعي يسجل موافقته �
   assertEquals(tables.consent_events.map((c) => [c.subject, c.subject_id]), [['sponsor', UPD]]);
 });
 
-Deno.test('2.1 قبل ترحيل نوع الراعي في السجل: رفض القيد لا يوقف قرار الراعي', async () => {
+// 20261129170000 مطبّق: رفض القيد لم يعد متوقعًا، فتعذّر السجل يفشل القرار كسائر الموافقات (لا قرار بلا دليله)
+Deno.test('2.1 تعذّر سجل موافقة الراعي يفشل قراره ولا يُبتلع', async () => {
   const tables = await world();
   installFake(tables, {
     embed: (t, r, all) => (t === 'capstones' ? { participants: all.participants.find((x) => x.id === r.participant_id) || null } : null),
     fail: (t, op) => (t === 'consent_events' && op.kind === 'insert' ? { code: '23514', message: 'violates check constraint "consent_events_subject_check"' } : null),
   });
-  const r = await withNet(() => X.sponsorSubmit({ t: TOKEN, decision: 'decline', note: 'عدّل الميزانية' }));
-  assertEquals(r.decision, 'declined');
+  const e: any = await assertRejects(() => withNet(() => X.sponsorSubmit({ t: TOKEN, decision: 'decline', note: 'عدّل الميزانية' })));
+  assertEquals(e.code, 'consent_unavailable');
 });
 
 // 2.2: «منتهٍ» حالة مشتقة لا مخزنة: pending مع sponsor_expires_at ماضٍ، بقاعدة واحدة (sponsorState في capstone.js)
@@ -139,12 +140,15 @@ Deno.test('2.3 تعذّر تذكير واحد لا يوقف غيره', () => mai
   assertEquals([out.r.reminded, out.r.failed, out.mails], [1, 1, 1]);
 }));
 
-Deno.test('2.3 قبل ترحيل sponsor_reminded_at: لا تذكير ولا بريد، فلا يتكرر كل أسبوع', () => mailOn(async () => {
+// 20261129180000 مطبّق: غياب العمود خطأ يُرفع لا تجاوز صامت
+Deno.test('2.3 تعذّر قراءة sponsor_reminded_at يرمي ولا يرسل بريدًا', () => mailOn(async () => {
   const tables = await remindWorld([{}]);
   installFake(tables, { fail: (t, op) => (t === 'capstones' && op.kind === 'select' && String(op.cols).includes('sponsor_reminded_at') ? { code: '42703', message: 'column capstones.sponsor_reminded_at does not exist' } : null),
     embed: (t, r, all) => (t === 'capstones' ? { participants: all.participants.find((x) => x.id === r.participant_id) || null } : null) });
-  const out = await withNet(async (calls) => ({ r: await X.sponsorReminders(), mails: resendCalls(calls).length }));
-  assertEquals([out.r.reminded, out.mails, out.r.skipped], [0, 0, 'sponsor_reminded_at']);
+  await withNet(async (calls) => {
+    await assertRejects(() => X.sponsorReminders());
+    assertEquals(resendCalls(calls).length, 0);
+  });
 }));
 
 Deno.test('2.3 المشارك يرى سطر انتهاء مهلة الراعي في صفحة مبادرته، ونصه لا يحيل إلى المستشار', () => {

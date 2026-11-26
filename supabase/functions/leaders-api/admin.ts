@@ -256,10 +256,7 @@ export async function assignOrg(a: Admin, b: Body) {
   const transferred: string[] = [];
   for (const pid of moving.ids) {
     const r = await db.rpc('transfer_participant', { p_participant: pid, p_actor: a.email, p_org: target?.id || null, p_set_org: true, p_cohort: null });
-    if (r.error) {
-      if (!transferred.length && ['PGRST202', '42883'].includes(String((r.error as any).code))) throw new Fail('نقل الجهة مع الدفعة غير مفعّل بعد: يلزم تطبيق ترحيل القاعدة', 409, 'not_migrated');
-      throw r.error;
-    }
+    if (r.error) throw r.error;
     transferred.push(pid);
   }
   if (transferred.length) q = q.not('id', 'in', `(${transferred.join(',')})`);
