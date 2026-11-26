@@ -40,7 +40,8 @@ describe('ترحيل sponsor_reminded_at', () => {
     expect(MIGRATIONS).toContain(NAME);
     expect(MIGRATION_GATES[NAME][0]).toBe('tolerant');
     expect(SQL.split('\n')[0]).toMatch(/^-- deploy-gate: tolerant /);
-    expect(read('supabase/schema/baseline.sql')).toMatch(/sponsor_expires_at timestamp with time zone,\n\s+sponsor_reminded_at timestamp with time zone,/);
+    // ترتيب الأعمدة في اللقطة المولدة ترتيب إضافتها، فيُفحص العمود داخل جدول capstones لا موضعه
+    expect(read('supabase/schema/baseline.sql').match(/create table if not exists leaders\.capstones \([\s\S]*?\n\);/)[0]).toMatch(/\n\s+sponsor_reminded_at timestamp with time zone,/);
   });
   it('يضيف العمود وآمن لإعادة التشغيل', async () => {
     const db = new PGlite();
