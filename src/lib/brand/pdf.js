@@ -53,8 +53,8 @@ function planWith({ total, cands, forced = [], pageH = CONTENT_H, firstH = FIRST
       // المرحلة 5: الكسر اللين (soft) داخل كتلة break-inside: avoid يُقبل حين لا كسر صلب يملأ الصفحة، فلا تبقى صفحة تحت 25%
       const ok = ys.filter((c) => c.y > s + 2 && c.y <= limit);
       const hard = ok.filter((c) => !c.soft);
-      const full = hard.filter((c) => c.y >= s + room * 0.3);
-      const softFull = ok.filter((c) => c.soft && c.y >= s + room * 0.3);
+      const full = hard.filter((c) => c.y >= s + room * 0.45);
+      const softFull = ok.filter((c) => c.soft && c.y >= s + room * 0.45);
       const sparse = preferFill && full.length && softFull.at(-1)?.y > full.at(-1).y;
       const pick = (sparse ? softFull : full.length ? full : softFull.length ? softFull : hard.length ? hard : ok).at(-1);
       end = pick ? pick.y : limit;
