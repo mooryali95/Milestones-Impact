@@ -91,7 +91,7 @@ describe('الوثيقة المؤسسية', () => {
     expect(r.blocked).toBeUndefined();
     const html = documentHtml(r.meta, r.body);
     expect(html).toContain('class="mast co"');
-    expect(html).toContain('<img src="data:image/svg+xml;base64,');
+    expect(html).toContain('<img data-org-logo src="data:image/svg+xml;base64,');
     expect(html).toContain('بإعداد');
     expect(html).toContain('style="background:#1F6F5C"');
     const heads = [...r.body.matchAll(/<span class="n">(\d+)<\/span>/g)].map((m) => +m[1]);

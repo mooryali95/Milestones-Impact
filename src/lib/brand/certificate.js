@@ -8,7 +8,7 @@
 // كل نص يمر عبر esc().
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 import { C, esc } from './doc.js';
-import { logoClass } from './logo.js';
+import { orgLogoHtml, refreshLogos, primeLogos } from './logo.js';
 
 const LOGO = LOGO_SRC.replace(/<\?xml[^>]*>\s*/, '');
 
@@ -113,7 +113,7 @@ export function certificateHtml(c0, qrSvg, opts = {}) {
   const org = c.org?.name || '';
   const facts = [c.cohort_ar ? `الدفعة: ${esc(c.cohort_ar)}` : '', org && !co ? `الجهة: ${esc(org)}` : ''].filter(Boolean);
   const micro = `MILESTONE IMPACT · ${c.serial} · ${kindEn.toUpperCase()} · `.repeat(14);
-  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+  return refreshLogos(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="color-scheme" content="light">
 ${opts.base ? `<base href="${esc(opts.base)}">` : ''}
 <title>${kindAr} · ${esc(c.name_ar)} · ${sample ? SAMPLE_STAMP_AR : esc(c.serial)}</title>
@@ -140,6 +140,7 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 40
 .brands .org img { height: 15mm; width: auto; max-width: 48mm; object-fit: contain; display: block; }
 .brands .org.t img { max-width: 18mm; }
 .brands .org.w img { max-width: 64mm; }
+.brands .org.light img { background: ${C.graphite}; padding: 2mm 3mm; box-sizing: content-box; }
 .brands .org small { font: 400 9pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; direction: rtl; }
 .main { align-self: center; }
 .kind-en { font: 400 8pt "Noto Sans", sans-serif; letter-spacing: .28em; color: ${C.gold}; text-transform: uppercase; margin: 0 0 1.5mm; }
@@ -188,7 +189,7 @@ ${opts.print ? '' : `<div class="toolbar"><button class="pri" data-act="pdf">ت�
   <div class="content">
     <header class="brands">
       <div class="mi">${LOGO}</div>
-      ${co ? `<i class="sep"></i><div class="org ${logoClass(c.org.logo)}"><img src="${esc(c.org.logo)}" alt="${esc(c.org.name)}"><small>بالشراكة مع ${esc(c.org.name)}</small></div>` : ''}
+      ${co ? `<i class="sep"></i>${orgLogoHtml(c.org.logo, { escape: esc, alt: c.org.name, after: `<small>بالشراكة مع ${esc(c.org.name)}</small>` })}` : ''}
     </header>
     <section class="main">
       <p class="kind-en">${kindEn}</p>
@@ -221,7 +222,7 @@ ${opts.print ? '' : `<div class="toolbar"><button class="pri" data-act="pdf">ت�
   <div class="rights">جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(c.issued_at).getFullYear()} Milestone Impact</bdi> · ${sample ? `${SAMPLE_STAMP_AR}، لا يثبت إتمام البرنامج` : 'تحقّق من صحة الشهادة بمسح الرمز'}</div>
   ${status ? `<div class="status"><span>${esc(status)}</span></div>` : ''}
 </article>
-</body></html>`;
+</body></html>`);
 }
 
 // رابط «أضف إلى ملفك» في LinkedIn بقسم التراخيص والشهادات
@@ -269,6 +270,8 @@ export async function downloadCertificate(win, c, qr, opts = {}) {
 export async function writeCertificate(win, c, opts = {}) {
   if (!win) return false;
   const qr = c.sample ? '' : await qrSvgFor(c.verify_url);
+  // الشعار يُقاس من الصورة نفسها مرة (فاتح · فئة · سقف الحدة) قبل الكتابة
+  if (c.org?.logo) await primeLogos(certificateHtml(c, qr, opts));
   const html = certificateHtml(c, qr, opts);
   win.document.open();
   win.document.write(html);

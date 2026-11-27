@@ -184,3 +184,78 @@ export function logoIsLight(src) {
   const d = decode(src);
   return d && d.type === 'svg+xml' ? svgIsLight(d.bin) : null;
 }
+
+// ── قياس الشعار من الصورة المحمّلة (المصدر الواحد للفاتح والفئة وسقف الحدة في المتصفح) ──
+// يُحمَّل كل شعار مرة ويُحفظ في الذاكرة. يصلح الروابط النسبية وwebp وPNG الفاتح التي لا تكشفها الترويسة.
+// orgLogoHtml يطبع المخزَّن، وwriteDocument/writeCertificate ينتظران primeLogos قبل الكتابة فيصل HTML بفئاته للخادم أيضًا.
+export const LOGO_PX_PER_MM = 8;
+// [الارتفاع، العرض الأقصى] بالمم لكل لوحة وفئة، مطابقة لـ .mast.co .org.* (doc.js) و.brands .org.* (certificate.js)
+const NOMINAL = { 'org plate': { w: [14, 64], s: [20, 60], t: [24, 20] }, org: { w: [15, 64], s: [15, 48], t: [15, 18] } };
+const CACHE = new Map(); // src → Promise
+const INFO = new Map(); // src → { w, h, light, aspect } | null
+const browserLoader = (src) => new Promise((res, rej) => {
+  const img = new Image();
+  img.decoding = 'async';
+  img.onload = () => {
+    try {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const k = Math.min(1, 64 / Math.max(w, h, 1));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      let data = null;
+      try { data = ctx.getImageData(0, 0, cv.width, cv.height).data; } catch { /* صورة من أصل آخر بلا CORS: الأبعاد وحدها */ }
+      res({ w, h, data });
+    } catch (e) { rej(e); }
+  };
+  img.onerror = () => rej(new Error('logo load'));
+  img.src = src;
+});
+let loader = browserLoader;
+export const setLogoLoader = (fn) => { loader = fn || browserLoader; };
+export const resetLogoCache = () => { CACHE.clear(); INFO.clear(); };
+export const logoInfo = (src) => INFO.get(src) || null;
+
+export function measureLogo(src) {
+  if (!src) return Promise.resolve(null);
+  if (!CACHE.has(src)) {
+    CACHE.set(src, Promise.resolve().then(() => loader(src)).then(({ w, h, data }) => {
+      const d = decode(src);
+      const light = d && d.type === 'svg+xml' ? svgIsLight(d.bin) : data ? isLightLogo(data) : false;
+      return { w, h, light, aspect: aspectClass(h ? w / h : null) };
+    }).catch(() => null).then((info) => { INFO.set(src, info); return info; }));
+  }
+  return CACHE.get(src);
+}
+
+const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+const SRC_RE = /<img data-org-logo src="([^"]*)"/g;
+// كل شعارات الجهة في HTML مبني، تُقاس قبل الكتابة (بمهلة فلا تتعطل الوثيقة بشعار بطيء)
+export async function primeLogos(html, timeout = 2500) {
+  const srcs = [...new Set([...String(html).matchAll(SRC_RE)].map((m) => unesc(m[1])))].filter((s) => !INFO.has(s));
+  if (!srcs.length) return;
+  await Promise.race([Promise.all(srcs.map(measureLogo)), new Promise((r) => setTimeout(r, timeout))]);
+}
+export const logosPending = (html) => [...String(html).matchAll(SRC_RE)].some((m) => !INFO.has(unesc(m[1])));
+
+// لوحة شعار الجهة: الفئة والفاتح من القياس إن وُجد، وإلا من الترويسة وSVG. سقف الحدة: لا يُعرض فوق دقته الأصلية ÷ 8 بكسل/مم
+export function orgLogoHtml(src, { escape, alt = '', base = 'org', light: light0 = null, after = '' }) {
+  const info = logoInfo(src);
+  const aspect = info ? info.aspect : logoClass(src);
+  const light = info ? info.light : (light0 ?? logoIsLight(src));
+  const dims = info || logoDims(src);
+  // السقف يُكتب فقط حين يقل عن المقاس الاسمي للفئة (CSS في doc.js وcertificate.js) فلا يوسّع حدًا قائمًا
+  const nom = NOMINAL[base]?.[aspect];
+  const mh = dims && dims.h ? +(dims.h / LOGO_PX_PER_MM).toFixed(1) : Infinity, mw = dims && dims.w ? +(dims.w / LOGO_PX_PER_MM).toFixed(1) : Infinity;
+  const cap = nom && (mh < nom[0] || mw < nom[1]) ? ` style="max-height:${Math.min(mh, nom[0])}mm;max-width:${Math.min(mw, nom[1])}mm"` : '';
+  return `<div class="${base} ${aspect}${light ? ' light' : ''}"><img data-org-logo src="${escape(src)}"${cap} alt="${escape(alt)}">${after}</div>`;
+}
+
+// يعيد بناء لوحات الشعار في HTML مكتمل بالقياس المخزَّن الآن (الجسم المبني سلفًا كصفحة الاعتماد يُصحَّح هنا أيضًا)
+const escHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const PANEL_RE = /<div class="(org(?: plate)?) [wst](?: light)?"><img data-org-logo src="([^"]*)"(?: style="[^"]*")? alt="([^"]*)">/g;
+export const refreshLogos = (html) => String(html).replace(PANEL_RE, (m, base, src, alt) => {
+  const s = unesc(src);
+  return logoInfo(s) ? orgLogoHtml(s, { escape: escHtml, alt: unesc(alt), base }).replace(/<\/div>$/, '') : m;
+});

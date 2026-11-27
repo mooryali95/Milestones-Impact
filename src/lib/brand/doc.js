@@ -7,7 +7,7 @@
 // المرجع: Milestone-Impact-Brand-Brief (الألوان، الخطوط الخفيفة، الماسة، الختم مرة واحدة).
 // كل نص يدخل الوثيقة يمر عبر esc(): النافذة ترث نطاق التطبيق.
 import { pdfServer } from './pdf-source.js';
-import { logoClass, logoIsLight } from './logo.js';
+import { orgLogoHtml, refreshLogos, primeLogos, logosPending } from './logo.js';
 import { DOC_LIVE_HEAD_AR, DOC_WATERMARK_AR, REPORT_RIGHTS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 
@@ -136,11 +136,10 @@ function coBrand(b, id, kindLabel, ctl) {
 }
 
 // العلامة المشتركة (الغلاف وصفحة الاعتماد): شعار الجهة بفئة أبعاده، فاصل ذهبي بارتفاعه، ثم «بإعداد» فوق علامة المنصة.
-// الفئة والكشف الفاتح من logo.js مرة واحدة؛ b.logoLight (من processLogo) يقدَّم على كشف SVG
+// الفئة والفاتح وسقف الحدة من logo.js (orgLogoHtml): من قياس الصورة المحمّلة إن سبق (primeLogos في writeDocument)، وإلا من الترويسة وSVG
 export function lockup(b) {
   const logo = safeLogo(b.logo);
-  const light = logo && (b.logoLight ?? logoIsLight(logo));
-  const org = logo ? `<div class="org plate ${logoClass(logo)}${light ? ' light' : ''}"><img src="${esc(logo)}" alt="${esc(b.name || '')}"></div>`
+  const org = logo ? orgLogoHtml(logo, { escape: esc, alt: b.name || '', base: 'org plate', light: b.logoLight ?? null })
     : `<div class="org"><span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span></div>`;
   return `<div class="top">${org}<i class="dv"></i><div class="by"><span>بإعداد</span>${LOGO}</div></div>`;
 }
@@ -171,7 +170,7 @@ export function documentHtml(meta, body, opts = {}) {
   const rows = (meta.rows || []).slice(0, meta.brand ? (meta.control ? 3 : 6) : 4);
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
   // opts.print: الوثيقة نفسها لمولّد PDF على الخادم (workers/pdf-render): بلا شريط، وbase لخطوط المنصة وصورها
-  return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
+  return refreshLogos(`<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
 <meta name="color-scheme" content="light"><meta name="darkreader-lock">
 ${opts.base ? `<base href="${esc(opts.base)}">` : ''}
 <title>${esc(meta.title)} · Milestone Impact</title>
@@ -355,7 +354,7 @@ html.pdf .mast.co .accent { bottom: 0; }
 </article>
 ${isLiveDoc(meta) && !opts.pdf ? `<div class="wm" aria-hidden="true"><span>${esc(WATERMARK.text)}</span></div>` : ''}
 ${opts.pdf ? runningHead(meta) : ''}
-</body></html>`;
+</body></html>`);
 }
 
 // ترويسة صفحات ملف PDF بعد الغلاف (pdf.js يرسمها مرة ويكررها): شعار الجهة أو اسمها ولونها في جهة، واسم الباب الحالي في الأخرى
@@ -381,8 +380,16 @@ export const openDocument = (meta, body) => writeDocument(window.open('', '_blan
 // opts.pdf: مصدر تذكرة لهذه الوثيقة وحدها بدل مصدر التطبيق
 export function writeDocument(win, meta, body, opts = {}) {
   if (!win) return false;
+  // الشعار يُقاس من الصورة نفسها مرة ثم تُكتب الوثيقة بفئته ولوحته (ينتظر أول مرة فقط)
+  const first = documentHtml(meta, body);
+  if (logosPending(first)) primeLogos(first).then(() => fill(win, meta, body, opts, documentHtml(meta, body)));
+  else fill(win, meta, body, opts, first);
+  return true;
+}
+
+function fill(win, meta, body, opts, html) {
   win.document.open();
-  win.document.write(documentHtml(meta, body));
+  win.document.write(html);
   win.document.close();
   win.document.querySelector('[data-act="print"]')?.addEventListener('click', () => win.print());
   // «تحميل PDF»: من الخادم حين تتاح تذكرة، وإلا يُبنى في نافذة المنصة (pdf.js downloadBest)، ويُحفظ من النافذة نفسها، والزر يعرض تقدمه
@@ -404,5 +411,4 @@ export function writeDocument(win, meta, body, opts = {}) {
     }
   });
   win.document.querySelector('[data-act="close"]')?.addEventListener('click', () => win.close());
-  return true;
 }
