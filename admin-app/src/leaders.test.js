@@ -67,3 +67,15 @@ describe('المدير الأعلى: شرط واحد', () => {
     }
   });
 });
+
+// 4.4: تغيير محور مرحلة من لوحتها ينقلها إلى آخر محورها الجديد بمنطق الإدراج نفسه داخل الحارس
+describe('تغيير محور مرحلة', () => {
+  it('save يحسب الموضع بـ stageInsertAt ويزيح ما بعده داخل withGuard', () => {
+    const admin = read('supabase/functions/leaders-api/admin.ts');
+    const fn = admin.slice(admin.indexOf('export async function save'));
+    const part = fn.slice(fn.indexOf('let phaseShift'), fn.indexOf("b.entity === 'handbook_modules' && 'body_md'"));
+    expect(part).toContain('stageInsertAt(others, row.phase)');
+    expect(part).toContain('row.sort = sort;');
+    expect(part).toMatch(/withGuard\([\s\S]*moved\.has\(s\.key\)[\s\S]*sort: Number\(s\.sort \?\? 0\) \+ 1/);
+  });
+});

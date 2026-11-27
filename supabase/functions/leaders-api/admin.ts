@@ -1626,8 +1626,23 @@ export async function save(a: Admin, b: Body) {
     if (bad) throw new Fail(bad.msg, 400, 'rules');
   }
   // إخفاء مرحلة أو نقلها لمحور آخر أو تغيير قاعدتها قد يكسر «تبدأ مع» لمرحلة غيرها، فيُرفض كما يُرفض في النشر
+  // تغيير محور مرحلة (4.4): تنتقل إلى آخر محورها الجديد بمنطق الإدراج نفسه، فيُزاح ما بعد موضعها بواحد داخل الحارس
+  let phaseShift: any[] = [];
+  if (b.entity === 'journey_stages' && !isNew && 'phase' in row && current && row.phase !== current.phase && PHASE_ORDER.includes(row.phase)) {
+    const pid = String(b.row.program_id);
+    const { data: rows } = await db.from('journey_stages').select('key, sort, phase').eq('program_id', pid);
+    const others = (rows || []).filter((s: any) => s.key !== b.row.key);
+    const { sort, shifted } = stageInsertAt(others, row.phase);
+    row.sort = sort;
+    phaseShift = shifted;
+  }
   if (b.entity === 'journey_stages' && !isNew && ['rules', 'active', 'sort', 'phase'].some((k) => k in row)) {
-    await withGuard(String(b.row.program_id), (list) => list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : s)));
+    const moved = new Set(phaseShift.map((s: any) => s.key));
+    await withGuard(String(b.row.program_id), (list) => list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : moved.has(s.key) ? { ...s, sort: Number(s.sort ?? 0) + 1 } : s)));
+    const stamp = { updated_at: new Date().toISOString(), updated_by: a.email };
+    for (const s of [...phaseShift].sort((x: any, y: any) => Number(y.sort) - Number(x.sort))) {
+      must(await db.from('journey_stages').update({ sort: Number(s.sort) + 1, ...stamp }).eq('program_id', String(b.row.program_id)).eq('key', s.key), 'تعذّر ترتيب المراحل');
+    }
   }
 
   // كتلة لم تُغلق أو وسم غير معروف يغيّر ما يصل كل مسار، فلا يُحفظ
