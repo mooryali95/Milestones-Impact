@@ -64,8 +64,11 @@ test('الجهات والدفعات فارغتين: شرح وزر الإضافة
   await expect(orgs).toContainText('لا جهات بعد');
   await expect(orgs.getByRole('button', { name: '+ جهة جديدة' })).toBeVisible();
   await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
-  const cohorts = page.locator('.la-blank');
-  await expect(cohorts).toContainText('لا دفعات بعد');
+  // البرامج والدفعات فارغتان معًا: لكل قسم حالته الفارغة بزره
+  const programs = page.locator('.la-blank').filter({ hasText: 'لا برامج فعالة' });
+  await expect(programs.getByRole('button', { name: '+ برنامج جديد' })).toBeVisible();
+  const cohorts = page.locator('.la-blank').filter({ hasText: 'لا دفعات بعد' });
+  await expect(cohorts).toBeVisible();
   await expect(cohorts.getByRole('button', { name: '+ دفعة جديدة' })).toBeVisible();
 });
 

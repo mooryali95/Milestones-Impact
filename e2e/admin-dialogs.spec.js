@@ -144,7 +144,7 @@ test('نوافذ البرامج: «قارن» والتقييم الختامي و
   await setup(page);
   await leaders(page, 'البرامج والدفعات');
   // قارن بالحالي
-  await page.getByRole('button', { name: 'النسخ (1)' }).click();
+  await page.getByRole('button', { name: /^سجل النسخ \(1\)/ }).click();
   await page.getByRole('button', { name: 'قارن بالحالي' }).click();
   await expect(page.getByRole('dialog', { name: 'الفرق' })).toContainText('فيديو التمهيد');
   await expect.poll(() => focusedDialog(page)).toBe('الفرق');
