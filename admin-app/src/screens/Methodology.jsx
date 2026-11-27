@@ -148,21 +148,24 @@ export function JourneyText({ text }) {
   return text.split(MISSING_TOKEN).flatMap((part, i) => (i ? [<span key={i} className="la-chip warn">{ASSESSMENT_MISSING_AR}</span>, part] : [part]));
 }
 
+const NONE = Object.freeze([]);
 export function Journey({ catalog, reload, canWrite, onProgram }) {
   const [edit, editor] = useEditor(reload);
   const { toast, prompt } = useUI();
   const pid = catalog.program_id;
   const [pdata, setPdata] = useState(null);
   useEffect(() => { L('admin.programs').then(setPdata); }, [pid]);
-  const stages = [...catalog.journey_stages].sort((a, b) => a.sort - b.sort);
-  const reqs = catalog.stage_requirements;
+  // تحصين (نقطة التحقق 2026-11-27): رد ناجح بلا journey_stages أو stage_requirements يُعرض رحلة فارغة بدل الانهيار
+  const stagesIn = Array.isArray(catalog.journey_stages) ? catalog.journey_stages : NONE;
+  const stages = [...stagesIn].sort((a, b) => a.sort - b.sort);
+  const reqs = Array.isArray(catalog.stage_requirements) ? catalog.stage_requirements : NONE;
   const mv = { catalog, reload, canWrite };
   useSpot(catalog);
   // سياق واحد (journeyCtx): مدة القياس من رد admin.catalog (baselineMinutes على الخادم)، لا قيمة ثابتة هنا
   const ctxOf = (s) => journeyCtx({ reqs, readyMin: READY_MIN, assessmentMinutes: catalog.assessment_minutes }, s);
   const shown = (t, s) => <JourneyText text={renderJourneyText(t, ctxOf(s))} />;
   // الرحلة في لمحة (J1b): من الحمولة نفسها، فتتحدث فور الحفظ. النقر المزدوج أو «افتحه» ينقل إلى النشاط في القائمة تحتها
-  const timeline = useMemo(() => journeyTimeline({ stages: catalog.journey_stages, requirements: reqs }, { title: 'رحلة البرنامج' }), [catalog.journey_stages, reqs]);
+  const timeline = useMemo(() => journeyTimeline({ stages: stagesIn, requirements: reqs }, { title: 'رحلة البرنامج' }), [stagesIn, reqs]);
   const openReq = (a) => {
     const el = document.getElementById(`jreq-${a.requirement_id}`);
     if (!el) return;

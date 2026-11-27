@@ -1,4 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef } from 'react';
+
+// عنوان القسم المعروض في h1 (PageHeader). ScreenHead لا يكرر عنوانًا يطابقه فلا يظهر الاسم مرتين ولا يتكرر في شجرة العناوين.
+export const SectionTitle = createContext(null);
 
 // ترويسة الصفحة الموحدة لكل شاشات لوحة الإدارة (المرحلة 4 من تصور 2026-11-26):
 // عنوان h1 يستقبل التركيز عند الانتقال إلى الشاشة، ووصف خاص بها اختياري، ومنطقة إجراءات، وشارة حالة اختيارية.
@@ -47,10 +50,12 @@ export function PageHeader({ title, eyebrow, desc, actions, status, domain }) {
 // ترويسة الشاشة داخل القسم (المرحلة 18، الترويسة الموحدة للكتاب الأم وكتاب القائد والرحلة): بلا بطل داكن.
 // h2 لأن h1 في PageHeader للقسم كله، وسطر وصف خاص بها اختياري، وسطر حالة (status) وإجراءات اختيارية.
 export function ScreenHead({ title, desc, status, actions }) {
+  const section = useContext(SectionTitle);
+  const dup = section != null && title === section;
   return (
     <header className="screen-head">
       <div className="screen-head-main">
-        <h2 className="screen-head-title">{title}</h2>
+        {!dup && <h2 className="screen-head-title">{title}</h2>}
         {desc && <p className="screen-head-desc">{desc}</p>}
       </div>
       {actions && <div className="screen-head-acts">{actions}</div>}

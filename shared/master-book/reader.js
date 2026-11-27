@@ -200,3 +200,21 @@ export function hashWithRef(hash, ref) {
   if (!qs) return base ? `#${base}` : '';
   return base ? `#${base}?${qs}` : `#${qs}`;
 }
+
+// تحصين رد الكتاب (نقطة التحقق 2026-11-27): رد ناجح ينقصه حقل يُعامل الغائب قائمة أو قيمة فارغة بدل انهيار الشاشة.
+// الرد الفاشل يمر كما هو. لا يغير حقلًا حاضرًا، ولا يخترع share أو deps أو proposals (غيابها له معنى: لا صلاحية).
+const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+export function bookShape(r) {
+  if (!r || !r.success) return r;
+  const counts = isObj(r.counts) ? r.counts : {};
+  const viewer = isObj(r.viewer) ? r.viewer : {};
+  const out = {
+    ...r,
+    chapters: Array.isArray(r.chapters) ? r.chapters : [],
+    comments: Array.isArray(r.comments) ? r.comments : [],
+    counts: { ...counts, total: Number(counts.total) || 0, byModule: isObj(counts.byModule) ? counts.byModule : {}, bySection: isObj(counts.bySection) ? counts.bySection : {} },
+    viewer: { ...viewer, name: viewer.name || '', role: viewer.role || '' },
+  };
+  if (r.share != null) out.share = { ...(isObj(r.share) ? r.share : {}), readers: Array.isArray(r.share?.readers) ? r.share.readers : [] };
+  return out;
+}
