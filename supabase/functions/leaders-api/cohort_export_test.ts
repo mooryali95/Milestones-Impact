@@ -45,3 +45,25 @@ Deno.test('منسق بلا جهة يُرفض، ودفعة مفقودة أو غي
   await assertRejects(() => cohortExport({ kind: 'admin', actor: 'm' }, { cohort_id: '22222222-2222-2222-2222-222222222222' }, deps(log)));
   assertEquals(log.length, 0);
 });
+
+// D18 كما في orgDoc: الجاهزية والدرجة للمنسق بصلاحية المستويات وموافقة المشارك على المشاركة مع جهته معًا
+Deno.test('المنسق: الجاهزية والدرجة بالصلاحية وموافقة المشارك معًا', async () => {
+  const mk = (consent: string | null) => ({
+    ...deps([]),
+    load: async () => ({
+      people: [{ id: 'p1', full_name: 'سارة', organization_id: 'o1', org_share_consented_at: consent }],
+      capstones: [{ participant_id: 'p1', status: 'approved', readiness: 90, score: 4 }],
+      charters: [],
+    }),
+  });
+  const ask = async (scores: boolean, consent: string | null) =>
+    ((await cohortExport({ kind: 'coordinator', actor: 'c', orgId: 'o1', scores }, { cohort_id: C1 }, mk(consent))) as any).rows[0];
+  const hidden = await ask(false, '2026-11-01');
+  assertEquals([hidden.readiness, hidden.score], [null, null]);
+  const noConsent = await ask(true, null);
+  assertEquals([noConsent.readiness, noConsent.score], [null, null]);
+  const shown = await ask(true, '2026-11-01');
+  assertEquals([shown.readiness, shown.score], [90, 4]);
+  const admin: any = await cohortExport({ kind: 'admin', actor: 'm' }, { cohort_id: C1 }, mk(null));
+  assertEquals(admin.rows[0].readiness, 90);
+});

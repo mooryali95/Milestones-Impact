@@ -7,18 +7,19 @@ import { allFor, audit, db, Fail } from './core.ts';
 import { cohortMemberIds } from './programs.ts';
 import { CHARTER_KEY } from './capstone.js';
 import { requireVisible, visibilityOfOrg } from './visibility.ts';
+import { coordPermissions } from './logic.js';
 import { exportRows, volumesOf, withoutContact } from './cohort-export.js';
 import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
-type Actor = { kind: 'admin' | 'coordinator'; actor: string | null; orgId?: string | null };
+type Actor = { kind: 'admin' | 'coordinator'; actor: string | null; orgId?: string | null; scores?: boolean };
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/i.test(String(v || ''));
 
 async function load(ids: string[]) {
   if (!ids.length) return { people: [], capstones: [], charters: [] };
   const [people, capstones, charters] = await Promise.all([
     // counting-exempt: معرّفات أعضاء الدفعة من cohortMemberIds (listed) فالعد مطبق قبلها
-    allFor(ids, () => db.from('participants').select('id, full_name, organization_id, organization_name').order('id'), 'id'),
+    allFor(ids, () => db.from('participants').select('id, full_name, organization_id, organization_name, org_share_consented_at').order('id'), 'id'),
     allFor(ids, () => db.from('capstones').select('participant_id, status, readiness, score, approved_at, sponsor_name').eq('status', 'approved').order('participant_id')),
     allFor(ids, () => db.from('model_submissions').select('participant_id, answers, learning_models!inner(key)').eq('learning_models.key', CHARTER_KEY).order('participant_id')),
   ]);
@@ -33,7 +34,11 @@ export async function cohortExport(who: Actor, b: Body, deps: any = DEPS) {
   const m = await deps.members(String(b.cohort_id));
   if (!m) throw new Fail('الدفعة غير موجودة', 404);
   const orgId = who.kind === 'coordinator' ? String(who.orgId) : null;
-  const rows = withoutContact(exportRows({ ...(await deps.load(m.ids)), orgId }));
+  const data = await deps.load(m.ids);
+  // D18 كما في orgDoc: الجاهزية والدرجة للمنسق بصلاحية المستويات وموافقة المشارك معًا، والمدير يراها دائمًا
+  const consented = new Set((data.people || []).filter((p: any) => p.org_share_consented_at).map((p: any) => p.id));
+  const rows = withoutContact(exportRows({ ...data, orgId })).map((r: any) =>
+    who.kind === 'coordinator' && !(who.scores && consented.has(r.participant_id)) ? { ...r, readiness: null, score: null } : r);
   const volumes = volumesOf(rows);
   await deps.audit(who.kind, who.actor, 'cohort_export', 'cohorts', m.cohort.id, null, {
     count: rows.length, scope: orgId ? 'organization' : 'cohort', organization_id: orgId, volumes: volumes.length, version: 'institutional', include: 'approved',
