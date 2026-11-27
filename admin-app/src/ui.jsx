@@ -257,6 +257,64 @@ export function DocLevelMeter({ level }) {
   return <span className="la-chip">مستوى الوثيقة: {l.title} <Meter value={l.step} max={LEVELS.length} label="مستوى الوثيقة" /></span>;
 }
 
+// خانة غائبة (المرحلة 15) بثلاث حالات بدل «·» التي كانت تخلط «يحمّل» بـ«لا قيمة»:
+// loading: هيكل خافت يعلن التحميل · none: علامة خافتة سببها في title ونص مقروء «غير محدد» · later: نص صريح لما لم يحدث بعد
+export const MISSING_SR = 'غير محدد';
+export function Missing({ state = 'none', reason = '', text = 'لم يحدث بعد' }) {
+  if (state === 'loading') return <span className="la-missing loading" aria-busy="true"><span className="sk" aria-hidden="true" /><span className="sr-only">جارٍ التحميل</span></span>;
+  if (state === 'later') return <span className="la-missing later">{text}</span>;
+  return (
+    <span className="la-missing" title={reason || MISSING_SR} data-reason={reason || undefined}>
+      <span className="la-missing-mark" aria-hidden="true" /><span className="sr-only">{reason ? `${MISSING_SR}: ${reason}` : MISSING_SR}</span>
+    </span>
+  );
+}
+
+// نقل صف لأعلى أو لأسفل (المرحلة 15): هدف 32px على الأقل، وtitle يسمي ما يُنقل («انقل الباب X لأعلى»)،
+// والاسم المقروء نص sr-only مطابق للـtitle (بلا aria-label يخالف المرئي). يظهر لمن يملك canWrite فقط.
+// onMove(dir) يعيد الموضع الجديد (1..total) أو null، فيُعلن عبر aria-live («صار في الموضع n من m»).
+// Alt مع الأسهم على الصف: onKeyDown={moveKeys(keys)} حيث keys = useRef() يُمرَّر لـMove عبر keysRef،
+// فيمر نقل لوحة المفاتيح بالمعلن نفسه (go). وتقبل moveKeys دالة مباشرة أيضًا.
+// أزرار الطرف aria-disabled لا disabled، فلا يضيع التركيز حين يصل الصف إلى أول الموضع أو آخره.
+export const moveTitle = (name, dir) => `انقل ${name} ${dir < 0 ? 'لأعلى' : 'لأسفل'}`;
+export const moveAnnounce = (name, pos, total) => (pos ? `${name} صار في الموضع ${pos} من ${total}` : '');
+export function moveKeys(target) {
+  return (e) => {
+    if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const fn = typeof target === 'function' ? target : target?.current;
+    if (fn) fn(e.key === 'ArrowUp' ? -1 : 1);
+  };
+}
+export function Move({ name, onMove, canWrite, first = false, last = false, total = 0, keysRef = null }) {
+  const [said, setSaid] = useState('');
+  const go = async (dir) => {
+    if (dir < 0 ? first : last) return;
+    setSaid('');
+    try {
+      const pos = await onMove(dir);
+      setSaid(moveAnnounce(name, pos, total));
+    } catch {
+      setSaid('');
+    }
+  };
+  if (keysRef) keysRef.current = canWrite ? go : null;
+  if (!canWrite) return null;
+  return (
+    <span className="la-move">
+      {[-1, 1].map((dir) => {
+        const edge = dir < 0 ? first : last;
+        return (
+          <button key={dir} type="button" className="la-move-btn" title={moveTitle(name, dir)} aria-disabled={edge ? 'true' : undefined} onClick={() => go(dir)}>
+            <span aria-hidden="true">{dir < 0 ? '▲' : '▼'}</span><span className="sr-only">{moveTitle(name, dir)}</span>
+          </button>
+        );
+      })}
+      <span className="sr-only" aria-live="polite">{said}</span>
+    </span>
+  );
+}
+
 // الشاشة العريضة (مشتركة: التواصل، وكثافة المشاركين في المرحلة 9)
 export const WIDE = '(min-width: 1100px)';
 export function useWide(query = WIDE) {
