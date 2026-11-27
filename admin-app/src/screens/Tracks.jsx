@@ -3,12 +3,17 @@
 // ════════════════════════════════════════════════════════════════
 // كل لوحة مستوى في Milestone، صفوفها مستوى Impact وأعمدتها مستوى Leadership.
 // تحرير أبواب الكتاب في استوديو الكتاب (الخطوة التالية)؛ هنا عرض كما يقرؤه المشارك.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DIM, DIM_ROMAN, DIMS, L, LVL, STATUS } from '../leaders.js';
 import { LVLS, ROMAN, TRACK_FIELDS, lines, shortTitle, trackKey, trackLevels } from '../methodology.js';
 import Form from '../Form.jsx';
 import Md from '../Md.jsx';
-import { Spinner, useUI } from '../ui.jsx';
+import { Spinner, useUI, useWide } from '../ui.jsx';
+import { navigate } from '../route.js';
+import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
+import { journeyTimeline } from '../../../supabase/functions/leaders-api/journey-timeline.js';
+import { EDIT_WHERE, sameJourney, trackJourneyRows, trackRequirements } from '../track-page.js';
+import { journeyHref } from '../attendance-groups.js';
 import { ChapterEditor } from './Handbook.jsx';
 import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
@@ -97,63 +102,133 @@ function Board({ tracks, onOpen }) {
   );
 }
 
+// صفحة المسار (المرحلة 23، 4.7): بطل خفيف، ثم «ما يراه المشارك» بجانب «إعدادات الإدارة» (تبويبان على الهاتف)، ثم
+// «رحلة المسار» بالخط الزمني القائم (JourneyTimeline) وصفوف الأطر من بطاقة المسار، ثم الكتاب، ثم المشاركون.
+// نص الملف يظهر مرة واحدة، وتحت كل قسم «أين يُحرَّر»
+const toTab = (tab) => navigate({ ctx: 'leaders', tab });
+function EditWhere({ part, onIdentity }) {
+  const w = EDIT_WHERE[part];
+  return (
+    <p className="la-muted tr-where"><span>أين يُحرَّر: </span>
+      {w.action === 'identity' ? (onIdentity ? <button type="button" className="la-link" onClick={onIdentity}>{w.label}</button> : <span>{w.label}</span>)
+        : w.tab ? <button type="button" className="la-link" onClick={() => toTab(w.tab)}>{w.label}</button>
+          : <span>{w.label} <code dir="ltr">{w.file}</code></span>}
+    </p>
+  );
+}
+
+function TrackJourney({ k, catalog }) {
+  const reqs = useMemo(() => trackRequirements(catalog, k), [catalog, k]);
+  const model = useMemo(() => journeyTimeline({ stages: catalog?.journey_stages || [], requirements: reqs }, { title: 'رحلة المسار' }), [catalog, reqs]);
+  const { rows, hours } = useMemo(() => trackJourneyRows(catalog, k), [catalog, k]);
+  const pid = catalog?.program_id;
+  const openAct = (a) => { if (pid && a?.requirement_id) window.location.hash = journeyHref(pid, `req=${encodeURIComponent(a.requirement_id)}`); };
+  return (
+    <section className="la-card tr-journey" aria-label="رحلة المسار">
+      {/* العنوان من نموذج الخط الزمني نفسه («رحلة المسار»)، فلا عنوانان للقسم */}
+      <JourneyTimeline key={k} id="jt-track" model={model} onOpen={pid ? openAct : undefined} openLabel={() => 'افتحه في الرحلة'} pop />
+      <p className="la-muted tr-hours">الجهد التقديري {hours[0]} إلى {hours[1]} ساعة</p>
+      <div className="tr-fw" data-testid="track-frameworks">{rows.map((row) => (
+        <article key={row.dimension} className="tr-fw-row">
+          <header><b>{DIM_ROMAN[row.dimension]} · {DIM[row.dimension]}</b> <span className={`la-lvl ${row.level}`}>{LVL[row.level]}</span>
+            {row.deep && <span className="la-chip tr-deep" title="الإطار المعمّق">★ الإطار المعمّق</span>}</header>
+          <div><h4>البنود</h4>{row.items.length ? <ul>{row.items.map((it) => (
+            <li key={it.code}>{it.href
+              ? <a className="la-link" href={it.href} aria-label={`${it.title}، في مرحلة ${it.stage}، افتحه في الرحلة`}>{it.title}</a>
+              : <span>{it.title}</span>}
+              {' '}<small className="la-muted">{it.stage ? `في مرحلة «${it.stage}»` : 'ليس في رحلة البرنامج'}</small></li>
+          ))}</ul> : <p className="la-muted">لا بنود خاصة بهذا المستوى.</p>}</div>
+          <div><h4>المختبرات</h4>{row.labs.length ? <ul>{row.labs.map((l) => <li key={l.key}>{l.title}</li>)}</ul> : <p className="la-muted">لا مختبرات.</p>}</div>
+          {row.bridges.length > 0 && <div><h4>الجسور</h4><ul>{row.bridges.map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
+        </article>
+      ))}</div>
+      <EditWhere part="stages" />
+      <EditWhere part="journey" />
+    </section>
+  );
+}
+
 function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
   const [chapter, setChapter] = useState(null);
   const { toast } = useUI();
   const [r, setR] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [pane, setPane] = useState('participant');
+  const wide = useWide('(min-width: 900px)');
   const load = () => L('admin.track', { key: k }).then(setR);
   useEffect(() => { setR(null); load(); }, [k]); // eslint-disable-line
   if (!r) return <Spinner />;
   if (!r.success) return <div className="la-err" role="alert">{r.message}</div>;
   const t = r.track;
   const ps = r.participants;
+  const pf = r.profile;
   const groups = DIMS.map((d) => ({ d, items: r.handbook.filter((c) => c.dimension === d) }));
+  const onIdentity = canWrite ? () => setEditing(true) : null;
+  // ما يراه المشارك: نص الملف حين يوجد، وإلا حقول الهوية. مرة واحدة هنا وحده
+  const guide = lines(pf?.journey_ar || t.journey_ar);
+  const showAdmin = canWrite;
+  const panes = showAdmin && !wide;
+  const participant = (
+    <section className="tr-pane tr-seen" id="tr-pane-participant" role={panes ? 'tabpanel' : undefined} aria-labelledby={panes ? 'tr-tab-participant' : 'tr-seen-h'} hidden={panes && pane !== 'participant'} tabIndex={panes ? 0 : undefined}>
+      {!panes && <h3 id="tr-seen-h">ما يراه المشارك</h3>}
+      <div className="la-track-profile">
+        {r.strengths && <p>{r.strengths}</p>}
+        <h4>توجيه الرحلة</h4>
+        {guide.length ? <ul>{guide.map((x, i) => <li key={i}>{x}</li>)}</ul> : <p className="la-muted">بلا توجيه بعد.</p>}
+      </div>
+      <h4>أولويات التطوير</h4>
+      {lines(t.focus_ar).length ? <ol>{lines(t.focus_ar).map((x, i) => <li key={i}>{x}</li>)}</ol> : <p className="la-muted">بلا أولويات بعد.</p>}
+      <EditWhere part="identity" onIdentity={onIdentity} />
+      <h4>المشروع التطبيقي</h4>
+      <p>{r.project?.text || 'لا فصول وثيقة بعد'}</p>
+      <EditWhere part="project" />
+    </section>
+  );
+  const custom = sameJourney(t, pf);
+  const internal = (label, v) => <div className="tr-field"><dt>{label}</dt><dd>{v || <span className="la-muted">فارغ</span>}</dd></div>;
+  const admin = showAdmin && (
+    <section className="tr-pane tr-admin" id="tr-pane-admin" role={panes ? 'tabpanel' : undefined} aria-labelledby={panes ? 'tr-tab-admin' : 'tr-admin-h'} hidden={panes && pane !== 'admin'} tabIndex={panes ? 0 : undefined}>
+      {!panes && <h3 id="tr-admin-h">إعدادات الإدارة</h3>}
+      {pf && <p className="la-note" role="note">هذه الحقول داخلية؛ المشارك يرى نص الملف «{pf.title_ar}».</p>}
+      <dl className="tr-fields">
+        {internal('اسم المسار', t.title_ar)}
+        {internal('لمن صُمّم', t.summary_ar)}
+        {custom ? <details className="tr-custom"><summary>تخصيص</summary>{internal('توجيه الرحلة', t.journey_ar)}</details> : internal('توجيه الرحلة', t.journey_ar)}
+      </dl>
+      <button className={`btn-sm ${t.title_ar ? 'ghost' : 'primary'}`} onClick={() => setEditing(true)}>{t.title_ar ? 'تحرير هوية المسار' : 'أنشئ هوية المسار'}</button>
+    </section>
+  );
   return (
     <>
       <button className="la-link" onClick={onBack}>→ كل المسارات</button>
+      {/* بطل خفيف: الرمز والمستويات والعنوان والوصف وسطر «لماذا هذا المسار» من إطار الأولوية (priorityFor في trackManifest) */}
       <section className="la-track-hero">
-        <div className="la-row between">
-          <div className="la-row"><code className="la-code">{t.key}</code><LvlChips k={t.key} /></div>
-          {/* المسار بلا هوية يُمنح هويته من هنا أيضًا، فلا يبقى طريقًا مسدودًا */}
-          {canWrite && <button className={`btn-sm ${t.title_ar ? 'ghost' : 'primary'}`} onClick={() => setEditing(true)}>{t.title_ar ? 'تحرير هوية المسار' : 'أنشئ هوية المسار'}</button>}
-        </div>
-        <h2>{t.title_ar || 'مسار بلا هوية بعد'}</h2>
-        {t.summary_ar && <p>{t.summary_ar}</p>}
-        <div className="la-track-cols">
-          <div><h4>أولويات التطوير</h4><ol>{lines(t.focus_ar).map((x, i) => <li key={i}>{x}</li>)}</ol></div>
-          <div><h4>المشروع التطبيقي</h4><p>{r.project?.text || 'لا فصول وثيقة بعد'}</p><small className="la-muted">يُشتق من فصول وثيقة المبادرة بمستويات المسار، فيُحرَّر من النماذج لا من هنا.</small></div>
-          <div><h4>توجيه الرحلة</h4><ul>{lines(t.journey_ar).map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-        </div>
-        {r.profile && (
-          <div className="la-track-profile">
-            <small className="la-muted">ما يراه المشارك: ملف التعريف «{r.profile.title_ar}» ({r.profile.title_en}) بعنوانه ووصفه وتوجيه رحلته، مكان الاسم و«لمن صُمّم» و«توجيه الرحلة» أعلاه، فتلك داخلية للإدارة. أما أولويات التطوير فتصل المشارك كما تحررها هنا. نصوص ملف التعريف معتمدة، تُعدَّل بطلب إلى فريق المحتوى لا من هذه اللوحة.</small>
-            <p>{r.profile.summary_ar}</p>
-            {r.strengths && <p className="la-muted">{r.strengths}</p>}
-            {r.profile.journey_ar && <ul>{lines(r.profile.journey_ar).map((x, i) => <li key={i}>{x}</li>)}</ul>}
-          </div>
-        )}
+        <div className="la-row"><code className="la-code">{t.key}</code><LvlChips k={t.key} /></div>
+        <h2>{pf?.title_ar || t.title_ar || 'مسار بلا هوية بعد'}</h2>
+        {(pf?.summary_ar || t.summary_ar) && <p>{pf?.summary_ar || t.summary_ar}</p>}
+        {DIM[trackManifest(t.key)?.priority] && <p className="tr-why"><b>لماذا هذا المسار: </b>يبدأ تعمّقه من {DIM[trackManifest(t.key).priority]}، الإطار الأولى بالتطوير في مستوياته.</p>}
+        <EditWhere part={pf ? 'profile' : 'identity'} onIdentity={onIdentity} />
       </section>
 
-      <section className="la-card">
-        <div className="la-row between"><h3>المشاركون في هذا المسار</h3><span className="la-muted">{ps.length} مشارك · {ps.filter((p) => p.approved).length} معتمد</span></div>
-        {ps.length ? (
-          <table className="la-table">
-            <thead><tr><th>الاسم</th><th>الجهة</th><th>الحالة</th><th>المسار</th></tr></thead>
-            <tbody>{ps.map((p) => (
-              <tr key={p.id} className="la-click" onClick={() => onPerson(p.id)}>
-                <td><button className="la-link" onClick={(e) => { e.stopPropagation(); onPerson(p.id); }}><b>{p.full_name}</b></button><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
-                <td>{p.organization_name || ''}</td><td>{STATUS[p.status] || p.status}</td>
-                <td>{p.approved ? <span className="la-chip ok">معتمد</span> : <span className="la-chip warn">مبدئي</span>}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        ) : <p className="la-muted">لا مشاركين في هذا المسار بعد.</p>}
-      </section>
+      <div className={`tr-split${showAdmin ? ' two' : ''}`}>
+        {panes && (
+          <div className="tr-tabs" role="tablist" aria-label="صفحة المسار">
+            {[['participant', 'ما يراه المشارك'], ['admin', 'إعدادات الإدارة']].map(([key, label]) => (
+              <button key={key} type="button" role="tab" id={`tr-tab-${key}`} aria-selected={pane === key} aria-controls={`tr-pane-${key}`} tabIndex={pane === key ? 0 : -1}
+                onClick={() => setPane(key)} onKeyDown={(e) => { const n = e.key === 'Home' ? 'participant' : e.key === 'End' ? 'admin' : (e.key === 'ArrowLeft' || e.key === 'ArrowRight') ? (key === 'participant' ? 'admin' : 'participant') : null; if (n) { e.preventDefault(); setPane(n); e.currentTarget.parentElement.querySelector(`#tr-tab-${n}`)?.focus(); } }}>{label}</button>
+            ))}
+          </div>
+        )}
+        {participant}
+        {admin}
+      </div>
+
+      <TrackJourney k={t.key} catalog={catalog} />
 
       <section className="la-card">
         <div className="la-row between"><h3>كتاب المسار كما يقرؤه المشارك</h3><span className="la-muted">{r.handbook.length} بابًا</span></div>
-        <><p className="la-muted">كتاب المسار من أبواب الأطر الثلاثة بمستواه؛ يُعدَّل من «كتاب القائد».</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>الكتاب مركّب من أبواب الأطر الثلاثة بمستوى هذا المسار في كل إطار، والفقرات الخاصة بمستويات أخرى محذوفة. تعديل أي باب يسري على كل المسارات التي تشترك فيه، ويتم من «كتاب القائد».</p></details></>
+        <><p className="la-muted">كتاب المسار من أبواب الأطر الثلاثة بمستواه.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>الكتاب مركّب من أبواب الأطر الثلاثة بمستوى هذا المسار في كل إطار، والفقرات الخاصة بمستويات أخرى محذوفة. تعديل أي باب يسري على كل المسارات التي تشترك فيه، ويتم من «كتاب القائد».</p></details></>
+        <EditWhere part="handbook" />
         {r.handbook.length ? (
           <div className="la-hb">
             <nav className="la-hb-toc" aria-label="أبواب الكتاب">{groups.map((g) => g.items.length > 0 && (
@@ -173,6 +248,22 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
             ))}</div>
           </div>
         ) : <p className="la-muted">لا أبواب بمحتوى لهذا المسار بعد.</p>}
+      </section>
+
+      <section className="la-card">
+        <div className="la-row between"><h3>المشاركون في هذا المسار</h3><span className="la-muted">{ps.length} مشارك · {ps.filter((p) => p.approved).length} معتمد</span></div>
+        {ps.length ? (
+          <table className="la-table">
+            <thead><tr><th>الاسم</th><th>الجهة</th><th>الحالة</th><th>المسار</th></tr></thead>
+            <tbody>{ps.map((p) => (
+              <tr key={p.id} className="la-click" onClick={() => onPerson(p.id)}>
+                <td><button className="la-link" onClick={(e) => { e.stopPropagation(); onPerson(p.id); }}><b>{p.full_name}</b></button><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
+                <td>{p.organization_name || ''}</td><td>{STATUS[p.status] || p.status}</td>
+                <td>{p.approved ? <span className="la-chip ok">معتمد</span> : <span className="la-chip warn">مبدئي</span>}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        ) : <p className="la-muted">لا مشاركين في هذا المسار بعد.</p>}
       </section>
       {chapter && <ChapterEditor m={chapter} catalog={catalog} canWrite={canWrite} onClose={(saved) => { setChapter(null); if (saved) { load(); onSaved(); } }} />}
       {editing && (

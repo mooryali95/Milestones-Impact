@@ -20,9 +20,10 @@ import ItemQuality from './ItemQuality.jsx';
 import { ProgramMilestones } from './Milestones.jsx';
 import { Missing, Move, moveKeys, StatusChip, useUI } from '../ui.jsx';
 import { ScreenHead } from '../PageHeader.jsx';
-import { versionState } from '../program-state.js';
+import { publishLine, versionState } from '../program-state.js';
+import { date as fmtDate } from '../dates.js';
 import { keepSpot, saveQueue, takeSpot } from '../review-queue.js';
-import { readQuery, writeQuery } from '../route.js';
+import { navigate, readQuery, writeQuery } from '../route.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 // أيقونات أنواع النشاط من مجموعة تطبيق leaders نفسها: shared/ui/Ico.jsx
 import Ico, { ACTIVITY_KIND_ICO } from '../../../shared/ui/Ico.jsx';
@@ -119,10 +120,20 @@ export function JourneyStatus({ pid, data, issues = [], onIssue }) {
   const errors = issues.some((x) => x.level === 'error');
   const lvl = errors ? 'error' : 'warn';
   const detailsRef = useRef(null);
+  // تكميل البند 19 (المرحلة 23): جملة النشر وزر «إلى النشر» يفتح «البرامج والدفعات» على بطاقة البرنامج (data-program)
+  const pub = prog ? publishLine(prog, data.cohorts, fmtDate) : null;
+  const toPublish = () => {
+    navigate({ ctx: 'leaders', tab: 'programs' });
+    const spot = (n) => { const el = [...document.querySelectorAll("[data-program]")].find((x) => x.dataset.program === pid); if (el) { el.scrollIntoView({ block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } else if (n) setTimeout(() => spot(n - 1), 150); };
+    setTimeout(() => spot(20), 0);
+  };
   return (
     <div className="j-status">
       <p className="j-status-line">
         {!data ? <Missing state="loading" /> : prog ? <StatusChip status={versionState(prog)} labels={PROGRAM_VERSION_STATE} tones={PROGRAM_VERSION_STATE_TONE} /> : null}
+        {pub?.text && <span className="j-publish">{pub.text}</span>}
+        {pub?.state === 'draft' && <button type="button" className="la-link j-to-publish" aria-label={`إلى النشر: «البرامج والدفعات» على برنامج «${prog.name}»`} onClick={toPublish}>إلى النشر</button>}
+        {pub?.older > 0 && <span className="j-older">{pub.older_ar}</span>}
         {ok && !warn.length && <span className="j-safe">{JOURNEY_SAFE_AR}</span>}
         {issues.length > 0 && (
           <button type="button" className="la-link j-issues-btn" aria-label={`${journeyIssuesAr(issues.length)}، اعرضها`}
