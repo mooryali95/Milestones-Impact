@@ -18,6 +18,7 @@
   "scripts": {
     "start": "vite",
     "dev": "vite",
+    "pdf:path": "node scripts/pdf-path.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "leaders:dev": "vite --config leaders-app/vite.config.js",

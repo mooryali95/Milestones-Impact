@@ -97,8 +97,9 @@ export default function SharedInitiative() {
     if (!report || pdf) return;
     setPdf('لحظة…');
     try {
-      const { downloadPdf } = await import('../../../src/lib/brand/pdf.js');
-      await downloadPdf(report.meta, report.body, { onProgress: setPdf });
+      // متجهي بتذكرة الرابط (share.get) حين يسمح صاحبه بالتحميل، وإلا يُبنى في المتصفح
+      const { downloadBest } = await import('../../../src/lib/brand/pdf.js');
+      await downloadBest(report.meta, report.body, { server: data.pdf, onProgress: setPdf });
     } catch (e) { console.error(e); }
     setPdf('');
   };

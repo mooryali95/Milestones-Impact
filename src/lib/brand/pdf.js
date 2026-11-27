@@ -114,6 +114,13 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
 }
 
 // ── الرسم ──
+// البديل المصور (تصور الفخامة، المرحلة 1، الخيار ب): المسار المتجهي على الخادم هو الأصل، وهذا الملف بديل حين يتعذر.
+// مقياس 3 (نحو 288 نقطة في البوصة) بدل 2، ولا طبقة نص خفية: jsPDF لا يشكّل الحروف العربية بلا خط مضمّن، وطبقة بحروف
+// منفصلة تضلل البحث والنسخ. فيُعلَّم الملف صراحة: «نسخة مصورة» في تذييل كل صفحة، وscanned-copy في كلماته المفتاحية
+// (scripts/pdf-path.mjs يقرؤها). المقاطع تقصر بالمقياس فتبقى اللوحة دون حد مساحتها في Safari
+export const RASTER_SCALE = 3;
+export const SCANNED_NOTE_AR = 'نسخة مصورة';
+const CHUNK_PX = (scale) => Math.floor(9000 / scale);
 const sanitize = (s) => String(s || 'وثيقة').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 
 // المرحلة 30: الترويسة والتذييل يُرسمان على لوحات من مستند الإطار (حيث حُمّلت خطوط الوثيقة) بعد انتظار الخطين بوزنهما وحجمهما،
@@ -134,7 +141,7 @@ function footer(ctx, n, of, scale, line) {
   ctx.direction = 'rtl';
   ctx.textAlign = 'left';
   ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px ${CHROME_FONTS.ar}`;
-  ctx.fillText(`صفحة ${n} من ${of}`, PAGE.side * scale, y);
+  ctx.fillText(`صفحة ${n} من ${of} · ${SCANNED_NOTE_AR}`, PAGE.side * scale, y);
   ctx.direction = 'ltr';
   ctx.textAlign = 'right';
   ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px ${CHROME_FONTS.latin}`;
@@ -188,7 +195,7 @@ export function stampWatermark(pdf, png) {
  * يبني ملف PDF ويعيده Blob. meta وbody كما يبنيهما قالب الوثيقة (capstoneReport)
  * @param {{ onProgress?: (t: string) => void, scale?: number }} [opts]
  */
-export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 } = {}) {
+export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RASTER_SCALE } = {}) {
   // الرقم المرجعي يُولَّد مرة واحدة فيطابق الغلافُ التذييلَ
   const meta = withDocId(meta0);
   onProgress('يُجهَّز الملف…');
@@ -225,23 +232,23 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
     // ترويسة الصفحات بعد الغلاف (doc.js runningHead): تُرسم مرة وتتكرر
     const headEl = doc.getElementById('pdf-head');
     const runHead = headEl ? await toCanvas(headEl, { width: PAGE.w, height: PAGE.top, pixelRatio: scale, fontEmbedCSS, backgroundColor: '#ffffff', cacheBust: false }) : null;
-    // المقاطع: صفحات متتالية حتى نحو 4500 بكسل في كل رسم، لحد ارتفاع اللوحة في المتصفحات
+    // المقاطع: صفحات متتالية حتى CHUNK_PX في كل رسم (3000 بكسل بمقياس 3)، لحد مساحة اللوحة في المتصفحات
     const chunks = [];
     for (let i = 0; i < plan.length;) {
       let j = i;
-      while (j + 1 < plan.length && plan[j + 1].end - plan[i].start <= 4500) j++;
+      while (j + 1 < plan.length && plan[j + 1].end - plan[i].start <= CHUNK_PX(scale)) j++;
       chunks.push({ from: i, to: j, start: plan[i].start, end: plan[j].end });
       i = j + 1;
     }
     const theads = new Map();
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
-    pdf.setProperties({ title: meta.title || 'وثيقة', subject: meta.subtitle || '', creator: 'Milestone Impact', author: 'Milestone Impact' });
+    pdf.setProperties({ title: meta.title || 'وثيقة', subject: [meta.subtitle, SCANNED_NOTE_AR].filter(Boolean).join(' · '), keywords: 'scanned-copy', creator: 'Milestone Impact', author: 'Milestone Impact' });
     // التذييل بالرقم المرجعي للوثيقة، ومعه عنوان الباب لكل صفحة
     // والبصمة المجمّدة معه للمعتمدة (meta.footer، المرحلة 32)
     const line = meta.footer || meta.id;
     const heads = [...doc.querySelectorAll('.sec > header h2, .in-open h2')].map((h) => ({ y: h.getBoundingClientRect().top - base, text: h.textContent.trim() }));
     const PT = 595.28 / PAGE.w;
-    await loadChromeFonts(doc, scale, `${heads.map((h) => h.text).join(' ')} ${DOC_LIVE_HEAD_AR} صفحة ١ من ٢`);
+    await loadChromeFonts(doc, scale, `${heads.map((h) => h.text).join(' ')} ${DOC_LIVE_HEAD_AR} صفحة ١ من ٢ ${SCANNED_NOTE_AR}`);
     for (const ch of chunks) {
       onProgress(`صفحة ${ch.to + 1} من ${plan.length}…`);
       const canvas = await toCanvas(root, {
@@ -273,7 +280,7 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
         ctx.drawImage(canvas, 0, (p.start - ch.start) * scale, page.width, h, 0, y, page.width, h);
         footer(ctx, k + 1, plan.length, scale, line);
         if (k > 0) pdf.addPage('a4');
-        // JPEG بجودة 0.8: نص حاد بدقة مضاعفة، والملف بحجم يُرسل بالبريد
+        // JPEG بجودة 0.8: نص حاد بمقياس 3، والملف بحجم يُرسل بالبريد
         pdf.addImage(page.toDataURL('image/jpeg', 0.8), 'JPEG', 0, 0, 595.28, 841.89, undefined, 'FAST');
       }
     }

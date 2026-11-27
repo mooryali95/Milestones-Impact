@@ -99,12 +99,13 @@ function Meter({ value, min }) {
 // keepReadiness: قراءة داخلية (الخبير) تبقي الجاهزية
 // kind: 'working' ملف العمل الكامل، أو 'institutional' الوثيقة المؤسسية؛ المحجوبة تعيد { blocked, message }
 // annex: ملحق المراجع بطلب صريح (المرحلة 21)، تمرره شاشة الخبير وحدها. دونه لا يُرسم ولو حملت الوثيقة الحقل
-export async function openCapstoneDoc(doc, win = window.open('', '_blank'), { keepReadiness = false, kind = 'working', annex = false } = {}) {
+export async function openCapstoneDoc(doc, win = window.open('', '_blank'), { keepReadiness = false, kind = 'working', annex = false, pdf = null } = {}) {
   const [{ writeDocument }, { withoutReadiness }, { renderInitiative }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/institutional.js')]);
   // نسخة تخرج من المنصة (طباعة المشارك، ورابط الراعي): بلا نسبة الجاهزية (قرار المالك 2026-11-24)
   const r = renderInitiative(keepReadiness ? doc : withoutReadiness(doc), kind, { annex });
   if (r.blocked) { win?.close(); return r; }
-  return writeDocument(win, r.meta, r.body);
+  // pdf: تذكرة مربوطة ببصمة هذه الوثيقة من النقطة التي أعادتها، فيأخذ زر «تحميل PDF» المسار المتجهي ولو كانت معتمدة
+  return writeDocument(win, r.meta, r.body, pdf ? { pdf: async () => pdf } : {});
 }
 
 // onHandbook: إحالة فصل إلى بابه في الكتاب؛ reopen: الفصل الذي يُفتح عند العودة من الكتاب
@@ -242,7 +243,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     const r = await call('capstone.doc');
     setBusy('');
     if (!r.success) { win?.close(); return setMsg({ err: r.message }); }
-    const ok = await openCapstoneDoc(r.doc, win, { kind });
+    const ok = await openCapstoneDoc(r.doc, win, { kind, pdf: r.pdf });
     if (ok?.blocked) return setMsg({ err: ok.message });
     if (!ok) setMsg({ err: POPUP_BLOCKED });
   };
