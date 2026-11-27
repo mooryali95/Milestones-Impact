@@ -10,7 +10,8 @@ import { cohortStateAr } from '../methodology.js';
 import { programReach } from '../program-reach.js';
 import CohortEditor from './CohortEditor.jsx';
 import { CertOverride } from '../cert.jsx';
-import { Empty, Spinner, useCopy, useEscape, useGuardedClose, useUI } from '../ui.jsx';
+import { Empty, Spinner, StatusChip, useCopy, useEscape, useGuardedClose, useUI } from '../ui.jsx';
+import { canSaveVersion, draftCount, draftSummaryAr, howOpen, readHow, splitArchived, versionState, writeHow } from '../program-state.js';
 import CohortTeam from './CohortTeam.jsx';
 import CohortVisibility from './CohortVisibility.jsx';
 import CohortIdentity from './CohortIdentity.jsx';
@@ -19,7 +20,7 @@ import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
 import { versionNotice } from '../../../supabase/functions/leaders-api/cohort-readiness.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
-import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, PROGRAM_VERSION_STATE, PROGRAM_VERSION_STATE_TONE } from '../../../supabase/functions/leaders-api/labels.js';
 import CohortJourney from './CohortJourney.jsx';
 import CohortRoster from './CohortRoster.jsx';
 import CohortDemo from './CohortDemo.jsx';
@@ -214,6 +215,8 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
   const [vis, setVis] = useState(null);
   const [ident, setIdent] = useState(null);
   const [finalCfg, setFinalCfg] = useState(null);
+  // تفضيل طي شرح الخطوات (localStorage داخل try/catch في program-state.js)
+  const [howPref, setHowPref] = useState(() => readHow());
 
   const load = useCallback(async () => setD(await L('admin.programs')), []);
   useEffect(() => { load(); }, [load]);
@@ -364,65 +367,81 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     );
   }
 
+  const { active, archived } = splitArchived(programs);
+  const drafts = draftCount(programs);
+  // بطاقة البرنامج الواحدة للقسمين: الفعّال أعلى الصفحة والمؤرشف في «مؤرشفة (n)» آخرها، وينتقل بينهما بعد رد الأرشفة (load)
+  const programCard = (p) => {
+    const st = versionState(p);
+    const last = p.versions[0];
+    return (
+      <section key={p.id} className={`la-card${p.archived_at ? ' off' : ''}`} data-program={p.id}>
+        <div className="la-row between">
+          <div>
+            <b>{p.name}</b> {p.is_default && <small className="la-chip">الافتراضي</small>}{' '}
+            <StatusChip status={st} labels={PROGRAM_VERSION_STATE} tones={PROGRAM_VERSION_STATE_TONE} className="ver-chip" />
+            {canWrite && canSaveVersion(st) && <> <button type="button" className="btn-sm ghost" aria-label={`احفظ نسخة لبرنامج «${p.name}»`} aria-describedby={st === 'draft' ? `draft-note-${p.id}` : undefined} onClick={() => saveVersion(p)}>احفظ نسخة</button></>}
+            {st === 'draft' && <p className="la-muted" id={`draft-note-${p.id}`}>ما عدّلته في رحلة البرنامج لا يصل إلى أي دفعة حتى تحفظه نسخة وترقّي الدفعة إليها.</p>}
+            <dl className="prog-meta">
+              <div><dt>المتطلبات</dt><dd>{p.requirements}</dd></div>
+              <div><dt>آخر نسخة</dt><dd>{last ? <>{last.number}، {last.label} <span className="la-muted">· {date(last.created_at)}</span></> : (p.requirements ? 'تُحفظ مع أول دفعة' : 'لا نسخة ولا دفعة حتى تُبنى رحلته')}</dd></div>
+              {p.unpinned_cohorts > 0 && <div><dt>الدفعات</dt><dd>{p.unpinned_cohorts === 1 ? 'دفعة غير مثبتة' : `${cohortsAr(p.unpinned_cohorts)} غير مثبتة`}</dd></div>}
+            </dl>
+            <div className={`la-reach${reach(p).on ? '' : ' none'}`}>{reach(p).text}</div>
+            {p.description_ar && <p className="la-muted">{p.description_ar}</p>}
+          </div>
+          <div className="la-row">
+            {/* فعل أساسي واحد (تدقيق 2026-11-23، كما في Stripe): «حرّر الرحلة»، و«سجل النسخ» يكشف قائمة تحت البطاقة فيبقى ظاهرًا
+                بحالته (aria-expanded)، وبقية الأفعال في قائمة ⋯ نفسها التي في ملف المشارك */}
+            <button className="btn-sm primary" onClick={() => onEditJourney(p.id)}>حرّر الرحلة</button>
+            <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id} aria-label={`سجل نسخ «${p.name}» (${p.versions.length})`}>سجل النسخ ({p.versions.length}) <span aria-hidden="true">{open === p.id ? '▴' : '▾'}</span></button>
+            {canWrite && <MoreMenu label={`إجراءات أخرى لبرنامج «${p.name}»`} items={[
+              { label: 'احفظ نسخة', run: () => saveVersion(p) },
+              !p.archived_at && { label: 'أنشئ له دفعة', run: () => onWizard({ program_id: p.id }) },
+              { label: 'التقييم الختامي', run: () => setFinalCfg(p) },
+              { label: `الشهادة${p.cert && Object.keys(p.cert).length ? ' (مخصصة)' : ''}`, run: () => editCert(p) },
+              { label: 'برنامج جديد من هذا', run: () => newProgram(p.id) },
+              !p.is_default && { label: p.archived_at ? 'إعادة' : 'أرشفة', run: () => archive(p) },
+            ]} />}
+          </div>
+        </div>
+        {open === p.id && (
+          p.versions.length ? (
+            <ul className="la-reqs">
+              {p.versions.map((v) => (
+                <li key={v.id}>
+                  <span><b>{v.number}.</b> {v.label} <small className="la-muted">{date(v.created_at)}{v.created_by ? ` · ${v.created_by}` : ''}{v.cohorts ? ` · ${cohortsAr(v.cohorts)}` : ''}</small>
+                    {v.live_cohorts > 0 && <> <small className="la-chip ok">قيد الاستعمال</small></>}</span>
+                  <span className="la-row">
+                    <button className="la-link" onClick={() => showCompare(v)}>قارن بالحالي</button>
+                    {canWrite && <button className="la-link" onClick={() => restore(v)}>استرجع</button>}
+                    {canWrite && <button className="la-link" onClick={() => newProgram(p.id, v.id)}>برنامج جديد منها</button>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="la-muted">{p.requirements ? 'لا نسخة بعد. تُحفظ النسخة 1 مع أول دفعة على البرنامج، أو احفظها الآن.' : 'لا نسخة بعد. ابنِ رحلة البرنامج أولًا، ثم تُحفظ نسخته الأولى مع أول دفعة أو بـ«احفظ نسخة».'}</p>
+        )}
+      </section>
+    );
+  };
+
   return (
     <>
-      <div className="la-card how-it-works" aria-label="كيف تعمل المنظومة">
+      {/* شرح الخطوات مطوي (المرحلة 11): مفتوح حين لا برامج، وإلا بتفضيل المدير اليدوي */}
+      <details className="la-more la-card how-it-works" open={howOpen(programs.length, howPref)}
+        onToggle={(e) => { if (!programs.length) return; const o = e.currentTarget.open; if (o !== howOpen(programs.length, howPref)) { writeHow(o); setHowPref(o ? '1' : '0'); } }}>
+        <summary>كيف تعمل المنظومة</summary>
         <ol>
           <li><b>البرنامج</b><span>ماذا يمر به القائد: المراحل والمتطلبات. يُبنى مرة ويُستعمل لأكثر من دفعة.</span></li>
           <li><b>الدفعة</b><span>لمن ومتى وكيف: الجهة، والمدة، والجدول، والمستشار والفريق. لكل دفعة ملف واحد فيه كل إعداداتها.</span></li>
           <li><b>المشاركون</b><span>يدخلون الدفعة <b>تلقائيًا</b>: من سجّل برابط جهة يدخل دفعتها المفتوحة أو الجارية، ومن سجّل بلا جهة يدخل الدفعة المفتوحة. الإلحاق اليدوي للاستثناءات فقط.</span></li>
         </ol>
-      </div>
+      </details>
 
       <div className="la-row between"><h3 className="la-phase">البرامج</h3>{canWrite && <button className="btn-sm ghost" onClick={() => newProgram()}>+ برنامج جديد</button>}</div>
-      {programs.map((p) => (
-        <section key={p.id} className={`la-card${p.archived_at ? ' off' : ''}`}>
-          <div className="la-row between">
-            <div>
-              <b>{p.name}</b> {p.is_default && <small className="la-chip">الافتراضي</small>} {p.archived_at && <small className="la-chip">مؤرشف</small>}
-              <div className="la-muted">
-                {p.requirements} متطلب · {p.versions[0] ? `آخر نسخة محفوظة: ${p.versions[0].number}، ${p.versions[0].label}، ${date(p.versions[0].created_at)}` : 'لم تُحفظ له نسخة بعد'}
-                {!p.versions[0] && !p.archived_at && <> <small className="la-chip warn">{p.requirements ? 'بلا نسخة: تُحفظ مع أول دفعة' : 'بلا متطلبات: لا نسخة ولا دفعة حتى تُبنى رحلته'}</small></>}
-                {p.draft_changed && <> <small className="la-chip" title="ما عدّلته في رحلة البرنامج لا يصل إلى أي دفعة حتى تحفظه نسخة وترقّي الدفعة إليها">في المسودة تعديلات لم تُحفظ نسخة</small></>}
-                {p.unpinned_cohorts > 0 && <> <small className="la-chip warn">{p.unpinned_cohorts === 1 ? 'دفعة غير مثبتة' : `${cohortsAr(p.unpinned_cohorts)} غير مثبتة`}</small></>}
-              </div>
-              <div className={`la-reach${reach(p).on ? '' : ' none'}`}>{reach(p).text}</div>
-              {p.description_ar && <p className="la-muted">{p.description_ar}</p>}
-            </div>
-            <div className="la-row">
-              {/* فعل أساسي واحد (تدقيق 2026-11-23، كما في Stripe): «حرّر الرحلة»، و«النسخ» يكشف قائمة تحت البطاقة فيبقى ظاهرًا
-                  بحالته (aria-expanded)، وبقية الأفعال في قائمة ⋯ نفسها التي في ملف المشارك */}
-              <button className="btn-sm primary" onClick={() => onEditJourney(p.id)}>حرّر الرحلة</button>
-              <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id}>النسخ ({p.versions.length})</button>
-              {canWrite && <MoreMenu label={`إجراءات أخرى لبرنامج «${p.name}»`} items={[
-                { label: 'احفظ نسخة', run: () => saveVersion(p) },
-                !p.archived_at && { label: 'أنشئ له دفعة', run: () => onWizard({ program_id: p.id }) },
-                { label: 'التقييم الختامي', run: () => setFinalCfg(p) },
-                { label: `الشهادة${p.cert && Object.keys(p.cert).length ? ' (مخصصة)' : ''}`, run: () => editCert(p) },
-                { label: 'برنامج جديد من هذا', run: () => newProgram(p.id) },
-                !p.is_default && { label: p.archived_at ? 'إعادة' : 'أرشفة', run: () => archive(p) },
-              ]} />}
-            </div>
-          </div>
-          {open === p.id && (
-            p.versions.length ? (
-              <ul className="la-reqs">
-                {p.versions.map((v) => (
-                  <li key={v.id}>
-                    <span><b>{v.number}.</b> {v.label} <small className="la-muted">{date(v.created_at)}{v.created_by ? ` · ${v.created_by}` : ''}{v.cohorts ? ` · ${cohortsAr(v.cohorts)}` : ''}</small>
-                      {v.live_cohorts > 0 && <> <small className="la-chip ok">قيد الاستعمال</small></>}</span>
-                    <span className="la-row">
-                      <button className="la-link" onClick={() => showCompare(v)}>قارن بالحالي</button>
-                      {canWrite && <button className="la-link" onClick={() => restore(v)}>استرجع</button>}
-                      {canWrite && <button className="la-link" onClick={() => newProgram(p.id, v.id)}>برنامج جديد منها</button>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="la-muted">{p.requirements ? 'لا نسخة بعد. تُحفظ النسخة 1 مع أول دفعة على البرنامج، أو احفظها الآن.' : 'لا نسخة بعد. ابنِ رحلة البرنامج أولًا، ثم تُحفظ نسخته الأولى مع أول دفعة أو بـ«احفظ نسخة».'}</p>
-          )}
-        </section>
-      ))}
+      {drafts > 0 && <p className="la-note prog-drafts" role="status">{draftSummaryAr(drafts)}</p>}
+      {!active.length && <Empty compact title="لا برامج فعالة" hint="البرنامج يحدد المراحل والمتطلبات التي يمر بها القائد.">{canWrite && <button className="btn-sm primary" type="button" onClick={() => newProgram()}>+ برنامج جديد</button>}</Empty>}
+      {active.map(programCard)}
 
       <CohortPulse />
       <div className="la-row between"><h3 className="la-phase">الدفعات</h3>{canWrite && <button className="btn-sm primary" onClick={() => onWizard({})}>+ دفعة جديدة</button>}</div>
@@ -458,6 +477,13 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
           </tbody>
         </table>
       </div>
+
+      {archived.length > 0 && (
+        <details className="la-more prog-archived">
+          <summary>مؤرشفة ({archived.length})</summary>
+          {archived.map(programCard)}
+        </details>
+      )}
 
       {dialogs}
     </>

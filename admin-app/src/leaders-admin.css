@@ -1702,3 +1702,14 @@ tr.ct-on > td { background: var(--gold-pale); }
 .la-fn .la-meter-bar, .la-seats .la-meter-bar { flex: 1; width: auto; min-width: 40px; height: 7px; }
 .la-funnel.big .la-fn .la-meter-bar { height: 10px; }
 .la-org .la-meter:not(.ok):not(.warn):not(.bad) .la-meter-bar > i, .la-fn .la-meter:not(.ok):not(.warn):not(.bad) .la-meter-bar > i { background: var(--org, var(--gold)); }
+
+/* البرامج والدفعات (المرحلة 11): البيانات الوصفية في dl بسطر ثانٍ، وقسم المؤرشفة، وشرح الخطوات المطوي */
+.prog-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 0; font-size: .84rem; color: var(--ink-mid); }
+.prog-meta > div { display: flex; gap: 6px; }
+.prog-meta dt { color: var(--ink-light); }
+.prog-meta dt::after { content: ':'; }
+.prog-meta dd { margin: 0; }
+.prog-drafts { margin: 0 0 8px; }
+.prog-archived { margin-top: 20px; }
+.prog-archived > summary, details.how-it-works > summary { cursor: pointer; font-weight: 700; }
+details.how-it-works[open] > summary { margin-bottom: 12px; }
