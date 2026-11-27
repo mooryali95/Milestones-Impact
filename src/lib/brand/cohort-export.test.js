@@ -102,3 +102,18 @@ describe('runBook: بالتتابع مع التقدم والإيقاف', () => {
     expect(out.cancelled).toBe(true);
   });
 });
+
+describe('رمز التحقق والعدد في الملخص (مراجعة المرحلة 2)', () => {
+  it('رمز التحقق هو البصمة المجمدة المطبوعة في الوثيقة لا بصمة النسخة الحية', async () => {
+    const { bookCode } = await import('./cohort-export.js');
+    const fp = 'AB12-CD34-EF56-7890';
+    const doc = { meta: { status: 'approved' }, issued: { fingerprint: fp, sections: [] } };
+    expect(bookCode(doc)).toBe(fp);
+    expect(bookCode({ meta: { status: 'approved' } })).toBe(null);
+  });
+  it('عدد المبادرات في الغلاف لا يحسب المتعذر', () => {
+    const rows = summaryRows([{ participant_id: 'a' }, { participant_id: 'b' }], { a: { fingerprint: 'x' }, b: { error: 'e' } });
+    const { meta } = bookCover({ cohort: { name: 'د' }, rows, date: 'اليوم' });
+    expect(meta.rows.find(([k]) => k === 'عدد المبادرات')[1]).toBe('1');
+  });
+});

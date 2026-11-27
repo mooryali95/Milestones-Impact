@@ -7,6 +7,10 @@
 // بترقيم متصل. لا يمس هذا الملف مصادر الوثيقة، ويستورد منها فقط.
 import { esc, table } from './doc.js';
 import { identityOf } from './institutional.js';
+import { issuedFingerprint } from '../../../supabase/functions/leaders-api/doc-quality.js';
+
+/** رمز التحقق المطبوع في الوثيقة المعتمدة: البصمة المجمدة (verifyMark) لا بصمة النسخة الحية */
+export const bookCode = (doc) => issuedFingerprint(doc);
 
 export const BOOK_COLUMNS = Object.freeze([
   { key: 'n', label: 'م', width: '7mm' },
@@ -65,15 +69,16 @@ export function summaryRows(rows, results = {}) {
 export function bookCover({ cohort, docMeta = {}, rows = [], date, volume = { n: 1, of: 1 } }) {
   const { brand } = identityOf(docMeta || {});
   const name = cohort?.name || 'الدفعة';
+  const included = rows.filter((r) => r.status !== 'تعذر توليدها').length;
   const vol = volume.of > 1 ? ` · المجلد ${volume.n} من ${volume.of}` : '';
   const meta = {
     kind: 'BOOK', brand, eyebrow: brand.program || 'برنامج القادة', title: `مبادرات ${name}`,
     subtitle: `المبادرات المعتمدة، النسخة المؤسسية${vol}`, pageAr: true,
-    rows: [['الدفعة', name], ['الجهة', brand.name || 'مبادرة مجتمعية'], ['التاريخ', date], ['عدد المبادرات', String(rows.length)]],
+    rows: [['الدفعة', name], ['الجهة', brand.name || 'مبادرة مجتمعية'], ['التاريخ', date], ['عدد المبادرات', String(included)]],
     pdfName: `Cohort-Initiatives${volume.of > 1 ? `-${volume.n}` : ''}`,
   };
   const body = `<section class="sec"><header><h2>الملخص التنفيذي</h2></header>
-<p>${esc(`يضم هذا الكتاب ${rows.length} مبادرة معتمدة من «${name}» بنسختها المؤسسية، ولكل منها رمز تحقق يثبت مطابقتها لما اعتُمد في المنصة.`)}</p>
+<p>${esc(`يضم هذا الكتاب ${included} مبادرة معتمدة من «${name}» بنسختها المؤسسية، ولكل منها رمز تحقق يثبت مطابقتها لما اعتُمد في المنصة.`)}</p>
 ${table(BOOK_COLUMNS, rows.map((r) => BOOK_COLUMNS.map((c) => r[c.key] ?? '')))}</section>`;
   return { meta, body };
 }

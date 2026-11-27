@@ -29,7 +29,7 @@ async function buildVolume({ cohort, rows, volume, signal, onProgress }) {
       docMeta = docMeta || x.doc?.meta || null;
       const out = finalDocument(x.doc, BOOK_OPTIONS);
       const p = await B.renderPart(out.meta, out.body, x.pdf);
-      return { ...p, fingerprint: x.fingerprint };
+      return { ...p, fingerprint: B.bookCode(x.doc) };
     },
   });
   if (run.cancelled || !run.parts.length) return run;
