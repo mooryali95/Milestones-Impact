@@ -536,11 +536,15 @@ function LookSheet({ prefs, onChange, onClose }) {
 
 // العلامة المائية بنمط الكتاب الشخصي (leaders-app/src/screens/Handbook.jsx): اسم القارئ وبريده وتاريخ اليوم، مائلة
 // متكررة بشفافية خفيفة فوق الصفحة كلها، فأي تصوير يُعرف مصدره. لا تلتقط النقر ولا تُقرأ لقارئ الشاشة
+export const WM_TILE = { w: 520, h: 220 };
+export const NO_VERSION = 'لم يصدر بعد';
 const xmlEsc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-function watermarkUrl(text, date = new Date()) {
+export function watermarkUrl(text, date = new Date()) {
   if (!text) return '';
   const stamp = xmlEsc(`${text} · ${date.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}`);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="380" height="150"><text x="190" y="80" text-anchor="middle" direction="rtl" font-family="Noto Kufi Arabic, Tahoma, sans-serif" font-size="15" font-weight="600" fill="#5a6468" fill-opacity="0.09" transform="rotate(-25.7 190 75)">${stamp}</text></svg>`;
+  // المرحلة 20: بلاطة أكبر (520×220) تخفف الكثافة، والشفافية لا تُكتب هنا بل على .mb-wm بمتغير يحدده الإطار
+  // (--mb-wm-opacity محصور بين 0.07 و0.09 في master-book.css)، فلا تنزل تحت حد الحماية
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WM_TILE.w}" height="${WM_TILE.h}"><text x="260" y="115" text-anchor="middle" direction="rtl" font-family="Noto Kufi Arabic, Tahoma, sans-serif" font-size="15" font-weight="600" fill="#5a6468" transform="rotate(-25.7 260 110)">${stamp}</text></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 // التاريخ يتجدد إن بقي القارئ مفتوحًا بعد منتصف الليل: فحص كل دقيقة، ولا يُعاد الرسم إلا إن تغيّر اليوم
@@ -551,8 +555,9 @@ function Watermark({ text }) {
   const url = useMemo(() => watermarkUrl(text, new Date(day)), [text, day]);
   return url ? <div className="mb-wm" aria-hidden="true" style={{ backgroundImage: url }} /> : null;
 }
-/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any>, propose?: (b: any) => Promise<any>, move?: (id: string, to: string, note?: string, seen?: string) => Promise<any>, release?: () => Promise<any>, releaseStart?: () => Promise<any>, releasePr?: () => Promise<any>, releasePublish?: (n: number, sha: string) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
-export default function MasterBook({ api, onClose, onExperts, place = 'admin' }) {
+/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any>, propose?: (b: any) => Promise<any>, move?: (id: string, to: string, note?: string, seen?: string) => Promise<any>, release?: () => Promise<any>, releaseStart?: () => Promise<any>, releasePr?: () => Promise<any>, releasePublish?: (n: number, sha: string) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string, ui?: { Head: any, Menu: any, menuText: string } }} props */
+// ui: مكونات اللوحة المشتركة (ScreenHead وMoreMenu وMENU_TEXT) تمررها الإدارة، فلا يستورد القارئ المشترك شيفرة اللوحة
+export default function MasterBook({ api, onClose, onExperts, place = 'admin', ui = null }) {
   const [data, setData] = useState(null);
   const [view, setView] = useState('shelf');
   const [idx, setIdx] = useState(0);
@@ -746,12 +751,44 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   // اختيار نسخة PDF: الكتاب كاملًا ثم الأجزاء الثلاثة، وجزء مقعد العضو أولها
   const pdfParts = PARTS.filter((p) => p.key !== 'draft' && data.chapters.some((c) => c.dimension === p.key)).sort((a, b) => outOfSeat(data.viewer, { dimension: a.key }) - outOfSeat(data.viewer, { dimension: b.key }));
   const shelfParts = [...PARTS].sort((a, b) => (a.key === 'draft') - (b.key === 'draft') || outOfSeat(data.viewer, { dimension: a.key }) - outOfSeat(data.viewer, { dimension: b.key }));
+  // المرحلة 20: في اللوحة ترويسة مضغوطة على سطح فاتح، وفعل أساسي واحد بحسب الدور والبقية في «إجراءات ▾».
+  // كل فعل يُبنى بشرط صلاحيته (viewer.decide وapi.release وapi.reader) لا بالإخفاء في CSS. البوابة كما هي
+  const compact = place === 'admin' && !!ui;
+  const readAct = { label: canResume(data.chapters, prefs.pos) ? 'تابع القراءة' : 'افتح الكتاب', run: compact ? resume : open }; // بلا كتاب مجسم في الترويسة المضغوطة فلا حركة فتح
+  const propsAct = showProposals && { label: `المقترحات${review ? ` (${review})` : ''}`, run: () => setPropsOf({}) };
+  const acts = [
+    readAct,
+    propsAct,
+    { label: `التعليقات${total ? ` (${total})` : ''}`, run: () => setAll(true) },
+    { label: 'الفهرس', run: () => setToc(true) },
+    data.viewer.decide && api.release && data.proposals_ready && { label: `أصدر الكتاب${data.proposal_counts?.approved ? ` (${data.proposal_counts.approved} معتمد)` : ''}`, run: () => setReleasing(true) },
+    { label: 'نسخة PDF', title: 'يفتح اختيار الجزء', run: () => setPdfMenu(true) },
+    data.share && api.reader && { label: `شارك مع الخبراء${data.share.readers.length ? ` (${data.share.readers.length})` : ''}`, run: () => setSharing(true) },
+  ].filter(Boolean);
+  // من يحسم المقترحات وأمامه مقترح للمراجعة: فعله الأول المقترحات، وغيره القراءة
+  const primaryAct = data.viewer.decide && review > 0 && propsAct ? propsAct : readAct;
+  const restActs = acts.filter((a) => a !== primaryAct);
   return (
     <div className={`mb-root place-${place}${view === 'read' ? ` theme-${prefs.theme}` : ''}`} ref={root}>
       <Watermark text={data.viewer.watermark} />
       <style>{COVER_CSS}</style>
       {view === 'shelf' ? (
-        <div className="mb-shelf">
+        <div className={`mb-shelf${compact ? ' compact' : ''}`}>
+          {compact ? (
+            <ui.Head title="الكتاب الأم"
+              desc="المرجع الواحد لبرنامج القادة: الأطر الثلاثة كاملة بكل مستوياتها، ومنه تُشتق نسخة كل مشارك بحسب مستواه ونطاق عمله."
+              actions={<>
+                <button type="button" className="mb-btn gold" onClick={primaryAct.run}>{primaryAct.label}</button>
+                <ui.Menu text={ui.menuText} label="الكتاب الأم" items={restActs} />
+              </>}
+              status={<p className="mb-status">
+                <span>الإصدار: <b>{data.version || NO_VERSION}</b></span>
+                <span>{data.chapters.filter((c) => !c.draft).length} باب</span>
+                <span>{total ? `${total} تعليق مفتوح` : 'لا تعليقات مفتوحة'}</span>
+                <span>تقرأ بصفتك: <b>{data.viewer.name}</b>{data.viewer.role ? ` (${data.viewer.role})` : ''}</span>
+                {lastAt >= 0 && <span>توقفت عند <b>{data.chapters[lastAt].title}</b>{prefs.pos.section ? `، ${prefs.pos.section}` : ''}</span>}
+              </p>} />
+          ) : (<>
           <header className="mb-top dark">
             {onClose ? <button type="button" className="mb-ic" onClick={onClose} aria-label="رجوع">→</button> : <span />}
             <span className="mb-brand">الكتاب الأم</span>
@@ -764,7 +801,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
               <h1>الكتاب الأم</h1>
               <p className="mb-lede">المرجع الواحد لبرنامج القادة: الأطر الثلاثة كاملة بكل مستوياتها، ومنه تُشتق نسخة كل مشارك بحسب مستواه ونطاق عمله.</p>
               <dl className="mb-facts">
-                <div><dt>الإصدار</dt><dd>{data.version || '·'}</dd></div>
+                <div><dt>الإصدار</dt><dd className={data.version ? undefined : 'mb-none'}>{data.version || NO_VERSION}</dd></div>
                 <div><dt>الأبواب</dt><dd>{data.chapters.filter((c) => !c.draft).length}</dd></div>
                 <div><dt>تعليقات مفتوحة</dt><dd>{total}</dd></div>
               </dl>
@@ -772,7 +809,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
                 <button type="button" className="mb-btn gold" onClick={open}>{canResume(data.chapters, prefs.pos) ? 'تابع القراءة' : 'افتح الكتاب'}</button>
                 <button type="button" className="mb-btn line" onClick={() => setAll(true)}>التعليقات{total ? ` (${total})` : ''}</button>
                 {showProposals && <button type="button" className="mb-btn line" onClick={() => setPropsOf({})}>المقترحات{review ? ` (${review})` : ''}</button>}
-                {data.viewer.decide && api.release && data.proposals_ready && <button type="button" className="mb-btn line" onClick={() => setReleasing(true)}>إصدار الكتاب{data.proposal_counts?.approved ? ` (${data.proposal_counts.approved} معتمد)` : ''}</button>}
+                {data.viewer.decide && api.release && data.proposals_ready && <button type="button" className="mb-btn line" onClick={() => setReleasing(true)}>أصدر الكتاب{data.proposal_counts?.approved ? ` (${data.proposal_counts.approved} معتمد)` : ''}</button>}
                 <button type="button" className="mb-btn line" aria-haspopup="dialog" aria-expanded={pdfMenu} onClick={() => setPdfMenu(true)}>نسخة PDF</button>
                 {data.share && api.reader && <button type="button" className="mb-btn line" onClick={() => setSharing(true)}>شارك مع الخبراء{data.share.readers.length ? ` (${data.share.readers.length})` : ''}</button>}
               </div>
@@ -781,6 +818,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
               {seatInfo && <p className="mb-seat">{seatInfo.label}: <b>{seatInfo.text}</b></p>}
             </div>
           </section>
+          </>)}
           <section className="mb-vols" aria-label="الأجزاء الثلاثة">
             {shelfParts.map((p) => {
               const chs = data.chapters.filter((c) => c.dimension === p.key);
