@@ -55,14 +55,15 @@ function sealRing(text, r = 43) {
   }).join('');
 }
 
-const SEAL = `<svg class="cseal" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">
+// الختم يشهد للشهادة السارية وحدها: النموذج للعرض والموسومة بحالة (ملغاة...) بلا «شهادة معتمدة» ولا CERTIFIED
+const seal = (valid) => `<svg class="cseal" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">
   <circle cx="60" cy="60" r="56" fill="none" stroke="${C.gold}" stroke-width=".8"/>
   <circle cx="60" cy="60" r="50" fill="none" stroke="${C.gold}" stroke-width=".4" stroke-dasharray="1.2 2.2"/>
   <circle cx="60" cy="60" r="33" fill="none" stroke="${C.gold}" stroke-width=".5"/>
-  ${sealRing('MILESTONE IMPACT · CERTIFIED · FROM INTENTION TO IMPACT · ')}
-  <rect x="56" y="38" width="8" height="8" transform="rotate(45 60 42)" fill="${C.gold}"/>
-  <text x="60" y="64" text-anchor="middle" direction="rtl" font-family="Noto Kufi Arabic, sans-serif" font-size="8" font-weight="500" fill="${C.gold}">شهادة معتمدة</text>
-  <text x="60" y="77" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="5.2" font-weight="500" letter-spacing=".9" fill="${C.gold}">CERTIFIED</text>
+  ${sealRing(valid ? 'MILESTONE IMPACT · CERTIFIED · FROM INTENTION TO IMPACT · ' : 'MILESTONE IMPACT · FROM INTENTION TO IMPACT · ')}
+  ${valid ? '<rect x="56" y="38" width="8" height="8" transform="rotate(45 60 42)" fill="' + C.gold + '"/>' : '<rect x="52" y="52" width="16" height="16" transform="rotate(45 60 60)" fill="' + C.gold + '"/>'}
+  ${valid ? `<text x="60" y="64" text-anchor="middle" direction="rtl" font-family="Noto Kufi Arabic, sans-serif" font-size="8" font-weight="500" fill="${C.gold}">شهادة معتمدة</text>
+  <text x="60" y="77" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="5.2" font-weight="500" letter-spacing=".9" fill="${C.gold}">CERTIFIED</text>` : ''}
 </svg>`;
 
 // كتلة التوثيق (قرار المالك 2026-11-27): الموقّع من إعداد الشهادة (certificate_settings.signatory أو إعداد الجهة) باسمه وصفته
@@ -199,7 +200,7 @@ ${opts.print ? '' : `<div class="toolbar"><button class="pri" data-act="pdf">ت�
     </section>
     <footer class="foot">
       ${attest(signers[0])}
-      ${SEAL}
+      ${seal(!status)}
       ${sample ? `<div class="verify"><dl>
           <dt>رقم الشهادة</dt><dd>${SAMPLE_STAMP_AR}، بلا رقم</dd>
           <dt>التحقق</dt><dd>لا رابط تحقق لهذا النموذج</dd>

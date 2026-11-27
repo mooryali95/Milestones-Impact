@@ -125,3 +125,20 @@ describe('فخامة الشهادة: التحميل', () => {
     expect(src).toMatch(/catch[\s\S]{0,200}win\.print\(\)/);
   });
 });
+
+describe('فخامة الشهادة: الختم لا يشهد لما ليس شهادة سارية', () => {
+  const sealOf = (h) => h.slice(h.indexOf('<svg class="cseal"'), h.indexOf('</svg>', h.indexOf('<svg class="cseal"')));
+  it('النموذج للعرض والشهادة الموسومة بحالة (ملغاة) بلا «شهادة معتمدة» ولا CERTIFIED في الختم', () => {
+    for (const h of [certificateHtml({ ...base, sample: true }, ''), certificateHtml(base, '<svg></svg>', { status: 'ملغاة' })]) {
+      const seal = sealOf(h);
+      expect(seal).not.toContain('شهادة معتمدة');
+      expect(seal).not.toMatch(/C<\/text>.*E<\/text>.*R<\/text>.*T<\/text>.*I<\/text>.*F<\/text>.*I<\/text>.*E<\/text>.*D<\/text>/s);
+      expect(seal).not.toContain('>CERTIFIED<');
+    }
+  });
+  it('الشهادة السارية تبقي الختم بلغتين', () => {
+    const seal = sealOf(certificateHtml(base, '<svg></svg>'));
+    expect(seal).toContain('شهادة معتمدة');
+    expect(seal).toContain('>CERTIFIED<');
+  });
+});
