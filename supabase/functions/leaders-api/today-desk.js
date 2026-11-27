@@ -11,7 +11,7 @@
 // المصدر المتعذر (skipped) لا يُسقط الرد: لا يُبنى منه تنبيه، وما يعتمد عليه في النبض يبقى مجهولًا (null) لا صفرًا.
 import { orgReadinessOf, readinessSummary, seatsFull } from './org-readiness.js';
 import { cohortKind, cohortReadiness, hubSummary } from './cohort-readiness.js';
-import { SESSION_WINDOW_MS, usesHandbook, workshopOf } from './cohort-setup.js';
+import { SESSION_WINDOW_MS, undatedFor, usesHandbook, workshopOf } from './cohort-setup.js';
 import { isRunning } from './cohort-running.js';
 import { lateAlertText } from './cohort-changes.js';
 
@@ -30,6 +30,8 @@ export const SOURCE_AR = {
 export const ALERT_KINDS = {
   seats_full: { label: 'المقاعد ممتلئة', needs: ['orgs'] },
   cohort_no_session: { label: 'دفعة جارية بلا جلسة قريبة', needs: ['programs', 'sessions', 'members'] },
+  // تصور تطبيق القادة، النظرة العامة البند 7: جلسات «يُحدد لاحقًا» في دفعة جارية (undatedFor، جزء من بند «الجلسات» في جاهزيتها)
+  cohort_undated: { label: 'جلسات بلا موعد في دفعة جارية', needs: ['programs', 'sessions'] },
   // تصور تشغيل الدفعة 2026-11-19، المرحلة 3: من صار متأخرًا في الدفعة منذ لقطة أمس، من اللقطة اليومية (cohort-pulse.ts)
   cohort_late: { label: 'متأخرون جدد في دفعة', needs: ['programs', 'snapshots'] },
   expert_over: { label: 'خبير فوق طاقته', needs: ['experts'] },
@@ -115,6 +117,18 @@ export function deskOf(src = {}) {
     if (!next || Date.parse(next) > horizon) {
       alerts.push({ kind: 'cohort_no_session', severity: 'warn', id: `cohort:${c.id}`, target: { tab: 'programs', id: c.id },
         text: `دفعة «${c.name}» جارية ولا جلسة لها في الأيام الـ${UPCOMING_DAYS} القادمة${next ? `: أقربها ${isoDay(Date.parse(next))}` : ''}` });
+    }
+  }
+
+  // ── جلسات بلا موعد في دفعة جارية: العدد من undatedFor (القاعدة نفسها في جاهزية الدفعة)، لا يحتاج العضوية ──
+  if (has('programs') && has('sessions')) {
+    for (const c of running) {
+      if (usesHandbook(c)) continue;
+      const n = undatedFor(c, src.sessions.workshops);
+      if (n > 0) {
+        alerts.push({ kind: 'cohort_undated', severity: 'warn', id: `undated:${c.id}`, target: { tab: 'programs', id: c.id },
+          text: `دفعة «${c.name}» الجارية فيها ${countAr(n, 'جلسة واحدة', 'جلستان', 'جلسات', 'جلسة')} بلا موعد` });
+      }
     }
   }
 

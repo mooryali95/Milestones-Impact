@@ -40,7 +40,7 @@ Deno.test('admin.today: العضوية والورش من رد الدفعات ن�
   };
   const r: any = await TD.today({}, base);
   assertEquals(r.skipped, ['org_setups', 'members', 'sessions']);
-  assertEquals(r.unchecked, ['cohort_no_session', 'org_readiness']);
+  assertEquals(r.unchecked, ['cohort_no_session', 'cohort_undated', 'org_readiness']);
   assertEquals(r.pulse[0].waiting, null);
   assertEquals(r.pulse[0].next_at, null);
   // تعذّر الدفعات كلها يكفي اسمه: لا يُضاف إليه الأعضاء والجلسات

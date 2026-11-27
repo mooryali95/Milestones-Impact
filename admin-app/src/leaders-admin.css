@@ -1681,3 +1681,11 @@ tr.ct-on > td { background: var(--gold-pale); }
 .xsp-unit-t { display: block; font-size: .8rem; color: var(--ink-mid); margin: 6px 0 2px; }
 .xsp-note { display: block; border-inline-start: 3px solid var(--st-warn); padding-inline-start: 6px; margin-top: 2px; }
 .xsp-edit { display: grid; gap: 6px; margin-top: 6px; }
+
+/* المرحلة 8: النظرة العامة. الإجراءات السريعة في الرأس بجانب التحية، وسهم البطاقة، والعرض النشط، وسطر المصفوفة */
+.today-head .today-links { margin: 0; gap: 6px; }
+.today-n-go { margin-inline-start: 6px; color: var(--petrol, currentColor); opacity: .7; }
+.today-n:hover .today-n-go, .today-n:focus-visible .today-n-go { opacity: 1; }
+.today-n[aria-pressed="true"] { border-color: var(--petrol, var(--line-strong)); box-shadow: inset 0 0 0 1px var(--petrol, var(--line-strong)); }
+.today-exc-sk .sk { display: block; flex: 1; block-size: 14px; }
+.today-mx { margin: 0 0 14px; font-size: .9rem; }

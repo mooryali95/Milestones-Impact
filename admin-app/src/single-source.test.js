@@ -35,3 +35,22 @@ describe('المصدر الواحد لمكوّنات المجال', () => {
     expect(rendering('CohortPulse')).toEqual(['Programs.jsx']);
   });
 });
+
+// المرحلة 8 (اعتماد المالك): «ما يحتاج انتباهك» يقرأ المصدرين عبر attentionRows، وعدد المتوقفين من matrix.js لا من شاشة المصفوفة
+describe('المرحلة 8: النظرة العامة تقرأ ولا تعيد الحساب', () => {
+  const src = readFileSync(join(DIR, 'Overview.jsx'), 'utf8');
+  it('لا تستورد من شاشة المصفوفة، ولا تحسب التوقف بنفسها', () => {
+    expect(src).not.toMatch(/from '\.\/Matrix\.jsx'/);
+    expect(src).not.toMatch(/\b(isIdle|idleRegs|idleDays)\b/);
+    expect(src).not.toMatch(/\b14\b/);
+    expect(src).toMatch(/idleCount/);
+  });
+  it('لا تطلب list-regs ولا ترسم أسماء المصفوفة', () => {
+    expect(src).not.toMatch(/list-regs/);
+    expect(src).not.toMatch(/\battention\(/);
+  });
+  it('الصندوق لا يُدمج بغيره: attentionRows لا يقرأ inbox', () => {
+    expect(src).toMatch(/attentionRows\(exceptionRows\(/);
+    expect(src).not.toMatch(/attentionRows\([^)]*inbox/);
+  });
+});

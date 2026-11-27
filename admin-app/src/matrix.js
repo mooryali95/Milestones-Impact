@@ -37,6 +37,14 @@ export const idleSince = (d) => `منذ آخر تعديل ${daysAr(d)}`;
 
 export const idleRegs = (regs, now = new Date()) => counted(regs).filter((r) => isIdle(r, now));
 
+// ── عدد المتوقفين خارج المصفوفة (المرحلة 8، النظرة العامة البند 6) ──
+// النظرة العامة لا تطلب list-regs عند فتحها (لا طلب شبكة جديد) ولا تعيد الحساب: تقرأ آخر عدد حسبته المصفوفة بـidleRegs
+// نفسها في هذه الجلسة (ذاكرة الصفحة وحدها، لا تخزين). قبل فتح المصفوفة العدد مجهول (null)، فيُعرض السطر رابطًا بلا رقم.
+let idleMemo = null;
+export function rememberIdle(regs, now = new Date()) { idleMemo = { n: idleRegs(regs || [], now).length, at: Date.now() }; return idleMemo; }
+export const idleCount = () => idleMemo;
+export const IDLE_HREF = () => regsHref({ view: 'idle' });
+
 // جمع «جهة» بالعربية الصحيحة
 export const apptsAr = (n) => (n === 1 ? 'موعد واحد' : n === 2 ? 'موعدان' : n >= 3 && n <= 10 ? `${n} مواعيد` : `${n} موعدًا`);
 export const orgsAr = (n) => (n === 1 ? 'جهة واحدة' : n === 2 ? 'جهتان' : n >= 3 && n <= 10 ? `${n} جهات` : `${n} جهة`);

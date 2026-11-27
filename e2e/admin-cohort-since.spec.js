@@ -250,9 +250,10 @@ test('الجوال 390 واللوحي 768: الشريط يلتف بلا تمري
 test('«نظرة عامة»: تنبيه المتأخرين الجدد لكل دفعة، ورابطه يفتح «المتابعة» على عرض «متأخرون»', async ({ page }) => {
   for (const width of [1440, 390]) {
     const calls = await setup(page, { width, hash: '#/leaders/overview', role: 'super_admin' });
-    const alerts = page.getByRole('region', { name: /تنبيهات/ });
+    // المرحلة 8: التنبيهات في قسم «ما يحتاج انتباهك» الواحد، بصف مشترك ووجهة «افتح ملف الدفعة ←»
+    const alerts = page.getByRole('region', { name: /يحتاج انتباهك/ });
     const late = alerts.locator('li[data-kind="cohort_late"]');
-    await expect(late).toHaveText(/دفعة «دفعة نوفمبر»: 5 أعضاء صاروا متأخرين منذ أمس، والمتأخرون الآن 7/);
+    await expect(late).toContainText(/دفعة «دفعة نوفمبر»: 5 أعضاء صاروا متأخرين منذ أمس، والمتأخرون الآن 7/);
     await expect(late.getByRole('link')).toHaveAttribute('href', '#/leaders/programs/c1?view=follow&show=late');
     expect(await noOverflow(page)).toBe(true);
     await shot(page, `overview-late-alert-${width}`);

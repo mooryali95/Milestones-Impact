@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // المشاركون: القائمة بفلاترها وتصديرها والنقل الجماعي، وملف المشارك
 // ════════════════════════════════════════════════════════════════
+import { IN_PROGRAM, PROGRAM_VIEW } from '../today.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { deleteFollowUp } from '../erase-follow.js';
 import { ErasureBanner, ErasureCard, ErasureLogLine, ErasureSheet, takeOpen } from './Erasure.jsx';
@@ -43,7 +44,7 @@ import { ONBOARDING_AR, ONBOARDING_STEPS, STUCK_STEPS as STUCK } from '../../../
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 
 const DAY = 864e5;
-const ACTIVE = ['placed', 'enrolled'];
+const ACTIVE = IN_PROGRAM;
 // عروض سريعة: الحالات التي يتدخل فيها المدير عادة، وعدد كل منها ظاهر على رقاقتها
 const PRESETS = [
   { key: 'approval', label: 'بانتظار الاعتماد', test: (p) => p.status === 'pending_approval' },
@@ -56,6 +57,8 @@ const PRESETS = [
   { key: 'idle', label: 'متوقف 14 يومًا', test: (p, now) => ACTIVE.includes(p.status) && (!seenAt(p) || now - Date.parse(seenAt(p)) > 14 * DAY) },
   { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
+  // «في البرنامج»: الحالتان اللتان يعدّهما رقم «المشاركون في البرنامج» في النظرة العامة (البطاقة تفتح هذا المرشح)
+  { key: PROGRAM_VIEW, label: 'في البرنامج', test: (p) => IN_PROGRAM.includes(p.status) },
   { key: 'out', label: 'موقوف أو منسحب', test: (p) => p.status === 'suspended' || p.status === 'withdrawn' },
 ];
 // كيف وصل المشارك إلى دفعته (pickCohort): تلقائيًا بجهته، أو بنقل يدوي، أو الدفعة المفتوحة لمن لا جهة له
