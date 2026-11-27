@@ -35,22 +35,36 @@ describe('fetchRetry', () => {
     await expect(fetchRetry('u', {}, quick())).rejects.toThrow('net');
   });
   it('ميزانية القراءة 20 ثانية: عطل البوابة 10 ثوانٍ لا يصل المستخدم، والانتظار الكلي لا يتجاوز الميزانية', async () => {
-    const c = clock();
-    // البوابة تفشل حتى الثانية العاشرة ثم تعود، وكل محاولة تأخذ 200 ملي ثانية
-    const f = vi.fn(async () => { c.tick(200); if (c.now() < 10_000) throw new TypeError('Failed to fetch'); return res(200); });
-    vi.stubGlobal('fetch', f);
-    // العشوائية مثبتة: Math.random يجعل مسار التراجع (وزمن آخر محاولة) يتغير بين التشغيلات فيرسب الاختبار أحيانًا
-    const random = () => 0.5;
-    expect((await fetchRetry('u', {}, { ...READ_POLICY, now: c.now, sleep: c.sleep, random })).status).toBe(200);
-    expect(c.now()).toBeGreaterThanOrEqual(10_000);
-    expect(c.now()).toBeLessThan(READ_POLICY.budget);
-    // عطل دائم: يتوقف قبل تجاوز الميزانية، بعدد محاولات محدود
-    const d = clock();
-    const g = vi.fn(async () => { d.tick(100); throw new TypeError('Failed to fetch'); });
-    vi.stubGlobal('fetch', g);
-    await expect(fetchRetry('u', {}, { ...READ_POLICY, now: d.now, sleep: d.sleep, random })).rejects.toThrow();
-    expect(d.now()).toBeLessThanOrEqual(READ_POLICY.budget);
-    expect(g.mock.calls.length).toBeGreaterThan(3);
+    // العشوائية محقونة لا Math.random، فالنتيجة ثابتة. وتُختبر أطرافها (أدنى وأعلى قيمة) ومسار مختلط ببذرة ثابتة،
+    // لأن الحالة الطرفية العليا هي التي كانت تكشف تجاوز الميزانية
+    const seeded = (s) => () => { s = (s * 1_103_515_245 + 12_345) % 2 ** 31; return s / 2 ** 31; };
+    // «تجاوز»: قيمة تجعل آخر انتظار ينتهي قبل الميزانية بأقل من مدة محاولة، فتنتهي المحاولة الأخيرة بعدها (20037)،
+    // وهي الحالة التي كانت تُرسب الاختبار عشوائيًا (20099)
+    const randoms = { 'أدنى': () => 0, 'منتصف': () => 0.5, 'أعلى': () => 0.999_999, 'تجاوز': () => 0.001, 'مختلط': seeded(42) };
+    for (const [name, random] of Object.entries(randoms)) {
+      // البوابة تفشل حتى الثانية العاشرة ثم تعود، وكل محاولة تأخذ 200 ملي ثانية
+      const c = clock();
+      const f = vi.fn(async () => { c.tick(200); if (c.now() < 10_000) throw new TypeError('Failed to fetch'); return res(200); });
+      vi.stubGlobal('fetch', f);
+      expect((await fetchRetry('u', {}, { ...READ_POLICY, now: c.now, sleep: c.sleep, random })).status, name).toBe(200);
+      expect(c.now(), name).toBeGreaterThanOrEqual(10_000);
+      expect(c.now(), name).toBeLessThan(READ_POLICY.budget);
+      // عطل دائم: كل انتظار وكل بدء محاولة داخل الميزانية، بعدد محاولات محدود
+      const ATTEMPT = 100;
+      const d = clock();
+      let slept = 0;
+      const sleep = async (ms) => { slept += ms; await d.sleep(ms); };
+      const starts = [];
+      const g = vi.fn(async () => { starts.push(d.now()); d.tick(ATTEMPT); throw new TypeError('Failed to fetch'); });
+      vi.stubGlobal('fetch', g);
+      await expect(fetchRetry('u', {}, { ...READ_POLICY, now: d.now, sleep, random })).rejects.toThrow();
+      expect(slept, name).toBeLessThan(READ_POLICY.budget);
+      for (const t of starts) expect(t, name).toBeLessThan(READ_POLICY.budget);
+      // التجاوز المسموح صراحةً: مدة المحاولة الأخيرة وحدها، لأن fetchRetry لا يقطع محاولة بدأت داخل الميزانية
+      // (مهلتها 4 ثوانٍ على الأقل حتى لا تُقطع محاولة سليمة، api.js). السقف الصارم قرار منفصل لم يُتخذ
+      expect(d.now(), name).toBeLessThanOrEqual(READ_POLICY.budget + ATTEMPT);
+      expect(g.mock.calls.length, name).toBeGreaterThan(3);
+    }
   });
   it('التراجع بعشوائية كاملة بين 0 وسقف يتضاعف حتى 5 ثوانٍ', () => {
     expect(backoffDelay(1, { random: () => 0 })).toBe(0);
