@@ -146,3 +146,37 @@ test('الكتاب المدمج: إشارات لكل مبادرة باسمها،
   expect((await PDFDocument.load(readFileSync(await again.path()))).getPageCount()).toBe(1 + 2 + 2);
   expect(worker).toEqual(['p1', 'p2', 'cover', 'cover']);
 });
+
+// ── المرحلة 4: التقسيم التلقائي إلى أجزاء مرقمة بالغلاف والملخص نفسيهما، وZIP اختياري للمبادرات منفردة ──
+test('الكتاب المدمج: يتجاوز الحد فيُقسم إلى جزأين مرقمين بالغلاف نفسه', async ({ page }) => {
+  // سقف مخفض للاختبار وحده (الحد الفعلي نحو 80MB أو 600 صفحة): الغلاف صفحة وكل مبادرة صفحتان، فلا يسع الملف إلا مبادرة
+  await page.addInitScript(() => { window.__MI_COHORT_SPLIT = { bytes: 1e9, pages: 3 }; });
+  const { worker } = await bookSetup(page);
+  const dlg = await openExport(page, 'سفراء 2026');
+  const files = [];
+  page.on('download', (d) => files.push(d));
+  await dlg.getByRole('button', { name: 'الكتاب المدمج (PDF)' }).click();
+  await expect(dlg.getByTestId('cohort-book-report')).toContainText('في 2 أجزاء');
+  await expect.poll(() => files.length).toBe(2);
+  expect(files.map((f) => f.suggestedFilename()).map((n) => n.match(/part-\d/)?.[0])).toEqual(['part-1', 'part-2']);
+  for (const f of files) expect((await PDFDocument.load(readFileSync(await f.path()))).getPageCount()).toBe(1 + 2);
+  expect(worker.filter((t) => t !== 'cover')).toEqual(['p1', 'p2']);
+});
+
+test('الكتاب المدمج: ومعه المبادرات منفردة في ملف ZIP', async ({ page }) => {
+  const { unzipSync, strFromU8 } = await import('fflate');
+  await bookSetup(page);
+  const dlg = await openExport(page, 'سفراء 2026');
+  await dlg.getByRole('checkbox', { name: 'ومعه المبادرات منفردة (ZIP)' }).check();
+  const files = [];
+  page.on('download', (d) => files.push(d));
+  await dlg.getByRole('button', { name: 'الكتاب المدمج (PDF)' }).click();
+  await expect(dlg.getByTestId('cohort-book-report')).toContainText('اكتمل الكتاب');
+  await expect.poll(() => files.length).toBe(2);
+  const zip = files.find((f) => f.suggestedFilename().endsWith('.zip'));
+  expect(zip.suggestedFilename()).toMatch(/Cohort-Initiatives.*\.zip$/);
+  const entries = unzipSync(new Uint8Array(readFileSync(await zip.path())));
+  expect(Object.keys(entries)).toEqual(['01 أحمد رقمنة الأرشيف.pdf', '02 سارة تسريع الخدمة.pdf', 'فهرس.txt']);
+  expect((await PDFDocument.load(entries['01 أحمد رقمنة الأرشيف.pdf'])).getPageCount()).toBe(2);
+  expect(strFromU8(entries['فهرس.txt'])).toContain('رقمنة الأرشيف');
+});

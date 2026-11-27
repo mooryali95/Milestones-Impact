@@ -234,3 +234,52 @@ describe('ثبات أرقام الفهرس (مراجعة المرحلة 3)', () 
     expect(make.mock.calls.length).toBeLessThanOrEqual(4);
   });
 });
+
+// المرحلة 4: التقسيم التلقائي بالحجم وعدد الصفحات، وملف ZIP للمبادرات منفردة
+import { splitBySize, SPLIT_LIMITS, zipParts, partFileName } from './cohort-export.js';
+import { unzipSync, strFromU8 } from 'fflate';
+
+describe('splitBySize: أجزاء مرقمة عند تجاوز الحد', () => {
+  const p = (id, size, pages) => ({ id, size, pages });
+  it('الحدود المعتمدة نحو 80MB أو 600 صفحة', () => {
+    expect(SPLIT_LIMITS).toEqual({ bytes: 80 * 1024 * 1024, pages: 600 });
+  });
+  it('ما دون الحد جزء واحد بالترتيب نفسه', () => {
+    expect(splitBySize([p('a', 10, 20), p('b', 10, 20)], { bytes: 100, pages: 100 })).toEqual([['a', 'b']]);
+  });
+  it('يقسم بالحجم مع حساب الغلاف في كل جزء، ولا يفرّق مبادرة واحدة', () => {
+    const parts = [p('a', 40, 1), p('b', 40, 1), p('c', 40, 1), p('d', 500, 1)];
+    expect(splitBySize(parts, { bytes: 100, pages: 1000 }, { size: 15, pages: 2 })).toEqual([['a', 'b'], ['c'], ['d']]);
+  });
+  it('يقسم بعدد الصفحات', () => {
+    const parts = [p('a', 1, 300), p('b', 1, 300), p('c', 1, 300)];
+    expect(splitBySize(parts, { bytes: 1e9, pages: 600 }, { size: 0, pages: 3 })).toEqual([['a'], ['b'], ['c']]);
+    expect(splitBySize(parts, { bytes: 1e9, pages: 600 })).toEqual([['a', 'b'], ['c']]);
+  });
+  it('بلا أجزاء لا شيء', () => { expect(splitBySize([])).toEqual([]); });
+});
+
+describe('bookCover: الجزء المرقم يحمل الغلاف والملخص نفسيهما', () => {
+  it('يُذكر الجزء في العنوان الفرعي واسم الملف، والملخص كامل', () => {
+    const rows = [{ n: 1, participant_id: 'a', full_name: 'أ', initiative: 'م1', status: 'معتمدة', page: 5 }, { n: 2, participant_id: 'b', full_name: 'ب', initiative: 'م2', status: 'معتمدة', page: null }];
+    const c = bookCover({ cohort: { name: 'د1' }, rows, date: 'اليوم', part: { n: 2, of: 3 } });
+    expect(c.meta.subtitle).toContain('الجزء 2 من 3');
+    expect(c.meta.pdfName).toBe('Cohort-Initiatives-part-2');
+    expect(c.body).toContain('م1');
+    expect(c.body).toContain('م2');
+    const one = bookCover({ cohort: { name: 'د1' }, rows, date: 'اليوم' });
+    expect(one.meta.subtitle).not.toContain('الجزء');
+    expect(one.meta.pdfName).toBe('Cohort-Initiatives');
+  });
+});
+
+describe('zipParts: المبادرات منفردة في ملف مضغوط', () => {
+  it('اسم لكل ملف بترتيبه وبلا رموز ممنوعة، وأسماء متكررة لا تتصادم', () => {
+    expect(partFileName(3, 'سارة/علي: مبادرة "أ"?')).toBe('03 سارة علي مبادرة أ.pdf');
+    const z = zipParts([{ name: 'أ', bytes: new Uint8Array([1, 2]) }, { name: 'أ', bytes: new Uint8Array([3]) }], { index: 'فهرس' });
+    const files = unzipSync(z);
+    expect(Object.keys(files)).toEqual(['01 أ.pdf', '02 أ.pdf', 'فهرس.txt']);
+    expect([...files['01 أ.pdf']]).toEqual([1, 2]);
+    expect(strFromU8(files['فهرس.txt'])).toBe('فهرس');
+  });
+});

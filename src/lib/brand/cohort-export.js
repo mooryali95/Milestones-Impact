@@ -7,7 +7,9 @@
 // بترقيم متصل. لا يمس هذا الملف مصادر الوثيقة، ويستورد منها فقط.
 // المرحلة 3: فهرس في الغلاف بروابط تقفز إلى صفحة بداية كل مبادرة، وإشارات مرجعية بمستويين (المبادرة ثم فصولها من outline
 // ملفها)، وتخزين مؤقت في IndexedDB ببصمة الوثيقة فيعيد الاستئناف ما لم يتغير دون توليد.
+// المرحلة 4: تقسيم تلقائي إلى أجزاء مرقمة إن تجاوز الملف نحو 80MB أو 600 صفحة، وZIP اختياري للمبادرات منفردة (fflate).
 import { PDFHexString, PDFName } from 'pdf-lib';
+import { strToU8, zipSync } from 'fflate';
 import { esc, raw, table } from './doc.js';
 import { identityOf } from './institutional.js';
 import { issuedFingerprint } from '../../../supabase/functions/leaders-api/doc-quality.js';
@@ -99,16 +101,16 @@ export async function pageCount(bytes) {
 }
 
 /** الغلاف والملخص التنفيذي: meta بهوية الجهة من أول وثيقة (identityOf)، وجسم بجدول الملخص */
-export function bookCover({ cohort, docMeta = {}, rows = [], date, volume = { n: 1, of: 1 } }) {
+export function bookCover({ cohort, docMeta = {}, rows = [], date, volume = { n: 1, of: 1 }, part = { n: 1, of: 1 } }) {
   const { brand } = identityOf(docMeta || {});
   const name = cohort?.name || 'الدفعة';
   const included = rows.filter((r) => r.status !== 'تعذر توليدها').length;
-  const vol = volume.of > 1 ? ` · المجلد ${volume.n} من ${volume.of}` : '';
+  const vol = (volume.of > 1 ? ` · المجلد ${volume.n} من ${volume.of}` : '') + (part.of > 1 ? ` · الجزء ${part.n} من ${part.of}` : '');
   const meta = {
     kind: 'BOOK', brand, eyebrow: brand.program || 'برنامج القادة', title: `مبادرات ${name}`,
     subtitle: `المبادرات المعتمدة، النسخة المؤسسية${vol}`, pageAr: true,
     rows: [['الدفعة', name], ['الجهة', brand.name || 'مبادرة مجتمعية'], ['التاريخ', date], ['عدد المبادرات', String(included)]],
-    pdfName: `Cohort-Initiatives${volume.of > 1 ? `-${volume.n}` : ''}`,
+    pdfName: `Cohort-Initiatives${volume.of > 1 ? `-${volume.n}` : ''}${part.of > 1 ? `-part-${part.n}` : ''}`,
   };
   const body = `<section class="sec"><header><h2>الملخص التنفيذي</h2></header>
 <p>${esc(`يضم هذا الكتاب ${included} مبادرة معتمدة من «${name}» بنسختها المؤسسية، ولكل منها رمز تحقق يثبت مطابقتها لما اعتُمد في المنصة.`)}</p>
@@ -326,4 +328,39 @@ export async function runBook(rows, { part, onProgress = () => {}, signal = null
 export async function saveBook(bytes, meta) {
   const { saveBlob } = await import('./pdf.js');
   saveBlob(new Blob([bytes], { type: 'application/pdf' }), { title: meta.title, pdfName: meta.pdfName });
+}
+
+// ── المرحلة 4: التقسيم التلقائي بالحجم وعدد الصفحات، وملف ZIP للمبادرات منفردة ──
+/** سقف الملف الواحد: نحو 80MB أو 600 صفحة، فما زاد يُقسم إلى أجزاء مرقمة بالغلاف والملخص نفسيهما */
+export const SPLIT_LIMITS = Object.freeze({ bytes: 80 * 1024 * 1024, pages: 600 });
+/** يوزع الأجزاء ({ id, size, pages }) بترتيبها على ملفات لا يتجاوز كل منها الحد مع غلافه، ولا تُفرّق مبادرة واحدة */
+export function splitBySize(parts, limits = SPLIT_LIMITS, cover = { size: 0, pages: 0 }) {
+  const groups = [];
+  let cur = null;
+  for (const p of parts) {
+    const fits = cur && cur.ids.length && cur.size + p.size <= limits.bytes && cur.pages + p.pages <= limits.pages;
+    if (!fits) { cur = { ids: [], size: cover.size || 0, pages: cover.pages || 0 }; groups.push(cur); }
+    cur.ids.push(p.id); cur.size += p.size; cur.pages += p.pages;
+  }
+  return groups.map((g) => g.ids);
+}
+/** اسم ملف المبادرة داخل ZIP: رقم ترتيبها ثم اسمها بلا رموز تمنعها أنظمة الملفات */
+export function partFileName(n, name) {
+  const clean = String(name || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return `${String(n).padStart(2, '0')} ${clean || 'مبادرة'}.pdf`;
+}
+/** ملف ZIP بلا ضغط (ملفات PDF مضغوطة أصلًا) لكل مبادرة منفردة، ومعه نص فهرس اختياري */
+export function zipParts(files, { index = '' } = {}) {
+  const entries = {};
+  files.forEach((f, i) => { entries[partFileName(i + 1, f.name)] = [f.bytes, { level: 0 }]; });
+  if (index) entries['فهرس.txt'] = [strToU8(index), { level: 6 }];
+  return zipSync(entries);
+}
+export function saveZip(bytes, meta) {
+  const name = `${meta.pdfName || 'Cohort-Initiatives'}.zip`;
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return name;
 }
