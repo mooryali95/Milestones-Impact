@@ -10,7 +10,7 @@
 // المرحلة 4: تقسيم تلقائي إلى أجزاء مرقمة إن تجاوز الملف نحو 80MB أو 600 صفحة، وZIP اختياري للمبادرات منفردة (fflate).
 import { PDFHexString, PDFName } from 'pdf-lib';
 import { strToU8, zipSync } from 'fflate';
-import { esc, raw, table } from './doc.js';
+import { esc, raw, table, humanDate } from './doc.js';
 import { identityOf } from './institutional.js';
 import { issuedFingerprint } from '../../../supabase/functions/leaders-api/doc-quality.js';
 
@@ -65,7 +65,7 @@ export function summaryRows(rows, results = {}) {
     return {
       n: i + 1, participant_id: r.participant_id, full_name: r.full_name || '', initiative: r.initiative || '',
       status: x.error ? 'تعذر توليدها' : 'معتمدة', readiness: !x.error && r.readiness != null ? `${r.readiness}%` : '',
-      approved_at: r.approved_at || '', code: x.error ? '' : x.fingerprint || '', page: x.start || null,
+      approved_at: r.approved_at ? humanDate(r.approved_at) : '', code: x.error ? '' : String(x.fingerprint || '').replace(/-/g, '\u2011'), page: x.start || null,
     };
   });
 }

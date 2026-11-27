@@ -52,7 +52,9 @@ describe('الملخص التنفيذي والغلاف', () => {
   });
   it('رمز التحقق من بصمة كل وثيقة، والحالة معتمدة، والمتعذر معلَّم', () => {
     const s = summaryRows(rows, { p1: { fingerprint: 'FP1', start: 3 }, p2: { error: 'x' } });
-    expect(s[0]).toMatchObject({ n: 1, full_name: 'أحمد', initiative: 'رقمنة', status: 'معتمدة', readiness: '80%', approved_at: '2026-11-21', code: 'FP1', page: 3 });
+    expect(s[0]).toMatchObject({ n: 1, full_name: 'أحمد', initiative: 'رقمنة', status: 'معتمدة', readiness: '80%', approved_at: '21 نوفمبر 2026', code: 'FP1', page: 3 });
+    // صيغة تاريخ واحدة للإنسان، والرمز لا ينكسر عند الشرطة
+    expect(summaryRows([{ participant_id: 'q', approved_at: '2026-11-20' }], { q: { fingerprint: 'MI-AB-12' } })[0].code).toBe('MI\u2011AB\u201112');
     expect(s[1]).toMatchObject({ status: 'تعذر توليدها', readiness: '', code: '' });
   });
   it('الغلاف بهوية الجهة من الوثيقة (lockup) وبالعدد والتاريخ، بلا بريد ولا هاتف', () => {
