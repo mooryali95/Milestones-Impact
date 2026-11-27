@@ -24,4 +24,4 @@ begin
   end if;
 end $$;
 
-insert into leaders.schema_migrations (name) values ('20261130040000_leaders_upload_size_limit') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261130050000_leaders_upload_size_limit') on conflict do nothing;

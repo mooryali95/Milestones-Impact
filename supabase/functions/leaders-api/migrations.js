@@ -202,7 +202,7 @@ export const MIGRATIONS = [
   '20261130010000_leaders_post_core',
   '20261130020000_leaders_post_form',
   '20261130030000_leaders_capstone_doc_options',
-  '20261130040000_leaders_upload_size_limit',
+  '20261130050000_leaders_upload_size_limit',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -318,5 +318,5 @@ export const MIGRATION_GATES = {
   '20261130010000_leaders_post_core': ["tolerant", "الدوال الأقدم لا تقرأ العمود، والجديدة تطلبه فقط والصيغة القصيرة مفعلة (post_form.short في app_settings، مطفأ افتراضيًا)"],
   '20261130020000_leaders_post_form': ["tolerant", "الدوال تكتب العمودين في الصيغة القصيرة وحدها (مفتاح post_form.short مطفأ)، وتقرير الأثر يقرؤهما بإعادة بلاهما (missingColumn في impact.ts)"],
   '20261130030000_leaders_capstone_doc_options': ["tolerant", "قبله تقرأ الدوال doc_options فارغًا فيُطبع الرمز كما كان (effectiveQr الافتراضي مفعّل)، والكتابة ترد «غير متاح الآن» (missingColumn في capstone.ts)"],
-  '20261130040000_leaders_upload_size_limit': ["tolerant", "إعداد مخزن فقط لا تقرؤه الدوال: سقف حجم الملف وأنواعه في leaders-private، والدوال الأقدم تصدر روابطها كما كانت."],
+  '20261130050000_leaders_upload_size_limit': ["tolerant", "إعداد مخزن فقط لا تقرؤه الدوال: سقف حجم الملف وأنواعه في leaders-private، والدوال الأقدم تصدر روابطها كما كانت."],
 };
