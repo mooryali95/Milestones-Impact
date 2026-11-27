@@ -10,7 +10,7 @@ import { copiedFromExamples } from '../../../supabase/functions/leaders-api/exam
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { CHAPTER_STANDING_AR, PRIORITY_WEIGHT, SPONSOR_STATE_AR, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { CAPSTONE_STATUS_TONE, CHAPTER_STANDING_TONE, DOC_QR_AR, LEVEL_AR, NO_TITLE, RUBRIC_LEVEL_AR, SPONSOR_STATE_TONE, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
+import { CAPSTONE_STATUS_TONE, CHAPTER_STANDING_TONE, DOC_QR_AR, DOC_QR_EXPORT_AR, LEVEL_AR, NO_TITLE, RUBRIC_LEVEL_AR, SPONSOR_STATE_TONE, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
 import { ADMIN_QR_CHOICES, REASON_MAX } from '../../../supabase/functions/leaders-api/doc-options.js';
 // حالة الفصل في صفحة الوثيقة: الفصول يقرؤها المستشار في كتاب القائد لا المالك، فالتقديم والقراءة بلسانه،
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
@@ -100,9 +100,12 @@ export async function openDoc(doc, toast, kind = 'working', onBlocked = null, op
 // ما ينقص، أو «نسخة كاملة»، ومفاتيح ثلاثة للتعديل اليدوي. الخيارات لكل تنزيل ولا تُحفظ. الوثيقة من الخادم لحظة الطلب مع تذكرة
 // مربوطة ببصمتها، ويُسجَّل التنزيل admin.docExport. الملف عبر downloadBest فيطابق ما يُرى، وبلا نسبة الجاهزية
 const EXPORT_SWITCHES = [['decision', 'صفحة القرار'], ['annex', 'ملحق المراجع'], ['appendix', 'ملحق ما ينقص'], ['qr', 'رمز التحقق']];
-// qrOk: قرار الرمز الفعلي (المرحلة 33، effectiveQr). المحجوب لا يُطبع رمزه في أي نسخة، فالمفتاح معطل بسببه
-export function FinalDocExport({ participantId, approved = false, qrOk = true }) {
-  const canQr = approved && qrOk;
+// qr: حالة الرمز من الخادم (qrStateFor): { qr, available, reason }. المفتاح يُفعَّل للمعتمدة ذات البصمة المجمّدة غير المحجوبة وحدها،
+// وسبب تعطيله سطر ظاهر تحته قبل التحميل (DOC_QR_EXPORT_AR)، لا تلميح title
+export function FinalDocExport({ participantId, approved = false, qr = null }) {
+  const available = approved && !!qr?.available;
+  const canQr = available && qr?.qr !== false;
+  const reason = qr?.reason || (!approved ? 'draft' : !available ? 'unissued' : canQr ? null : 'withheld');
   const { toast } = useUI();
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState('send');
@@ -152,11 +155,11 @@ export function FinalDocExport({ participantId, approved = false, qrOk = true })
           </div>
           <div className="la-row">
             {EXPORT_SWITCHES.map(([k, t]) => (
-              <label key={k} className="row" title={k === 'qr' && !canQr ? (approved ? DOC_QR_AR.admin_now(false) : 'رمز التحقق للوثيقة المعتمدة فقط') : undefined}><input type="checkbox" role="switch" disabled={!options || (k === 'qr' && !canQr)} checked={k === 'qr' ? canQr && !!options?.qr : !!options?.[k]} onChange={(e) => setOpts((o) => ({ ...(o || {}), [k]: e.target.checked }))} /> {t}</label>
+              <label key={k} className="row"><input type="checkbox" role="switch" aria-describedby={k === 'qr' && reason ? `cps-qr-why-${participantId}` : undefined} disabled={!options || (k === 'qr' && !canQr)} checked={k === 'qr' ? canQr && !!options?.qr : !!options?.[k]} onChange={(e) => setOpts((o) => ({ ...(o || {}), [k]: e.target.checked }))} /> {t}</label>
             ))}
           </div>
-          {options && approved && !qrOk && <p className="la-muted small">{DOC_QR_AR.admin_now(false)}</p>}
-          {options && <p className="la-muted small" aria-live="polite">{mod.exportSummary(options, { approved })}</p>}
+          {options && reason && <p className="la-muted small" id={`cps-qr-why-${participantId}`}>{DOC_QR_EXPORT_AR[reason]}</p>}
+          {options && <p className="la-muted small" aria-live="polite">{mod.exportSummary(options, { approved, available })}</p>}
           <div className="la-row">
             <button type="button" className="btn-sm primary" disabled={!options || !!busy} onClick={download}>{busy || 'تحميل'}</button>
             <button type="button" className="btn-sm ghost" disabled={!!busy} onClick={close}>إلغاء</button>
@@ -334,7 +337,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           </div>
         </div>
         <div className="la-row">
-          <FinalDocExport participantId={id} approved={c.status === 'approved'} qrOk={d.qr_state?.qr !== false} />
+          <FinalDocExport participantId={id} approved={c.status === 'approved'} qr={d.qr_state} />
           <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'working', null, undefined, d.pdf)}>ملف العمل الكامل</button>
           <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'institutional', setBlocked, undefined, d.pdf)}>الوثيقة المؤسسية</button>
           <button className="btn-sm ghost" onClick={() => onPerson(id)}>ملف المشارك</button>

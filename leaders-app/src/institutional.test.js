@@ -102,9 +102,9 @@ describe('الوثيقة المؤسسية', () => {
     expect(r.body).not.toContain('FINGERPRINT');
     const d = completeDoc(); const f = institutionalReport({ ...d, issued: freezeIssued(d) });
     expect(f.body).toContain(`FINGERPRINT <b>${f.fingerprint}</b>`);
-    // حالة العمل (المرحلة 29): كل باب بعد الأول يبدأ صفحته؛ الميثاق والبطاقة: الاعتماد وحده يبدأ صفحته
+    // ضبط الفراغات (2026-11-27): في كل الأشكال الاعتماد وحده يبدأ صفحته، وأبواب حالة العمل تنساب بحاجز واسع
     const forced = (r.body.match(/class="in-sec np"/g) || []).length;
-    expect(forced).toBe(r.form.key === 'case' ? (r.body.match(/class="in-sec[ "]/g) || []).length - 1 : 1);
+    expect(forced).toBe(1);
     expect(r.body).toContain('.in-open + * { break-before: avoid; }');
     expect(r.body).toContain('من 4 يناير 2026');
     expect(text(r.body)).not.toContain('لم يُملأ');

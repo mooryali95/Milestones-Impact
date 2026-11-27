@@ -134,7 +134,7 @@ export function InitiativePanel({ participantId, canWrite = false, onChanged }) 
       <div className="la-row between">
         <h3 id="pf-cap-h">{d.doc?.meta?.initiative || 'مبادرة بلا اسم بعد'}</h3>
         <span className="la-row">
-          <FinalDocExport participantId={participantId} approved={c.status === 'approved'} qrOk={d.qr_state?.qr !== false} />
+          <FinalDocExport participantId={participantId} approved={c.status === 'approved'} qr={d.qr_state} />
           <button type="button" className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'working', null, undefined, d.pdf)}>اقرأ الوثيقة كما هي الآن</button>
           {/* صفحة المراجعة متاحة دائمًا: تُبنى من حالته الآن ولو لم يُنشأ له صف (admin.capstone لا يكتب عند القراءة) */}
           <a className="btn-sm ghost" href={`#/leaders/capstones/${encodeURIComponent(participantId)}`}>صفحة المراجعة</a>
