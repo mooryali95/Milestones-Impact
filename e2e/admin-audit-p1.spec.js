@@ -119,6 +119,13 @@ test('الرحلة والمتطلبات: لمحة الرحلة بمراحل بل
   await expect(page.locator('#screen-dashboard')).not.toContainText('NaN');
 });
 
+test('رابط صفحة المسار (?stage=) يفتح الرحلة على بطاقة المرحلة: ظاهرة والتركيز فيها', async ({ page }) => {
+  await open(page, '#/leaders/journey/pa?stage=s2', { size: { width: 1280, height: 500 } });
+  const card = page.locator('[data-mt-row="s2"]');
+  await expect(card).toBeFocused();
+  await expect(card).toBeInViewport();
+});
+
 test('جدول الدفعات: فعل أساسي واحد ظاهر لكل صف، والبقية في قائمة ⋯', async ({ page }) => {
   await open(page, '#/leaders/programs');
   const row = page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' });
