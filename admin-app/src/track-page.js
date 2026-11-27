@@ -2,10 +2,8 @@
 // صفحة المسار (المرحلة 23، تصور الرحلة والمسار 4.7): دوال خالصة تقرأ ما هو قائم ولا تنشئ مصدرًا جديدًا
 // ════════════════════════════════════════════════════════════════
 // رحلة المسار من trackManifest(k).card.journey (البطاقة نفسها التي تقرؤها الرحلة والكتاب والوثيقة)، وكل بند يُربط
-// بمرحلته من journey_stages في رد admin.catalog. والخط الزمني من journeyTimeline نفسه بمتطلبات البرنامج التي تنطبق
-// على مستويات المسار (requirementApplies، القاعدة التي يبني بها الخادم رحلة المشارك).
+// بمرحلته من journey_stages في رد admin.catalog، ويُعرض بعارض البطاقة نفسه (cardRow في Tracks.jsx).
 import { DIMENSIONS, requirementApplies, trackLevels } from '../../supabase/functions/leaders-api/logic.js';
-import { trackManifest } from '../../supabase/functions/leaders-api/track-manifest.js';
 import { journeyHref } from './attendance-groups.js';
 
 /** المتطلبات التي تنطبق على مستويات المسار، فيرى المدير رحلة هذا المسار كاملة (المشتركة والخاصة بمستواه) */
@@ -16,31 +14,30 @@ export function trackRequirements(catalog, k) {
 }
 
 /**
- * صفوف «رحلة المسار»: صف لكل إطار بمستواه، وبنوده بأسمائها ومراحلها، ومختبراته، وجسوره، ونجمة الإطار المعمّق.
- * البند الذي ليس في البرنامج يبقى برمزه بلا مرحلة ولا رابط، فلا يُخترع له موضع.
+ * أطر بطاقة المسار (trackManifest(k).card) كما يعرضها عارض البطاقة في Tracks.jsx (cardRow): صف لكل إطار بمستواه،
+ * وبنوده بأسمائها ومرحلتها من journey_stages ورابط إلى الرحلة مفتوحة على تلك المرحلة، ومختبراته، وأبوابه في الكتاب،
+ * وجسوره، ونجمة الإطار المعمّق. البند الذي ليس في البرنامج يبقى برمزه بلا مرحلة ولا رابط، فلا يُخترع له موضع.
  */
-export function trackJourneyRows(catalog, k) {
-  const m = trackManifest(k);
-  const levels = m.levels;
+export function cardFrameworks(m, catalog = null, handbook = []) {
   const reqs = catalog?.stage_requirements || [];
   const stages = new Map((catalog?.journey_stages || []).map((s) => [s.key, s]));
   const labs = new Map((catalog?.lab_links || []).map((l) => [l.key, l]));
   const pid = catalog?.program_id || null;
-  const rows = DIMENSIONS.map((d) => {
+  return DIMENSIONS.map((d) => {
     const f = m.card.journey.by_framework?.[d] || { requirements: [], labs: [] };
     return {
-      dimension: d, level: levels[d], deep: m.priority === d,
+      dimension: d, level: m.levels[d], deep: m.priority === d,
       items: f.requirements.map((code) => {
         const r = reqs.find((x) => x.code === code && x.active !== false);
         const s = r ? stages.get(r.stage_key) : null;
         return { code, title: r?.title_ar || code, stage: s?.title_ar || null, stage_key: s?.key || null,
-          href: r && pid ? journeyHref(pid, `req=${encodeURIComponent(r.id)}`) : null };
+          href: s && pid ? journeyHref(pid, `stage=${encodeURIComponent(s.key)}`) : null };
       }),
       labs: f.labs.map((key) => ({ key, title: labs.get(key)?.title_ar || key })),
+      chapters: (handbook || []).filter((c) => c.dimension === d).map((c) => ({ id: c.id, title: c.title })),
       bridges: m.card.bridges.filter((b) => b.dimension === d).map((b) => b.title),
     };
   });
-  return { rows, hours: m.card.support.estimate_hours, priority: m.priority };
 }
 
 /** «أين يُحرَّر»: الوجهة واسمها لكل جزء من الصفحة، من مصادره الأربعة */

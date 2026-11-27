@@ -173,6 +173,10 @@ test.describe('ما يُحرَّر على أنه للمشارك يقول من ي
         await expect(page.getByRole('tablist', { name: 'صفحة المسار' })).toHaveCount(0);
         await expect(page.locator('#tr-pane-admin')).toBeVisible();
       }
+      // رحلة المسار بعارض البطاقة: ثلاثة صفوف للأطر، وفي كل صف أبوابه في الكتاب
+      const fw = page.getByTestId('track-frameworks');
+      await expect(fw.locator('.tr-fw-row')).toHaveCount(3);
+      await expect(fw.getByRole('heading', { name: 'أبوابه في الكتاب' })).toHaveCount(3);
       await page.screenshot({ path: `test-results/j23-track-${width}.png`, fullPage: true });
     });
   }

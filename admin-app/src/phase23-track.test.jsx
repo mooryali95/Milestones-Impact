@@ -14,7 +14,7 @@ vi.mock('./ui.jsx', async (orig) => ({ ...(await orig()), useUI: () => ({ toast:
 const { JourneyStatus } = await import('./screens/Methodology.jsx');
 const { default: Tracks } = await import('./screens/Tracks.jsx');
 const { PUBLISH_DRAFT_AR, publishLine } = await import('./program-state.js');
-const { sameJourney, trackJourneyRows, trackRequirements } = await import('./track-page.js');
+const { sameJourney, cardFrameworks, trackRequirements } = await import('./track-page.js');
 const { trackManifest } = await import('../../supabase/functions/leaders-api/track-manifest.js');
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -78,16 +78,16 @@ describe('رحلة المسار: من بطاقة المسار ومراحل ال�
   it('المتطلبات المنطبقة على مستويات المسار وحدها', () => {
     expect(trackRequirements(catalog, K).map((r) => r.id)).toEqual(['r1', 'r3']);
   });
-  it('صف لكل إطار بمستواه، والبند باسمه ومرحلته ورابطه، والنجمة على إطار الأولوية', () => {
-    const { rows, hours } = trackJourneyRows(catalog, K);
+  it('صف لكل إطار بمستواه، والبند باسمه ومرحلته ورابط مرحلته، وأبوابه في الكتاب، والنجمة على إطار الأولوية', () => {
+    const rows = cardFrameworks(man, catalog, [{ id: 'h1', dimension: 'milestone', title: 'باب المعالم' }, { id: 'h2', dimension: 'impact', title: 'باب الأثر' }]);
     expect(rows.map((r) => r.dimension)).toEqual(['milestone', 'impact', 'leadership']);
     expect(rows.map((r) => r.level)).toEqual(['intermediate', 'beginner', 'advanced']);
     expect(rows.filter((r) => r.deep).map((r) => r.dimension)).toEqual([man.priority]);
     const it0 = rows[0].items[0];
-    expect(it0).toMatchObject({ title: 'سجل المعالم', stage: 'التأهيل', stage_key: 's1', href: '#/leaders/journey/p1?req=r1' });
+    expect(it0).toMatchObject({ title: 'سجل المعالم', stage: 'التأهيل', stage_key: 's1', href: '#/leaders/journey/p1?stage=s1' });
     expect(rows[0].items[1]).toMatchObject({ stage: null, href: null });
     expect(rows[0].labs[0].title).toBe('مختبر أول');
-    expect(hours).toEqual(man.card.support.estimate_hours);
+    expect(rows.map((r) => r.chapters.map((c) => c.title))).toEqual([['باب المعالم'], ['باب الأثر'], []]);
   });
   it('sameJourney: يطابق نص الملف بعد التقليم', () => {
     expect(sameJourney({ journey_ar: ' أ\nب ' }, { journey_ar: 'أ\nب' })).toBe(true);
@@ -129,10 +129,12 @@ describe('صفحة المسار', () => {
     expect(host.querySelector('.tr-admin [role="note"]').textContent).toContain('هذه الحقول داخلية؛ المشارك يرى نص الملف');
     expect(host.querySelector('details.tr-custom summary').textContent).toBe('تخصيص');
     expect(host.querySelectorAll('.tr-where').length).toBeGreaterThanOrEqual(5);
-    expect(host.querySelector('#jt-track-h').textContent).toBe('رحلة المسار');
-    expect(host.querySelectorAll('.tr-journey .jt-act').length).toBeGreaterThan(0);
+    // عارض البطاقة الواحد، لا خط زمني ثانٍ للبيانات نفسها
+    expect(host.querySelector('.tr-journey .jt-act')).toBeNull();
+    expect(host.querySelectorAll('.tr-journey .tr-fw-row').length).toBe(3);
+    expect(host.querySelector('.tr-journey').textContent).toContain('أبوابه في الكتاب');
     const link = host.querySelector('.tr-fw a.la-link');
-    expect(link.getAttribute('href')).toBe('#/leaders/journey/p1?req=r1');
+    expect(link.getAttribute('href')).toBe('#/leaders/journey/p1?stage=s1');
     expect(link.getAttribute('aria-label').startsWith(link.textContent)).toBe(true);
   });
   it('القارئ بلا صلاحية كتابة: لا «إعدادات الإدارة»', async () => {

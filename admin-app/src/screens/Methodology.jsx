@@ -292,9 +292,11 @@ export function Journey({ catalog, reload, canWrite, onProgram, onPatch }) {
   });
   useEffect(() => {
     const q = new URLSearchParams(readQuery());
-    const add = q.get('add'), req = q.get('req');
-    if (!add && !req) return;
+    const add = q.get('add'), req = q.get('req'), stage = q.get('stage');
+    if (!add && !req && !stage) return;
     writeQuery(withMode('', mode));
+    // من صفحة المسار: الرحلة مفتوحة على مرحلة البند (?stage=<المفتاح>)
+    if (stage) { setTimeout(() => toStage(stage), 0); return; }
     if (req) { setTimeout(() => openReq({ requirement_id: req }), 0); return; }
     const first = stages.find((s) => s.active) || stages[0];
     if (add === 'workshop' && canWrite && first) { setMode('build'); newReq(first.key, 'workshop'); }

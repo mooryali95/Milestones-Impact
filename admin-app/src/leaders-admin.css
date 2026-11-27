@@ -252,7 +252,7 @@
 .tr-tabs [role="tab"] { background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 10px; font: inherit; cursor: pointer; min-height: 44px; }
 .tr-tabs [role="tab"][aria-selected="true"] { border-bottom-color: var(--gold); font-weight: 700; }
 .tr-fw { display: grid; gap: 10px; margin-top: 12px; }
-.tr-fw-row { border: 1px solid var(--line-strong); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: 200px 1fr 1fr 1fr; gap: 12px; align-items: start; }
+.tr-fw-row { border: 1px solid var(--line-strong); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: 200px repeat(4, 1fr); gap: 12px; align-items: start; }
 .tr-fw-row header { display: grid; gap: 6px; align-content: start; justify-items: start; }
 .tr-fw-row h4 { color: var(--gold-text); font-size: .78rem; margin: 0 0 4px; }
 .tr-fw-row ul { margin: 0; padding-inline-start: 18px; display: grid; gap: 4px; font-size: .84rem; line-height: 1.7; }

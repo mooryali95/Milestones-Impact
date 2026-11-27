@@ -10,10 +10,7 @@ import Form from '../Form.jsx';
 import Md from '../Md.jsx';
 import { Spinner, useUI, useWide } from '../ui.jsx';
 import { navigate } from '../route.js';
-import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
-import { journeyTimeline } from '../../../supabase/functions/leaders-api/journey-timeline.js';
-import { EDIT_WHERE, sameJourney, trackJourneyRows, trackRequirements } from '../track-page.js';
-import { journeyHref } from '../attendance-groups.js';
+import { EDIT_WHERE, cardFrameworks, sameJourney } from '../track-page.js';
 import { ChapterEditor } from './Handbook.jsx';
 import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
@@ -103,7 +100,7 @@ function Board({ tracks, onOpen }) {
 }
 
 // صفحة المسار (المرحلة 23، 4.7): بطل خفيف، ثم «ما يراه المشارك» بجانب «إعدادات الإدارة» (تبويبان على الهاتف)، ثم
-// «رحلة المسار» بالخط الزمني القائم (JourneyTimeline) وصفوف الأطر من بطاقة المسار، ثم الكتاب، ثم المشاركون.
+// «رحلة المسار» بعارض بطاقة المسار نفسه (cardRow وCardFrameworks)، ثم الكتاب، ثم المشاركون.
 // نص الملف يظهر مرة واحدة، وتحت كل قسم «أين يُحرَّر»
 const toTab = (tab) => navigate({ ctx: 'leaders', tab });
 function EditWhere({ part, onIdentity }) {
@@ -117,31 +114,13 @@ function EditWhere({ part, onIdentity }) {
   );
 }
 
-function TrackJourney({ k, catalog }) {
-  const reqs = useMemo(() => trackRequirements(catalog, k), [catalog, k]);
-  const model = useMemo(() => journeyTimeline({ stages: catalog?.journey_stages || [], requirements: reqs }, { title: 'رحلة المسار' }), [catalog, reqs]);
-  const { rows, hours } = useMemo(() => trackJourneyRows(catalog, k), [catalog, k]);
-  const pid = catalog?.program_id;
-  const openAct = (a) => { if (pid && a?.requirement_id) window.location.hash = journeyHref(pid, `req=${encodeURIComponent(a.requirement_id)}`); };
+function TrackJourney({ k, catalog, handbook }) {
+  const row = useMemo(() => cardRow(k, catalog, handbook), [k, catalog, handbook]);
   return (
-    <section className="la-card tr-journey" aria-label="رحلة المسار">
-      {/* العنوان من نموذج الخط الزمني نفسه («رحلة المسار»)، فلا عنوانان للقسم */}
-      <JourneyTimeline key={k} id="jt-track" model={model} onOpen={pid ? openAct : undefined} openLabel={() => 'افتحه في الرحلة'} pop />
-      <p className="la-muted tr-hours">الجهد التقديري {hours[0]} إلى {hours[1]} ساعة</p>
-      <div className="tr-fw" data-testid="track-frameworks">{rows.map((row) => (
-        <article key={row.dimension} className="tr-fw-row">
-          <header><b>{DIM_ROMAN[row.dimension]} · {DIM[row.dimension]}</b> <span className={`la-lvl ${row.level}`}>{LVL[row.level]}</span>
-            {row.deep && <span className="la-chip tr-deep" title="الإطار المعمّق">★ الإطار المعمّق</span>}</header>
-          <div><h4>البنود</h4>{row.items.length ? <ul>{row.items.map((it) => (
-            <li key={it.code}>{it.href
-              ? <a className="la-link" href={it.href} aria-label={`${it.title}، في مرحلة ${it.stage}، افتحه في الرحلة`}>{it.title}</a>
-              : <span>{it.title}</span>}
-              {' '}<small className="la-muted">{it.stage ? `في مرحلة «${it.stage}»` : 'ليس في رحلة البرنامج'}</small></li>
-          ))}</ul> : <p className="la-muted">لا بنود خاصة بهذا المستوى.</p>}</div>
-          <div><h4>المختبرات</h4>{row.labs.length ? <ul>{row.labs.map((l) => <li key={l.key}>{l.title}</li>)}</ul> : <p className="la-muted">لا مختبرات.</p>}</div>
-          {row.bridges.length > 0 && <div><h4>الجسور</h4><ul>{row.bridges.map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
-        </article>
-      ))}</div>
+    <section className="la-card tr-journey" aria-labelledby="tr-journey-h">
+      <h3 id="tr-journey-h">رحلة المسار</h3>
+      <CardFrameworks rows={row.frameworks} />
+      <p className="la-muted tr-hours">الجهد التقديري {row.hours[0]} إلى {row.hours[1]} ساعة</p>
       <EditWhere part="stages" />
       <EditWhere part="journey" />
     </section>
@@ -223,7 +202,7 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
         {admin}
       </div>
 
-      <TrackJourney k={t.key} catalog={catalog} />
+      <TrackJourney k={t.key} catalog={catalog} handbook={r.handbook} />
 
       <section className="la-card">
         <div className="la-row between"><h3>كتاب المسار كما يقرؤه المشارك</h3><span className="la-muted">{r.handbook.length} بابًا</span></div>
@@ -281,7 +260,8 @@ export const ALL_TRACKS = LVLS.flatMap((m) => LVLS.flatMap((i) => LVLS.map((l) =
 const HB_AR = { guided: 'موجّه', applied: 'تطبيقي', specialist: 'متخصص' };
 const SUP_AR = { readiness: 'أسئلة الجاهزية', examples: 'أمثلة محلولة', on_demand: 'عند الطلب' };
 const CASE_AR = { readiness: '3 أسئلة جاهزية', case3: '3 مسوّغات', case5: '5 مسوّغات' };
-export function cardRow(k) {
+// عارض البطاقة الواحد: جدول البطاقات وقسم «رحلة المسار» في صفحة المسار يقرآن cardRow ويعرضان أطرها بـCardFrameworks
+export function cardRow(k, catalog = null, handbook = []) {
   const m = trackManifest(k);
   const c = m.card;
   return {
@@ -291,7 +271,28 @@ export function cardRow(k) {
     journey: c.journey.requirements.join(' '), labs: c.journey.labs.length,
     support: `${SUP_AR[c.support.mode]} · ${CASE_AR[c.support.case.form]} · ${c.support.estimate_hours[0]} إلى ${c.support.estimate_hours[1]} س`,
     bridges: c.bridges.length,
+    hours: c.support.estimate_hours, frameworks: cardFrameworks(m, catalog, handbook),
   };
+}
+export function CardFrameworks({ rows }) {
+  const list = (h, xs, empty, item) => <div><h4>{h}</h4>{xs.length ? <ul>{xs.map(item)}</ul> : <p className="la-muted">{empty}</p>}</div>;
+  return (
+    <div className="tr-fw" data-testid="track-frameworks">{rows.map((row) => (
+      <article key={row.dimension} className="tr-fw-row">
+        <header><b>{DIM_ROMAN[row.dimension]} · {DIM[row.dimension]}</b> <span className={`la-lvl ${row.level}`}>{LVL[row.level]}</span>
+          {row.deep && <span className="la-chip tr-deep" title="الإطار المعمّق">★ الإطار المعمّق</span>}</header>
+        {list('البنود', row.items, 'لا بنود خاصة بهذا المستوى.', (it) => (
+          <li key={it.code}>{it.href
+            ? <a className="la-link" href={it.href} aria-label={`${it.title}، في مرحلة ${it.stage}، افتح الرحلة على هذه المرحلة`}>{it.title}</a>
+            : <span>{it.title}</span>}
+            {' '}<small className="la-muted">{it.stage ? `في مرحلة «${it.stage}»` : 'ليس في رحلة البرنامج'}</small></li>
+        ))}
+        {list('المختبرات', row.labs, 'لا مختبرات.', (l) => <li key={l.key}>{l.title}</li>)}
+        {list('أبوابه في الكتاب', row.chapters, 'لا أبواب بمحتوى لهذا الإطار بعد.', (c) => <li key={c.id}>{c.title}</li>)}
+        {row.bridges.length > 0 && list('الجسور', row.bridges, '', (t, i) => <li key={i}>{t}</li>)}
+      </article>
+    ))}</div>
+  );
 }
 export function TrackCards({ onOpen }) {
   const rows = ALL_TRACKS.map(cardRow);
@@ -306,7 +307,7 @@ export function TrackCards({ onOpen }) {
             <td><button className="link" onClick={() => onOpen(r.key)}><code>{r.key}</code></button><div><LvlChips k={r.key} /></div></td>
             <td><b>{r.profile}</b><small className="muted" style={{ display: 'block' }}>{r.name}</small></td>
             <td>{r.handbook}</td><td>{r.doc}</td><td>{r.cap}</td>
-            <td><small dir="ltr">{r.journey}</small></td><td>{r.labs}</td><td>{r.support}</td><td>{r.bridges}</td>
+            <td><small dir="ltr">{r.journey}</small><details className="la-more small"><summary>الأطر</summary><CardFrameworks rows={r.frameworks} /></details></td><td>{r.labs}</td><td>{r.support}</td><td>{r.bridges}</td>
           </tr>
         ))}</tbody>
       </table></div>
