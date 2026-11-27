@@ -311,6 +311,12 @@ export const EXPERT_STATUS = {
 export const EXPERT_REQUEST_STATUS = {
   open: 'يبحث عن خبير', offered: 'معروض على خبير', accepted: 'قبِله الخبير', unmatched: 'لا خبير مطابق', cancelled: 'أُلغي', completed: 'اكتمل',
 };
+// نبرة شارتي حالة الخبير وطلب الإسناد (المرحلة 16): تُقرأ عبر StatusChip وحده، فلا تحدد الشاشة النبرة في سطرها
+export const EXPERT_STATUS_TONE = { applied: 'warn', invited: '', active: 'ok', paused: '', suspended: 'bad', rejected: '' };
+export const EXPERT_REQUEST_STATUS_TONE = { open: 'warn', offered: 'warn', accepted: 'ok', unmatched: 'bad', cancelled: '', completed: 'ok' };
+// اكتمال لجنة الحوكمة في شريط اللجان (committees.js يعطي ready وgaps)
+export const COMMITTEE_STATE = { ready: 'مكتملة', gaps: 'ناقصة' };
+export const COMMITTEE_STATE_TONE = { ready: 'ok', gaps: 'warn' };
 // ما تعنيه كل حالة للمشارك وما يحدث بعدها، كما يجري فعلًا على الخادم (experts.ts): الاعتذار ينقل الطلب للتالي،
 // والمقبول يغلقه فريق البرنامج بعد الخدمة، و«لا خبير مطابق» يراه الفريق في قائمة الطلبات (p-capstone-4)
 export const EXPERT_REQUEST_HINT = {

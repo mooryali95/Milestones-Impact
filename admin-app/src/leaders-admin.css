@@ -1724,3 +1724,13 @@ details.how-it-works[open] > summary { margin-bottom: 12px; }
 .la-move-btn:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 1px; }
 .la-move-btn:disabled, .la-move-btn[aria-disabled="true"] { opacity: .35; cursor: default; }
 .la-missing-mark { display: inline-block; inline-size: .9em; block-size: 1.5px; background: currentColor; opacity: .55; vertical-align: middle; border-radius: 1px; }
+
+/* الخبراء (المرحلة 16): شريط اللجان تحت صف الأرقام، وتبويبا الطلبات والشبكة */
+.ex-committees { margin: 4px 0 18px; }
+.ex-committees-h { font-size: .9rem; margin: 0 0 8px; color: var(--brand-ink-mid); }
+.ex-committees-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.ex-committee { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; margin: 0; }
+.ex-committee .la-blank.compact { padding: 8px 0; margin: 0; }
+.ex-gaps { line-height: 1.6; }
+.ex-tabs button:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+.ex-stats .la-meter { max-width: 100%; }

@@ -16,7 +16,7 @@ async function admin(page) {
     const r = {
       'admin.orgs': { success: true, orgs: [], unassigned: { total: 0, typed: [] } },
       'admin.participants': { success: true, participants: [] },
-      'admin.experts': { success: true, experts },
+      'admin.experts': { success: true, experts, committees: [{ key: 'content', title: 'لجنة المحتوى', members: [{ id: 'e1', name: 'د. سارة الحربي' }], ready: false, gaps: ['ينقصها مراجع لإطار القياس'] }, { key: 'measurement', title: 'لجنة القياس', members: [], ready: false, gaps: ['لا أعضاء بعد'] }] },
       'admin.expert': { success: true, expert: experts.find((e) => e.id === b.id), activity: [{ action: 'expert.apply', actor: 'k@x.com', created_at: '2026-10-28' }],
         service: { sessions: 4, attended: 3, no_show: 1, upcoming: 0, participants: 2, hours: 2.5, cost: 750, reviews: { requirements: 1, models: 3, capstones: 1 }, recent: [{ id: 'c1', status: 'attended', starts_at: '2026-10-20', participants: { full_name: 'سارة' } }] },
         // تصور 360، المرحلة 0ب: الإدارة ترى التقييم حيًّا، وما يراه الخبير من ملخصه الدوري، وتنبيه الهبوط
@@ -44,6 +44,16 @@ async function admin(page) {
 test('شبكة الخبراء: المؤشرات والفلترة ثم اعتماد طلب انضمام', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 1000 });
   const calls = await admin(page);
+  // المرحلة 16: في الطلبات ما يحتاج تدخلًا فيُفتح تبويبها افتراضيًا، والشبكة تبويب ثانٍ في الرابط
+  await expect(page.getByRole('tab', { name: /طلبات الإسناد \(1 يحتاج تدخلًا\)/ })).toHaveAttribute('aria-selected', 'true');
+  // شريط اللجان تحت الأرقام: العدد والاكتمال والفجوات، واللجنة الفارغة بفعل واحد
+  const bar = page.getByRole('region', { name: 'اللجان' });
+  await expect(bar).toContainText('عضو واحد');
+  await expect(bar).toContainText('ينقصها مراجع لإطار القياس');
+  await expect(bar.getByRole('button', { name: 'أضف عضوًا' })).toBeVisible();
+  if (SHOT) await page.locator('.ex').screenshot({ path: `${SHOT}/experts-top.png` });
+  await page.getByRole('tab', { name: /شبكة الخبراء/ }).click();
+  await expect(page).toHaveURL(/tab=network/);
   const rows = page.locator('.ex-table tbody tr');
   await expect(rows).toHaveCount(2);
   await page.getByRole('button', { name: /طلبات بانتظار المراجعة/ }).click();
@@ -53,7 +63,6 @@ test('شبكة الخبراء: المؤشرات والفلترة ثم اعتما
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('د. سارة الحربي');
   if (SHOT) await page.locator('.ex').screenshot({ path: `${SHOT}/experts.png` });
-  // في الشاشة شريطان (طلبات الإسناد وشبكة الخبراء): المسح هنا لشريط الشبكة
   await page.locator('.la-card', { hasText: 'شبكة الخبراء' }).getByRole('button', { name: 'مسح الكل' }).click();
   await page.getByText('خالد العتيبي').click();
   await expect(page.getByRole('heading', { name: 'خالد العتيبي' })).toBeVisible();
@@ -70,6 +79,7 @@ test('شبكة الخبراء: المؤشرات والفلترة ثم اعتما
 // التدقيق 2026-11-11 (admin-eval-13): صف الخبير كان يُفتح بالفأرة وحدها، فلا طريق بلوحة المفاتيح لملف الخبير
 test('شبكة الخبراء: صف الخبير يبلغه التبويب ويُفتح بـEnter', async ({ page }) => {
   await admin(page);
+  await page.getByRole('tab', { name: /شبكة الخبراء/ }).click();
   const row = page.locator('.ex-table tbody tr').filter({ hasText: 'خالد العتيبي' });
   await expect(row).toHaveAttribute('tabindex', '0');
   await row.focus();
@@ -79,6 +89,7 @@ test('شبكة الخبراء: صف الخبير يبلغه التبويب وي�
 
 test('إضافة خبير بدعوة، والسعر حقل إداري', async ({ page }) => {
   const calls = await admin(page);
+  await page.getByRole('tab', { name: /شبكة الخبراء/ }).click();
   await page.getByRole('button', { name: '+ خبير' }).click();
   await page.getByLabel('الاسم *').fill('منى القحطاني');
   await page.getByLabel('البريد *').fill('m@x.com');
