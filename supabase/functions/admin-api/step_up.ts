@@ -37,7 +37,9 @@ export type StepUpDeps = {
   verifyAuth: (o: any) => Promise<{ verified: boolean; authenticationInfo: { newCounter: number } }>;
   // الخطوة الزمنية للرمز إن طابق (نافذة ±1)، وإلا null
   matchTotp: (secret: string, code: string) => Promise<bigint | null>;
-  tooManyFails: (sb: SB, email: string, ip: string) => Promise<boolean>;
+  // حجز المحاولة ذريًا قبل الفحص، وحجز خطوة الرمز على admin_users.totp_last_step (login_guard.ts)
+  reserveAttempt: (sb: SB, email: string, ip: string) => Promise<{ ok: false } | { ok: true; done: (success: boolean) => Promise<void> }>;
+  claimTotpStep: (sb: SB, userId: string, step: bigint) => Promise<boolean>;
   saveChallenge: (sb: SB, challenge: string, purpose: 'step_up', subject: string) => Promise<void>;
   // deno-lint-ignore no-explicit-any
   takeChallenge: (sb: SB, challenge: string, purpose: string) => Promise<any>;
@@ -142,7 +144,8 @@ export async function stepUp(action: string, body: Record<string, unknown>, sess
     if (session.passkeyOnly) return out({ success: false, code: 'reauth_passkey', message: 'حسابك بمفتاح المرور وحده، أكّد بالبصمة' }, 403);
     const { data: us } = await sb.from('admin_users').select('totp_enabled, totp_secret').eq('id', session.userId).limit(1);
     if (!us?.[0]?.totp_enabled || !us[0].totp_secret) return out({ success: false, code: 'no_totp', message: 'تطبيق المصادقة غير مفعّل على حسابك' }, 409);
-    if (await d.tooManyFails(sb, session.email, d.ip)) return out({ success: false, code: 'rate', message: 'تجاوزت عدد المحاولات، انتظر 15 دقيقة' }, 429);
+    const attempt = await d.reserveAttempt(sb, session.email, d.ip);
+    if (!attempt.ok) return out({ success: false, code: 'rate', message: 'تجاوزت عدد المحاولات، انتظر 15 دقيقة' }, 429);
     const step = await d.matchTotp(String(us[0].totp_secret), String(body.code || ''));
     if (step !== null) {
       // حجز الخطوة ذري قبل أي منح، للغرضين معًا: صف علامة في webauthn_challenges (challenge فريد) مستهلك ومنتهٍ عند
@@ -153,15 +156,15 @@ export async function stepUp(action: string, body: Record<string, unknown>, sess
       const { error: held } = await sb.from('webauthn_challenges').insert({
         scope: 'admin', purpose: 'step_up', subject: session.userId, challenge: `totp-step:${session.userId}:${step}`, expires_at: at, consumed_at: at,
       });
-      if (held && String(held.code) === '23505') {
-        await sb.from('totp_attempts').insert({ email: session.email, success: false, ip: d.ip || null });
+      // والخطوة نفسها مشتركة مع الدخول وإدارة الرمز: رمز دخل به المدير للتو لا يُقبل هنا (تقرير الأمن 2026-11-27)
+      if ((held && String(held.code) === '23505') || (!held && !(await d.claimTotpStep(sb, session.userId, step)))) {
         await log(false, 'totp', { why: 'replay' });
         return out({ success: false, code: 'replay', message: 'استُعمل هذا الرمز للتو، انتظر الرمز التالي' }, 409);
       }
       if (held && MISSING.has(String(held.code))) return out({ success: false, code: 'step_up_unavailable', message: 'لم يُطبَّق ترحيل التحقق الإضافي بعد' }, 503);
       if (held) throw new Error(`webauthn_challenges: ${held.code}`);
     }
-    await sb.from('totp_attempts').insert({ email: session.email, success: step !== null, ip: d.ip || null });
+    await attempt.done(step !== null);
     if (step === null) { await log(false, 'totp', { why: 'code' }); return out({ success: false, code: 'bad_code', message: 'الرمز غير صحيح، أدخل الرمز الحالي من تطبيق المصادقة' }, 403); }
     return await grant('totp', step);
   }

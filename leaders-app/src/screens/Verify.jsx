@@ -2,7 +2,8 @@
 // التحقق العام من شهادة: leaders.sunkvalue.com/v/<الرقم>
 // ════════════════════════════════════════════════════════════════
 // صفحة مفتوحة بلا دخول، يصلها من يمسح رمز QR على الشهادة. تعرض حالة
-// الشهادة وبياناتها من اللقطة المحفوظة على الخادم، وتفتح نسختها الرسمية.
+// الشهادة وما يثبتها وحده: الاسم والبرنامج والدفعة والجهة وتاريخ الإصدار والرقم. لا لقطة ولا توقيع ولا قرار
+// تقييم، فلا تُعرض الشهادة كاملة هنا؛ نسختها الرسمية عند صاحبها.
 import { CONTACT_EMAIL, DOC_VERIFY_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
@@ -37,12 +38,6 @@ function CertificateVerify() {
     history.replaceState(null, '', `/v/${encodeURIComponent(s)}`);
     setSerial(s);
   };
-  const open = async () => {
-    const win = window.open('', '_blank');
-    const { writeCertificate } = await import('../../../src/lib/brand/certificate.js');
-    const stamp = r.status === 'valid' ? undefined : r.status === 'replaced' ? 'مستبدلة' : 'ملغاة';
-    await writeCertificate(win, r.certificate, { status: stamp });
-  };
 
   const state = !r ? null : !r.success ? null : !r.found ? 'missing' : r.status;
   const c = r?.certificate;
@@ -56,7 +51,6 @@ function CertificateVerify() {
           <p className={`vf-state ${state}`}><i aria-hidden="true" />{STATE[state]}</p>
           {state === 'replaced' && r.replacement && <p className="small"><a href={`/v/${r.replacement}`}>اعرض الإصدار الأحدث</a></p>}
           {c && <>
-            {c.kind === 'completion_success' && <p className="small muted">شهادة إتمام بنجاح</p>}
             <p className="vf-name">{c.name_ar}</p>
             {c.name_en && <p className="vf-en">{c.name_en}</p>}
             <dl>
@@ -68,7 +62,6 @@ function CertificateVerify() {
               {r.revoked_at && <><dt>{state === 'replaced' ? 'تاريخ الاستبدال' : 'تاريخ الإلغاء'}</dt><dd>{fmt(r.revoked_at)}</dd></>}
               <dt>الجهة المصدِرة</dt><dd>Milestone Impact</dd>
             </dl>
-            {state !== 'invalid' && <button className="btn sm" onClick={open}>اعرض الشهادة</button>}
           </>}
         </>}
         <form className="vf-search" onSubmit={search}>

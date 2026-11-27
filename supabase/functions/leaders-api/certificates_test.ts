@@ -1,7 +1,7 @@
 // D05: مفتاح توقيع الشهادات مستقل عن الفلفل بمعرّف مفتاح، فتدويره لا يبطل ما صدر، وتدوير الفلفل لا يمس الجديد.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-const { certificateNotice, checkCertificate, heldCertificates, issueAfterNameConfirm, signCertificate, onFinalApproved, PASSING, preview } = await import('./certificates.ts');
+const { certificateNotice, checkCertificate, heldCertificates, issueAfterNameConfirm, signCertificate, onFinalApproved, PASSING, preview, verify } = await import('./certificates.ts');
 const { db, Fail, finalDecisionMail } = await import('./core.ts');
 
 const K1 = 'k1-'.padEnd(40, 'a');
@@ -219,5 +219,37 @@ Deno.test('تأكيد الاسم يصدر الشهادة لمن لا شهادة 
       assertEquals([inserted[0].participant_id, inserted[0].snapshot.decision, inserted[0].snapshot.kind], [PID, 'pass', 'completion_success']);
       assert(inserted[0].signature.startsWith('k2:'));
     } finally { restore(); }
+  }
+});
+
+// خصوصية التحقق العام: يُرد الاسم والبرنامج والدفعة والجهة وتاريخ الإصدار والحالة والرقم وحدها،
+// بلا صورة توقيع ولا قرار تقييم ولا لقطة؛ والملغاة والمزورة لا تكشف شيئًا
+Deno.test('التحقق العام لا يرد إلا الحقول العامة، والملغاة والمزورة لا تكشف شيئًا', async () => {
+  Deno.env.set('LEADERS_CERT_SIGNING_KEY', K2); Deno.env.set('LEADERS_CERT_KEY_ID', 'k2');
+  const snap = {
+    serial: 'MI-LDR-2026-ABCDEF', name_ar: 'سارة الأحمد', name_en: 'Sarah', program_ar: 'برنامج القادة', program_en: 'Leaders',
+    track_ar: 'مسار التوازن', hours: 48, issued_at: '2026-10-23T09:00:00Z', org: { id: 'o1', name: 'هيئة التطوير', logo_url: 'x' },
+    cohort_ar: 'دفعة نوفمبر', kind: 'completion_success', decision: 'pass_notes', formula_version: 3, program_id: 'pr1', content_release: 'r1',
+    signatories: [{ name_ar: 'أ', title_ar: 'ب', signature_url: 'data:image/png;base64,AAAA' }], verify_url: 'https://x/v/MI-LDR-2026-ABCDEF',
+  };
+  const sig = await signCertificate([snap.serial, snap.name_ar, snap.name_en, snap.program_ar, snap.track_ar, snap.hours, snap.issued_at, snap.org.name, snap.cohort_ar, snap.kind, snap.decision, snap.formula_version].join('|'));
+  const row = (status: string, signature = sig) => ({ serial: snap.serial, status, snapshot: snap, signature, issued_at: snap.issued_at, revoked_at: status === 'valid' ? null : '2026-11-01T00:00:00Z', replaced_by: null, participants: { is_demo: false } });
+  const run = async (r: any) => {
+    const restore = fakeDb({ certificates: [r], certificate_checks: [] }, []);
+    try { return await verify({ serial: snap.serial }, { ip: null, ua: null }) as any; } finally { restore(); }
+  };
+  const ok = await run(row('valid'));
+  assertEquals(ok.status, 'valid');
+  assertEquals(ok.certificate, {
+    serial: snap.serial, name_ar: 'سارة الأحمد', name_en: 'Sarah', program_ar: 'برنامج القادة', program_en: 'Leaders', track_ar: 'مسار التوازن',
+    cohort_ar: 'دفعة نوفمبر', org: { name: 'هيئة التطوير' }, issued_at: snap.issued_at,
+  });
+  const text = JSON.stringify(ok);
+  for (const leak of ['signature', 'decision', 'pass_notes', 'formula', 'snapshot', 'signator', 'content_release', 'program_id', 'kind']) assert(!text.includes(leak), leak);
+  for (const r of [row('revoked'), row('valid', 'k2:' + '0'.repeat(64))]) {
+    const out = await run(r);
+    assertEquals(out.certificate, null);
+    assert(!JSON.stringify(out).includes('سارة'));
+    assertEquals(Object.keys(out).sort(), ['authentic', 'certificate', 'found', 'replacement', 'revoked_at', 'status', 'success']);
   }
 });

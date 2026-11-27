@@ -18,8 +18,8 @@ describe('ثابت الصفحة المشترك', () => {
   });
   it('قاعدة @page في الوثيقة تطابق PAGE_MM', () => {
     expect(pageRule(html)).toMatch(new RegExp(`margin: ${PAGE_MM.top}mm ${PAGE_MM.side}mm ${PAGE_MM.bottom}mm;`));
-    // الغلاف في ملف PDF يملأ ما فوق هامش التذييل
-    expect(html).toContain(`html.pdf .mast.co { min-height: ${PAGE.h - PAGE.bottom}px;`);
+    // الغلاف في ملف PDF يملأ الورقة كلها
+    expect(html).toContain(`html.pdf .mast.co { min-height: ${PAGE.h}px;`); // المرحلة 5: الغلاف بلا تذييل إلى حافة الورقة
   });
 });
 

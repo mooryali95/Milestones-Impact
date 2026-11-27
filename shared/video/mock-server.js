@@ -123,7 +123,7 @@ export function createMockServer() {
       case 'peer.ask': s.mine.push(b.text); return peer();
       case 'experts.suggest': return { success: true, role: 'coach', roles: [], contexts: {}, dimensions: {}, requests: [], candidates: [] };
       case 'certificate': return { success: true, certificate: null };
-      case 'cert.verify': return { success: true, found: true, status: 'valid', certificate: { kind: 'completion_success', serial: b.serial || 'MI-LDR-2026-000142', name_ar: NAME, program_ar: 'برنامج إدارة المشروعات للقادة', cohort_ar: 'دفعة نوفمبر 2026', org: { name: 'هيئة التحوّل الرقمي' }, issued_at: '2027-02-25T00:00:00Z' } };
+      case 'cert.verify': return { success: true, found: true, status: 'valid', certificate: { serial: b.serial || 'MI-LDR-2026-000142', name_ar: NAME, program_ar: 'برنامج إدارة المشروعات للقادة', cohort_ar: 'دفعة نوفمبر 2026', org: { name: 'هيئة التحوّل الرقمي' }, issued_at: '2027-02-25T00:00:00Z' } };
       case 'lab.list': return { success: true, items: [], points: 0 };
       case 'org.visibility': return { success: true, list: true, scores: true, share_consented: false, org: 'هيئة التحوّل الرقمي' };
       case 'sessions.list': return { success: true, items: [{ id: 's1', device: 'Chrome على Windows', at: '2026-11-05T09:00:00Z', current: true }] };

@@ -108,7 +108,7 @@ describe('الغلاف الفاخر (المرحلة 25)', () => {
   });
   it('صفحة غلاف كاملة في PDF والطباعة', () => {
     const pdf = documentHtml(m25, '', { pdf: true });
-    expect(css(pdf)).toMatch(/html\.pdf \.mast\.co \{ min-height: 1032px/);
+    expect(css(pdf)).toMatch(/html\.pdf \.mast\.co \{ min-height: 1123px/);
     expect(css(pdf)).toMatch(/@page :first \{ margin: 0;/);
   });
 });

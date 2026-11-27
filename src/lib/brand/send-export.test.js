@@ -40,6 +40,12 @@ for (const [name, make] of [['مكتملة (المؤسسية)', live], ['غير 
     for (const w of ['اضغط']) expect(word(w).test(t), w).toBe(false);
     expect(out.body).not.toMatch(/class="cp-draft"|class="cp-check"/);
   });
+  it('رقم الوثيقة بلا لاحقة إصدار (-V) في المتن والتذييل واسم الملف', () => {
+    expect(html(out)).not.toMatch(/MI-CP-[\w-]*-V\d/);
+    expect(String(out.meta.id)).not.toMatch(/-V\d/);
+    expect(String(out.meta.footer || '')).not.toMatch(/-V\d/);
+    expect(String(out.meta.pdfName || '')).not.toMatch(/-V\d/);
+  });
   it('ختم واحد رصين على الغلاف، بلا علامة مائية ولا حالة داخلية في الغلاف', () => {
     expect(out.meta.stamp).toBe(DOC_SEND_STAMP_AR);
     expect(t.split(DOC_SEND_STAMP_AR).length - 1).toBe(1);

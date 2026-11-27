@@ -1,6 +1,7 @@
 // تذكرة مولّد PDF على الخادم لمن طلب وثيقته (capstone.doc). بلا PDF_RENDER_URL أو PDF_RENDER_SECRET: null، فيبني المتصفح الملف.
 import { signTicket } from '../_shared/pdf-ticket.js';
 import { Fail } from './core.ts';
+import { docFingerprint } from './doc-quality.js';
 
 // fp: بصمة الوثيقة التي يُطلب ملفها (doc-quality.js docFingerprint)، فلا يطبع العامل بهذه التذكرة وثيقةً ببصمة غيرها (المرحلة 21)
 export async function pdfTicket(sub: string, fp: string | null = null) {
@@ -8,6 +9,12 @@ export async function pdfTicket(sub: string, fp: string | null = null) {
   const secret = Deno.env.get('PDF_RENDER_SECRET') || '';
   if (!/^https:\/\//.test(url) || secret.length < 32) return null;
   return { url: url.replace(/\/$/, ''), ticket: await signTicket(secret, sub, Date.now(), fp) };
+}
+
+// تذكرة لوثيقة مبادرة بعينها، مربوطة ببصمتها، لكل نقطة تعيد وثيقة (الخبير والراعي ورابط المشاركة والإدارة، تصور الفخامة المرحلة 1):
+// تذكرة الجلسة العامة لا تطبع وثيقة تحمل بصمة، فيرجع الملف المعتمد إلى البديل المصور لولاها. التعذر null، فلا يفشل الطلب بسببها
+export async function docTicket(sub: string, doc: unknown) {
+  try { return await pdfTicket(sub, docFingerprint(doc)); } catch { return null; }
 }
 
 // تذكرة لأي جلسة صالحة (pdf.ticket، المرحلة 3أ): مشارك أو خبير أو منسق أو مدير، بالترتيب. الصاحب «نوع-معرّف» للسجل وسقف

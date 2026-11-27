@@ -87,12 +87,13 @@ const FILTERS = ['submitted', 'accepted', 'returned', 'approved', 'draft'].map((
 
 // kind: 'working' ملف العمل الكامل، و'institutional' الوثيقة المؤسسية (تُحجب حتى تكتمل الأسئلة العشرة).
 // شاشات الإدارة مراجع: ملحق المراجع بخيار صريح (annex، المرحلة 21) لا بمجرد وصول الحقل
-export async function openDoc(doc, toast, kind = 'working', onBlocked = null, options = { annex: true }) {
+export async function openDoc(doc, toast, kind = 'working', onBlocked = null, options = { annex: true }, pdf = null) {
   const win = window.open('', '_blank');
   const [{ writeDocument }, { renderInitiative }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/institutional.js')]);
   const r = renderInitiative(doc, kind, options);
   if (r.blocked) { win?.close(); return onBlocked ? onBlocked(r.missing) : toast(r.message); }
-  if (!writeDocument(win, r.meta, r.body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
+  // pdf: تذكرة admin.capstone المربوطة ببصمة الوثيقة، فيأخذ «تحميل PDF» في نافذتها المسار المتجهي
+  if (!writeDocument(win, r.meta, r.body, pdf ? { pdf: async () => pdf } : {})) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
 }
 
 // تحميل الوثيقة النهائية PDF (المرحلة 21): زر أساسي ولوح صغير. «نسخة للإرسال» (الافتراض) بلا ملحق المراجع ولا صفحة القرار ولا ملحق
@@ -337,8 +338,8 @@ function Detail({ id, canWrite, onBack, onPerson }) {
         </div>
         <div className="la-row">
           <FinalDocExport participantId={id} approved={c.status === 'approved'} qr={d.qr_state} />
-          <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast)}>ملف العمل الكامل</button>
-          <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'institutional', setBlocked)}>الوثيقة المؤسسية</button>
+          <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'working', null, undefined, d.pdf)}>ملف العمل الكامل</button>
+          <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'institutional', setBlocked, undefined, d.pdf)}>الوثيقة المؤسسية</button>
           <button className="btn-sm ghost" onClick={() => onPerson(id)}>ملف المشارك</button>
         </div>
       </section>

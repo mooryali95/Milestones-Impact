@@ -5,7 +5,7 @@
 // (capstone.doc / admin.capstone / sponsor.get / coord.capstone). يبني على
 // محرك الوثائق doc.js فتخرج بالهوية نفسها، ويضيف رسوم الوثيقة: شجرة هيكل
 // التجزئة، والمخطط الزمني، وخريطة المخاطر، وملخص التكلفة.
-import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js';
+import { bars, callout, esc, kpis, points, raw, section, table, TYPE_SCALE as TS } from './doc.js';
 import { costLabel, dateAr, displayPages, pageNumberOf, parseDate, parseNumber, CHAPTER_STANDING_AR, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
@@ -26,52 +26,52 @@ export const paras = (t) => String(t || '').split(/\n+/).map((x) => x.trim()).fi
 
 // ── رسوم الوثيقة ──
 export const STYLE = `<style>
-.cp-p { margin: 0 0 2mm; font-size: 9.6pt; line-height: 1.9; color: #2C4148; }
+.cp-p { margin: 0 0 2mm; font-size: ${TS.body}pt; line-height: ${TS.workLeading}; color: #2C4148; }
 .cp-f { margin: 0 0 4mm; break-inside: avoid; }
-.cp-f > b { display: block; font-weight: 400; font-size: 8.4pt; color: #5F7176; margin-bottom: 1mm; }
+.cp-f > b { display: block; font-weight: 400; font-size: ${TS.caption}pt; color: #5F7176; margin-bottom: 1mm; }
 .cp-toc { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 10mm; }
-.cp-toc li { display: flex; gap: 3mm; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; font-size: 9.4pt; break-inside: avoid; }
-.cp-toc li span { font: 400 8pt "Noto Sans", sans-serif; color: #A97A2E; min-width: 7mm; }
-.cp-toc li small { margin-inline-start: auto; color: #5F7176; font-size: 7.6pt; }
+.cp-toc li { display: flex; gap: 3mm; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; font-size: ${TS.small}pt; break-inside: avoid; }
+.cp-toc li span { font: 400 ${TS.caption}pt "Noto Sans", sans-serif; color: #A97A2E; min-width: 7mm; }
+.cp-toc li small { margin-inline-start: auto; color: #5F7176; font-size: ${TS.footer}pt; }
 .cp-tree { margin: 3mm 0 0; padding: 0; list-style: none; }
-.cp-tree li { position: relative; padding: 1.2mm 0; font-size: 9pt; }
-.cp-tree li .c { display: inline-block; min-width: 12mm; font: 400 8pt "Noto Sans", sans-serif; color: #8A6424; }
+.cp-tree li { position: relative; padding: 1.2mm 0; font-size: ${TS.small}pt; }
+.cp-tree li .c { display: inline-block; min-width: 12mm; font: 400 ${TS.caption}pt "Noto Sans", sans-serif; color: #8A6424; }
 .cp-tree li small { color: #5F7176; margin-inline-start: 2mm; }
 .cp-tree li.l1 { font-weight: 400; border-top: 1px solid #DCE2E1; padding-top: 2mm; margin-top: 1mm; }
 .cp-tree li.l2 { padding-inline-start: 7mm; } .cp-tree li.l3 { padding-inline-start: 14mm; } .cp-tree li.l4 { padding-inline-start: 21mm; }
 .cp-tree li.l2::before, .cp-tree li.l3::before, .cp-tree li.l4::before { content: ''; position: absolute; top: 0; bottom: 50%; width: 3mm; border-bottom: 1px solid #DCE2E1; border-inline-start: 1px solid #DCE2E1; inset-inline-start: calc(var(--d) * 7mm - 4mm); }
 .cp-fig { margin: 4mm 0 2mm; break-inside: avoid; }
-.cp-fig figcaption { font-size: 7.6pt; color: #5F7176; margin-top: 1mm; }
-.cp-heat { display: grid; grid-template-columns: 8mm repeat(5, 1fr); gap: 1px; width: 92mm; font: 400 7.5pt "Noto Sans", sans-serif; direction: ltr; }
+.cp-fig figcaption { font-size: ${TS.footer}pt; color: #5F7176; margin-top: 1mm; }
+.cp-heat { display: grid; grid-template-columns: 8mm repeat(5, 1fr); gap: 1px; width: 92mm; font: 400 ${TS.footer}pt "Noto Sans", sans-serif; direction: ltr; }
 .cp-heat div { aspect-ratio: 1.6; display: grid; place-items: center; color: #0B272F; }
 .cp-heat .ax { color: #5F7176; aspect-ratio: auto; }
 .cp-heat .lo { background: #EEF1F0; } .cp-heat .md { background: #F2E6D0; } .cp-heat .hi { background: #E1BE85; }
-.cp-heat b { font-weight: 400; font-size: 10pt; }
-.cp-legend { display: flex; gap: 4mm; font-size: 7.5pt; color: #5F7176; margin-top: 2mm; }
+.cp-heat b { font-weight: 400; font-size: ${TS.body}pt; }
+.cp-legend { display: flex; gap: 4mm; font-size: ${TS.footer}pt; color: #5F7176; margin-top: 2mm; }
 .cp-legend i { display: inline-block; width: 3mm; height: 3mm; vertical-align: middle; margin-inline-end: 1mm; }
 .cp-check { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.6mm; }
-.cp-check li { font-size: 9pt; padding-inline-start: 6mm; position: relative; }
-.cp-check li::before { position: absolute; inset-inline-start: 0; font: 400 9pt "Noto Sans", sans-serif; }
+.cp-check li { font-size: ${TS.small}pt; padding-inline-start: 6mm; position: relative; }
+.cp-check li::before { position: absolute; inset-inline-start: 0; font: 400 ${TS.small}pt "Noto Sans", sans-serif; }
 .cp-check li.ok::before { content: '✓'; color: #A97A2E; } .cp-check li.no::before { content: '○'; color: #5F7176; }
-.cp-check li small { display: block; color: #5F7176; font-size: 8pt; }
-.cp-stamp { display: inline-block; border: 1px solid #A97A2E; color: #8A6424; padding: 1mm 4mm; border-radius: 2px; font-size: 8.5pt; }
-.cp-gaps { width: 100%; border-collapse: collapse; font-size: 9pt; }
-.cp-gaps th { text-align: right; font-weight: 400; font-size: 8.5pt; color: #5F7176; padding: 2mm 1.5mm; border-bottom: 1px solid #0B272F; }
+.cp-check li small { display: block; color: #5F7176; font-size: ${TS.caption}pt; }
+.cp-stamp { display: inline-block; border: 1px solid #A97A2E; color: #8A6424; padding: 1mm 4mm; border-radius: 2px; font-size: ${TS.caption}pt; }
+.cp-gaps { width: 100%; border-collapse: collapse; font-size: ${TS.small}pt; }
+.cp-gaps th { text-align: right; font-weight: 400; font-size: ${TS.caption}pt; color: #5F7176; padding: 2mm 1.5mm; border-bottom: 1px solid #0B272F; }
 .cp-gaps td { padding: 2mm 1.5mm; border-bottom: 1px solid #EEF1F0; vertical-align: top; }
-.cp-gaps td.ch { color: #0B272F; font-weight: 400; } .cp-gaps td.why { color: #5F7176; font-size: 8.2pt; }
-.cp-rev { display: inline-block; margin-inline-start: 1.5mm; font-size: 7.5pt; color: #8A6424; border-bottom: 1px dotted #A97A2E; }
+.cp-gaps td.ch { color: #0B272F; font-weight: 400; } .cp-gaps td.why { color: #5F7176; font-size: ${TS.caption}pt; }
+.cp-rev { display: inline-block; margin-inline-start: 1.5mm; font-size: ${TS.footer}pt; color: #8A6424; border-bottom: 1px dotted #A97A2E; }
 .cp-flag > .cp-p { color: #5F7176; }
-.cp-gaps td q { color: #2C4148; font-size: 8pt; }
-.cp-draft { border: 1px dashed #5F7176; color: #5F7176; padding: 3mm 5mm; border-radius: 2px; font-size: 9pt; margin-top: 6mm; }
-.cp-score b { font: 400 28pt/1 "Noto Sans", sans-serif; } .cp-score span { color: #5F7176; font-size: 9pt; margin-inline-start: 2mm; }
+.cp-gaps td q { color: #2C4148; font-size: ${TS.caption}pt; }
+.cp-draft { border: 1px dashed #5F7176; color: #5F7176; padding: 3mm 5mm; border-radius: 2px; font-size: ${TS.small}pt; margin-top: 6mm; }
+.cp-score b { font: 400 ${TS.display}pt/1 "Noto Sans", sans-serif; } .cp-score span { color: #5F7176; font-size: ${TS.small}pt; margin-inline-start: 2mm; }
 .cp-break { break-before: page; }
-.cp-charter { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.cp-charter { width: 100%; border-collapse: collapse; font-size: ${TS.small}pt; }
 .cp-charter th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; color: #5F7176; padding: 1.3mm 0; border-bottom: 1px solid #EEF1F0; }
 .cp-charter td { padding: 1.3mm 0 1.3mm 2mm; border-bottom: 1px solid #EEF1F0; line-height: 1.7; color: #2C4148; white-space: pre-line; }
 .cp-case { margin: 0 0 5mm; break-inside: avoid; }
-.cp-case h3 { margin: 0 0 1mm; } .cp-case > small { display: block; color: #5F7176; font-size: 8pt; margin-bottom: 2mm; }
+.cp-case h3 { margin: 0 0 1mm; } .cp-case > small { display: block; color: #5F7176; font-size: ${TS.caption}pt; margin-bottom: 2mm; }
 /* الوثيقة عربية: عناوين الأقسام الصغيرة بالعربية بلا تباعد أحرف يقطع وصلها */
-.sec > header .eyebrow { font: 400 7.6pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0; text-transform: none; }
+.sec > header .eyebrow { font: 400 ${TS.footer}pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0; text-transform: none; }
 /* الفصل الطويل ينقسم بين الصفحات بحقوله، فلا تبقى صفحات نصف فارغة؛ والحقل القصير لا ينقسم، وعنوانه مع أوله */
 .sec.keep:has(.cp-f) { break-inside: auto; }
 .cp-f:has(.tbl) { break-inside: auto; }
@@ -87,47 +87,47 @@ export const STYLE = `<style>
 /* رقم الصفحة في الفهرس: مكانه محجوز في الملف وحده، يكتبه pdf.js بعد تقسيم الصفحات */
 .cp-pgno { display: none; }
 /* الطباعة ومولّد الخادم: الرقم من target-counter (المرحلة 27)؛ وملف المتصفح يكتبه pdf.js في موضعه فلا يتكرر */
-@media print { html:not(.pdf) .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; font: 400 8pt "Noto Sans", sans-serif; color: #5F7176; }
+@media print { html:not(.pdf) .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; font: 400 ${TS.caption}pt "Noto Sans", sans-serif; color: #5F7176; }
   html:not(.pdf) .cp-pgno:empty::after { content: target-counter(attr(data-ref url), page); } }
-html.pdf .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; font: 400 8pt "Noto Sans", sans-serif; color: #5F7176; }
+html.pdf .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; font: 400 ${TS.caption}pt "Noto Sans", sans-serif; color: #5F7176; }
 .cp-anchor { display: block; height: 0; }
 .cp-toc2 { display: grid; gap: 3mm; }
 .cp-toc2 .ph { break-inside: avoid; }
-.cp-toc2 .ph > h3 { margin: 0 0 1mm; font-weight: 400; font-size: 10pt; display: flex; gap: 2mm; align-items: baseline; }
-.cp-toc2 .ph > h3 small { color: #5F7176; font-size: 7.6pt; font-weight: 400; }
-.cp-toc2 .ph > p { margin: 0 0 1.4mm; color: #5F7176; font-size: 7.8pt; }
+.cp-toc2 .ph > h3 { margin: 0 0 1mm; font-weight: 400; font-size: ${TS.h3}pt; display: flex; gap: 2mm; align-items: baseline; }
+.cp-toc2 .ph > h3 small { color: #5F7176; font-size: ${TS.h3}pt; font-weight: 400; }
+.cp-toc2 .ph > p { margin: 0 0 1.4mm; color: #5F7176; font-size: ${TS.footer}pt; }
 .cp-toc2 ol { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 8mm; }
-.cp-toc2 li { break-inside: avoid; border-bottom: 1px solid #EEF1F0; padding: 1.3mm 0; font-size: 9pt; display: flex; gap: 2.5mm; align-items: baseline; }
+.cp-toc2 li { break-inside: avoid; border-bottom: 1px solid #EEF1F0; padding: 1.3mm 0; font-size: ${TS.small}pt; display: flex; gap: 2.5mm; align-items: baseline; }
 .cp-toc2 li a { color: inherit; text-decoration: none; flex: 1; }
-.cp-toc2 li span.n { font: 400 8pt "Noto Sans", sans-serif; color: #A97A2E; min-width: 6mm; }
-.cp-toc2 li i { font-style: normal; font-size: 7.5pt; color: #5F7176; white-space: nowrap; }
+.cp-toc2 li span.n { font: 400 ${TS.caption}pt "Noto Sans", sans-serif; color: #A97A2E; min-width: 6mm; }
+.cp-toc2 li i { font-style: normal; font-size: ${TS.footer}pt; color: #5F7176; white-space: nowrap; }
 .cp-toc2 li i.no { color: #8A6424; }
 .cp-toc2 .front { columns: 1; display: flex; flex-wrap: wrap; gap: 0 6mm; }
 .cp-toc2 .front li { border: 0; padding: .6mm 0; }
-.cp-join { margin: 6mm 0 2mm; padding-top: 3mm; border-top: 1px solid #DCE2E1; font-weight: 400; font-size: 10.4pt; color: #0B272F; break-after: avoid; }
-.cp-ref { font-size: 8.4pt; color: #5F7176; margin: 1mm 0 0; }
+.cp-join { margin: 6mm 0 2mm; padding-top: 3mm; border-top: 1px solid #DCE2E1; font-weight: 400; font-size: ${TS.body}pt; color: #0B272F; break-after: avoid; }
+.cp-ref { font-size: ${TS.caption}pt; color: #5F7176; margin: 1mm 0 0; }
 .cp-ref b { font-weight: 400; color: #2C4148; }
-.cp-why { margin: -2mm 0 4mm; color: #5F7176; font-size: 8.4pt; }
+.cp-why { margin: -2mm 0 4mm; color: #5F7176; font-size: ${TS.caption}pt; }
 .cp-launch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid #A97A2E; margin-bottom: 4mm; }
 .cp-launch > div { padding: 3mm 3mm 3mm 0; border-inline-start: 1px solid #DCE2E1; padding-inline-start: 3mm; break-inside: avoid; }
 .cp-launch > div:first-child { border-inline-start: 0; padding-inline-start: 0; }
-.cp-launch h3 { margin: 0; font-weight: 400; font-size: 10pt; }
-.cp-launch small { display: block; color: #5F7176; font-size: 7.5pt; margin-bottom: 2mm; }
+.cp-launch h3 { margin: 0; font-weight: 400; font-size: ${TS.h3}pt; }
+.cp-launch small { display: block; color: #5F7176; font-size: ${TS.footer}pt; margin-bottom: 2mm; }
 .cp-launch ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 1.6mm; }
-.cp-launch li { font-size: 8.6pt; line-height: 1.7; color: #2C4148; padding-inline-start: 3.5mm; position: relative; }
+.cp-launch li { font-size: ${TS.caption}pt; line-height: 1.7; color: #2C4148; padding-inline-start: 3.5mm; position: relative; }
 .cp-launch li::before { content: ''; position: absolute; inset-inline-start: 0; top: 2.2mm; width: 1.4mm; height: 1.4mm; background: #A97A2E; transform: rotate(45deg); }
-.cp-gloss { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.cp-gloss { width: 100%; border-collapse: collapse; font-size: ${TS.small}pt; }
 .cp-gloss th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; color: #0B272F; }
 .cp-gloss td { padding: 1.6mm 0 1.6mm 2mm; border-bottom: 1px solid #EEF1F0; color: #2C4148; line-height: 1.7; }
 .cp-gloss tr { break-inside: avoid; }
 .cp-fig svg.mi-narrow { max-width: 105mm !important; display: block; margin: 0 auto; }
-.mi-legend { display: flex; gap: 4mm; flex-wrap: wrap; font-size: 7.5pt; color: #5F7176; margin-top: 1.5mm; }
+.mi-legend { display: flex; gap: 4mm; flex-wrap: wrap; font-size: ${TS.footer}pt; color: #5F7176; margin-top: 1.5mm; }
 .mi-lg { display: inline-flex; align-items: center; gap: 1.2mm; }
 .mi-lg i { display: inline-block; width: 4mm; height: 1.6mm; border-radius: 1px; }
 .mi-lg i.dash { height: 0; border-top: 1px dashed #5F7176; background: none; }
 .mi-lg i.dm { width: 2mm; height: 2mm; transform: rotate(45deg); }
 .mi-lg i.ln { height: 0; border-top: 1px solid #5F7176; background: none; }
-.cp-case .cp-miss { color: #5F7176; font-size: 8.6pt; border: 1px dashed #DCE2E1; padding: 2mm 3mm; border-radius: 2px; }
+.cp-case .cp-miss { color: #5F7176; font-size: ${TS.caption}pt; border: 1px dashed #DCE2E1; padding: 2mm 3mm; border-radius: 2px; }
 </style>`;
 
 // شجرة هيكل التجزئة من الترميز الهرمي (1، 1.1، 1.1.2)
@@ -426,18 +426,18 @@ function levelMeter(level) {
   const max = LEVEL_LIST.length;
   return `<span class="cp-meter" role="meter" aria-valuemin="1" aria-valuemax="${max}" aria-valuenow="${l.step}" aria-valuetext="${l.step} من ${max}" aria-label="مستوى الوثيقة: ${esc(l.title)}، ${l.step} من ${max}">${LEVEL_LIST.map((x) => `<i class="${x.step <= l.step ? 'on' : ''}"></i>`).join('')}<b>${esc(l.title)}</b><small class="cp-meter-num">${l.step} من ${max}</small></span>`;
 }
-const ANNEX_STYLE = `<style>
-.cp-annex-tag { display: inline-block; border: 1px solid currentColor; padding: .4mm 2mm; font-size: 8pt; margin: 0 0 2mm; }
-.cp-chip { display: inline-block; white-space: nowrap; border: 1px solid #9a9a9a; border-radius: 2mm; padding: 0 1.6mm; font-size: 8pt; }
+export const ANNEX_STYLE = `<style>
+.cp-annex-tag { display: inline-block; border: 1px solid currentColor; padding: .4mm 2mm; font-size: ${TS.caption}pt; margin: 0 0 2mm; }
+.cp-chip { display: inline-block; white-space: nowrap; border: 1px solid #9a9a9a; border-radius: 2mm; padding: 0 1.6mm; font-size: ${TS.caption}pt; }
 .cp-chip i { font-style: normal; }
 .cp-meter { display: inline-flex; align-items: center; gap: .8mm; vertical-align: middle; }
 .cp-meter i { display: inline-block; width: 6mm; height: 1.6mm; border: 1px solid #555; }
 .cp-meter i.on { background: #555; }
 .cp-meter b { margin-inline-start: 1.5mm; font-weight: 500; }
-.cp-meter-num { margin-inline-start: 1.5mm; font-size: 8pt; }
-.cp-legend { list-style: none; padding: 0; margin: 2mm 0 4mm; display: grid; gap: 1mm; font-size: 8.5pt; }
+.cp-meter-num { margin-inline-start: 1.5mm; font-size: ${TS.caption}pt; }
+.cp-legend { list-style: none; padding: 0; margin: 2mm 0 4mm; display: grid; gap: 1mm; font-size: ${TS.caption}pt; }
 .cp-fw { break-inside: avoid; margin-top: 5mm; }
-.cp-fw h3 { margin: 0 0 1.5mm; font-size: 11pt; }
+.cp-fw h3 { margin: 0 0 1.5mm; font-size: ${TS.h3}pt; }
 .cp-fw h3 small { font-weight: 400; }
 .cp-empty { border: 1px dashed #9a9a9a; padding: 3mm; text-align: center; }
 </style>`;
@@ -535,14 +535,14 @@ export function placeRow(m) {
 // ملف العمل الكامل يُسمّى باسمه فلا يُخلط بالوثيقة المؤسسية. التاريخ بأرقام لاتينية (YYYY-MM-DD)
 const PDF_PREFIX = { institutional: 'وثيقة-المبادرة', working: 'ملف-عمل-المبادرة', draft: 'مسودة-وثيقة-المبادرة' };
 // kind: 'institutional' الوثيقة المؤسسية، 'working' ملف العمل بملحقه، 'draft' ملف العمل بلا ملحق (قارئ قبل الاعتماد)
-export function pdfFileName(m = {}, kind = 'institutional', now = new Date()) {
+export function pdfFileName(m = {}, kind = 'institutional', now = new Date(), { send = false } = {}) {
   const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   // تنظيف قبل البديل: محارف الاتجاه الخفية، وما لا يصلح في اسم ملف، ثم قص بنقاط الترميز لا بوحدات UTF-16 فلا يُشطر حرف
   const clean = (v) => [...String(v ?? '').replace(/[‎‏‪-‮⁦-⁩]/g, '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().replace(/\s+/g, '-')]
     .slice(0, 60).join('').replace(/-+$/, '');
   const name = clean(m.initiative) || clean(m.ref) || 'المبادرة';
   // رقم الوثيقة وإصدارها لاحقة قصيرة: نسختان في اليوم نفسه لا تتطابقان اسمًا
-  const tag = clean(`${String(m.ref || '').replace(/^MI-CP-/, '')}${m.version ? `-V${m.version}` : ''}`).replace(/^-+/, '');
+  const tag = clean(`${String(m.ref || '').replace(/^MI-CP-/, '')}${m.version && !send ? `-V${m.version}` : ''}`).replace(/^-+/, '');
   return [PDF_PREFIX[kind] || PDF_PREFIX.institutional, name, ymd, tag].filter(Boolean).join('-');
 }
 
@@ -681,12 +681,12 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
 
   return {
     meta: {
-      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: send ? 'وثيقة المبادرة' : 'Initiative Document',
+      id: (send ? `${m.ref || 'MI-CP'}` : `${m.ref || 'MI-CP'}-V${m.version || 1}`), kind: 'CP', kindLabel: send ? 'وثيقة المبادرة' : 'Initiative Document',
       // نسخة الإرسال: تسمية الرقم المرجعي على الغلاف بالعربية، ولا وسم لاتيني فوق العنوان
       ...(send ? { refLabel: DOC_TEXT.send.docNo } : {}),
-      footer: footerLine(`${m.ref || 'MI-CP'}-V${m.version || 1}`, mark?.fingerprint), pageAr: true, selfFonts: true,
+      footer: footerLine((send ? `${m.ref || 'MI-CP'}` : `${m.ref || 'MI-CP'}-V${m.version || 1}`), mark?.fingerprint), pageAr: true, selfFonts: true,
       // ملف العمل بملحقه لمن يعمل عليها؛ وبلا ملحق (القارئ قبل الاعتماد) يُسمّى «وثيقة المبادرة»
-      pdfName: pdfFileName(m, example ? 'institutional' : appendix ? 'working' : 'draft'),
+      pdfName: pdfFileName(m, example ? 'institutional' : appendix ? 'working' : 'draft', new Date(), { send }),
       // شعار الجهة ولونها على الغلاف وترويسة الصفحات (doc.js)، كما في الوثيقة المؤسسية
       ...(example ? {} : { brand: { name: m.org?.name || null, logo: m.org?.logo || null, color: m.org?.color || null } }),
       eyebrow: example ? 'Leaders Program · Worked example' : send ? 'برنامج القادة' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',

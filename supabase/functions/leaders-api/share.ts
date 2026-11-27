@@ -10,6 +10,7 @@ import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.t
 import { visibilityOfParticipant } from './visibility.ts';
 import { cleanNote, cleanShareInput, MAX_ACTIVE_SHARES, NOTE_LIMITS, NOTIFY_EVERY_MS, ownerView, publicDoc, shareState } from './share.js';
 import { shareDocFor } from './capstone.ts';
+import { docTicket } from './pdf-ticket.ts';
 
 type Body = Record<string, any>;
 const DAY = 864e5;
@@ -137,6 +138,8 @@ export async function get(b: Body) {
     owner: p.full_name, expires_at: row.expires_at, allow_notes: notesOk, allow_download: !!row.allow_download,
     sections: (doc?.sections || []).map((s: any) => ({ key: s.key, title: s.title })),
     doc,
+    // تذكرة الملف المتجهي لقارئ الرابط حين يسمح صاحبه بالتحميل، مربوطة ببصمة ما يُعرض له
+    pdf: row.allow_download ? await docTicket(`share-${row.id}`, doc) : null,
   };
 }
 
