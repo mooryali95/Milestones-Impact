@@ -16,7 +16,9 @@
 }
 .mb-root *, .mb-root *::before, .mb-root *::after { box-sizing: border-box; }
 /* فوق النوافذ (.mb-sheet-wrap عند 60) فلا تخلو لقطة سلسلة تعليقات منها، وتبقى في الطباعة فلا تخرج نسخة ورقية بلا مصدر */
-.mb-wm { position: fixed; inset: 0; z-index: 70; pointer-events: none; background-repeat: repeat; }
+.mb-wm { position: fixed; inset: 0; z-index: 70; pointer-events: none; background-repeat: repeat;
+  /* المرحلة 20: الشفافية من الإطار (--mb-wm-opacity)، محصورة بين 0.07 و0.09 فلا يُضعفها إطار تحت حد الحماية */
+  opacity: clamp(.07, var(--mb-wm-opacity, .09), .09); }
 @media print { .mb-wm { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 .mb-root button { font: inherit; color: inherit; cursor: pointer; }
 .mb-root :focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
@@ -537,3 +539,15 @@
 .mb-cm footer .mb-link, .mb-replying .mb-link, .mb-quote .mb-link { min-height: 44px; display: inline-flex; align-items: center; }
 .mb-pager button { min-height: 56px; }
 .mb-sec-ref { top: 30px; }
+
+/* المرحلة 20: رف الكتاب في اللوحة (place-admin مع مكونات اللوحة) ترويسة مضغوطة على سطح فاتح بدل البطل الداكن */
+.mb-shelf.compact { background: var(--paper); color: var(--slate); }
+.mb-shelf.compact .screen-head { max-width: 1100px; margin: 0 auto; padding: 18px 20px 12px; font-family: var(--body); }
+.mb-shelf.compact .screen-head-title { font: 400 1.6rem/1.4 var(--display); color: var(--graphite); }
+.mb-shelf.compact .screen-head-acts { flex-wrap: wrap; }
+.mb-shelf.compact .mb-btn { padding: 6px 16px; font-size: 14px; min-height: 44px; }
+.mb-status { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.8; }
+.mb-status b { font-weight: 600; color: var(--slate); }
+.mb-shelf.compact .mb-note { background: rgba(169, 122, 46, .08); color: var(--gold-text); }
+.mb-shelf.compact .mb-vols { padding-top: 8px; }
+.mb-facts dd.mb-none { font: 400 15px/1.8 var(--body); white-space: nowrap; color: rgba(237, 230, 216, .78); }

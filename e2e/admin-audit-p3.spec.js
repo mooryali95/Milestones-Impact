@@ -184,14 +184,21 @@ test.describe('المرحلة 3', () => {
   });
 
   for (const size of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
-    test(`الكتاب الأم داخل اللوحة (${size.width}): شريط رجوع ومسار، والعلامة المائية باقية، وملء الشاشة، وEsc`, async ({ page }) => {
+    test(`الكتاب الأم داخل اللوحة (${size.width}): ترويسة مضغوطة وفعل واحد و«إجراءات ▾»، والعلامة المائية باقية، وملء الشاشة وحده، وEsc`, async ({ page }) => {
       await setup(page, '#/leaders/book', { size });
       const bar = page.getByRole('navigation', { name: 'شريط الكتاب الأم' });
-      await expect(bar.getByRole('button', { name: '→ رجوع إلى لوحة الإدارة' })).toBeVisible();
+      // المرحلة 20: لا مسار، والرجوع لا يظهر خارج ملء الشاشة
+      await expect(bar.getByRole('list')).toHaveCount(0);
+      await expect(bar.getByRole('button', { name: 'رجوع إلى لوحة الإدارة' })).toHaveCount(0);
+      await expect(bar.getByRole('button')).toHaveCount(1);
       await expect(page.getByRole('heading', { name: 'الكتاب الأم', exact: true })).toBeVisible();
+      await expect(page.locator('.mb-hero')).toHaveCount(0);
+      await expect(page.locator('.screen-head').getByRole('button', { name: /^(افتح الكتاب|تابع القراءة|المقترحات)/ })).toHaveCount(1);
+      await expect(page.getByRole('button', { name: /^إجراءات/ })).toBeVisible();
+      await expect(page.locator('.mb-status')).not.toContainText('·');
       await expect(page.locator('.mb-wm')).toHaveCount(1);
+      expect(Number(await page.locator('.mb-wm').evaluate((e) => getComputedStyle(e).opacity))).toBeGreaterThanOrEqual(0.07);
       if (size.width > 500) {
-        await expect(bar.getByRole('list', { name: 'المسار' })).toContainText('الكتاب الأم');
         // رأس اللوحة وشريطها ظاهران: القارئ لا يغطيهما
         await expect(page.getByRole('navigation', { name: 'أقسام تطبيق القادة' })).toBeVisible();
         const nav = await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).boundingBox();
@@ -200,11 +207,11 @@ test.describe('المرحلة 3', () => {
       }
       await noOverflow(page);
       await shot(page, 'book-inline');
-      // ملء الشاشة ثم Esc يخرج منه، وEsc ثانية تعود إلى اللوحة
+      // ملء الشاشة: يظهر الرجوع، ثم Esc يخرج منه، وEsc ثانية تعود إلى اللوحة
       await bar.getByRole('button', { name: 'ملء الشاشة' }).click();
       await expect(bar.getByRole('button', { name: 'الخروج من ملء الشاشة' })).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('.mbs-frame')).toHaveCSS('position', 'fixed');
-      await expect(bar.getByRole('button', { name: '→ رجوع إلى لوحة الإدارة' })).toBeInViewport();
+      await expect(bar.getByRole('button', { name: 'رجوع إلى لوحة الإدارة' })).toBeInViewport();
       await shot(page, 'book-full');
       await page.keyboard.press('Escape');
       await expect(bar.getByRole('button', { name: 'ملء الشاشة' })).toHaveAttribute('aria-pressed', 'false');
@@ -213,14 +220,16 @@ test.describe('المرحلة 3', () => {
     });
   }
 
-  test('الكتاب الأم: زر الرجوع يعود إلى اللوحة، وEsc داخل نافذة القارئ تغلقها وحدها', async ({ page }) => {
+  test('الكتاب الأم: نسخة PDF من «إجراءات ▾»، وEsc داخل نافذة القارئ تغلقها وحدها، والرجوع من ملء الشاشة يعود إلى اللوحة', async ({ page }) => {
     await setup(page, '#/leaders/book');
-    await page.getByRole('button', { name: 'نسخة PDF' }).click();
+    await page.getByRole('button', { name: /^إجراءات/ }).click();
+    await page.getByRole('menuitem', { name: 'نسخة PDF' }).click();
     await expect(page.getByRole('dialog', { name: 'نسخة PDF' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'نسخة PDF' })).toHaveCount(0);
     expect(await page.evaluate(() => location.hash)).toBe('#/leaders/book');
-    await page.getByRole('button', { name: '→ رجوع إلى لوحة الإدارة' }).click();
+    await page.getByRole('button', { name: 'ملء الشاشة' }).click();
+    await page.getByRole('button', { name: 'رجوع إلى لوحة الإدارة' }).click();
     await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/leaders/handbook');
   });
 
