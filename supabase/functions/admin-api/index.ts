@@ -11,6 +11,7 @@ import { bdi, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, 
 import { SITES } from "../_shared/sites.js";
 import { hasSecondFactor } from "../_shared/second_factor.js";
 import { STEP_UP_ACTIONS, stepUp, writeAccess } from "./step_up.ts";
+import { claimTotpStep, consumeEmailOtp, reserveAttempt, resetTotpStep } from "./login_guard.ts";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
 // النشر: supabase functions deploy admin-api
@@ -35,8 +36,6 @@ const ORIGINS = (Deno.env.get("ADMIN_ORIGINS") ||
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4h admin sessions
 const OTP_COOLDOWN_MS = 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
-const MAX_FAILS = 5;
-const FAIL_WINDOW_MS = 15 * 60 * 1000;
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 // العمليات الحساسة (مفاتيح المرور ووضع المفتاح وحده) تتطلب دخولًا حديثًا.
 const FRESH_MS = 10 * 60 * 1000;
@@ -108,9 +107,6 @@ async function totpMatch(secret: string, token: string, win = 1): Promise<bigint
   for (let i = -win; i <= win; i++) if (await hotp(secret, t + BigInt(i)) === token) return t + BigInt(i);
   return null;
 }
-async function verifyTotp(secret: string, token: string, win = 1): Promise<boolean> {
-  return (await totpMatch(secret, token, win)) !== null;
-}
 function genSecret(): string { return b32enc(crypto.getRandomValues(new Uint8Array(20))); }
 function totpUri(secret: string, email: string): string {
   return `otpauth://totp/${encodeURIComponent(APP)}:${encodeURIComponent(email)}?secret=${secret}&issuer=${encodeURIComponent(APP)}&algorithm=SHA1&digits=6&period=30`;
@@ -132,14 +128,13 @@ ${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, ADMIN_MAIL)
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
-// القفل لكل شبكة: خمس محاولات خاطئة من عنوان واحد تقفله هو، لا المدير. كان أي زائر يقفل حساب أي مدير بخمسة رموز خاطئة.
-// وسقف أعلى للبريد كله يُبقي التخمين الموزع على شبكات كثيرة محدودًا (تدقيق 2026-11-14، N8)
-const MAX_FAILS_ALL = 20;
-async function tooManyFails(sb: SB, email: string, ip = ""): Promise<boolean> {
-  const since = new Date(Date.now() - FAIL_WINDOW_MS).toISOString();
-  const fails = () => sb.from("totp_attempts").select("*", { count: "exact", head: true }).eq("email", email).eq("success", false).gte("created_at", since);
-  const [all, mine] = await Promise.all([fails(), ip ? fails().eq("ip", ip) : Promise.resolve({ count: 0 })]);
-  return (all.count ?? 0) >= MAX_FAILS_ALL || (mine.count ?? 0) >= MAX_FAILS || (!ip && (all.count ?? 0) >= MAX_FAILS);
+// القفل لكل شبكة (5 للعنوان) وسقف للبريد كله (20) خلال ربع ساعة، والمحاولة تُحجز ذريًا قبل فحص الرمز: login_guard.ts
+// (تدقيق 2026-11-14، N8؛ وتقرير الأمن 2026-11-27: كان العد قبل التسجيل فتتجاوزه الطلبات المتزامنة)
+const RATE_MSG = { success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" };
+// رمز تطبيق المصادقة لهذا المدير: يطابق ثم تُحجز خطوته، فلا يُقبل الرمز نفسه مرتين لأي غرض
+async function useTotp(sb: SB, userId: string, secret: string, code: string): Promise<boolean> {
+  const step = await totpMatch(secret, code);
+  return step !== null && await claimTotpStep(sb, userId, step);
 }
 // رموز الدخول لبريد واحد في اليوم: بلا هذا الحد يستنزف طلب متكرر كل دقيقة حصة رموز المنصة كلها
 const OTP_PER_EMAIL_DAY = 12;
@@ -410,7 +405,8 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       const code = String(body.code || "");
       if (!email || !/^\d{6}$/.test(code)) return json({ success: false, message: "الرمز يجب أن يكون 6 أرقام" }, 400);
       const ip = clientCtx(req).ip;
-      if (await tooManyFails(sb, email, ip)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
+      const attempt = await reserveAttempt(sb, email, ip);
+      if (!attempt.ok) return json(RATE_MSG, 429);
 
       const { data: admins } = await sb.from("admin_users")
         .select("id, name, role_id, is_active, totp_secret, totp_enabled, is_owner, passkey_only").eq("email", email).limit(1);
@@ -422,19 +418,17 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         if (user.totp_enabled && user.totp_secret) {
           method = "totp";
           // TOTP عامل ثانٍ حقيقي: من فعّله لا يدخل برمز البريد.
-          verified = await verifyTotp(user.totp_secret as string, code);
+          verified = await useTotp(sb, String(user.id), user.totp_secret as string, code);
         } else {
           const now = new Date().toISOString();
           const { data: otps } = await sb.from("email_otps").select("id")
             .eq("email", email).eq("otp_code", await otpHash(email, code)).eq("verified", false).gte("expires_at", now)
             .order("created_at", { ascending: false }).limit(1);
-          if (otps?.length) {
-            verified = true;
-            await sb.from("email_otps").update({ verified: true }).eq("id", otps[0].id);
-          }
+          // التعليم مشروط بأنه لم يُستعمل: طلبان متزامنان بالرمز نفسه ينجح أحدهما
+          if (otps?.length) verified = await consumeEmailOtp(sb, otps[0].id);
         }
       }
-      await sb.from("totp_attempts").insert({ email, success: verified, ip: ip || null });
+      await attempt.done(verified && !!user);
       if (!verified || !user) return json({ success: false, message: BAD_CODE_MSG });
       return json({ success: true, ...(await issueSession(sb, user, email, method, clientCtx(req))) });
     }
@@ -495,7 +489,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       }, {
         sb, sessionHash: await sha256hex(tok), ip: clientCtx(req).ip, rpId: RP_ID, origins: ORIGINS,
         genOptions: generateAuthenticationOptions, verifyAuth: verifyAuthenticationResponse, matchTotp: (sec, code) => totpMatch(sec, code),
-        tooManyFails, saveChallenge, takeChallenge, challengeFlood, challengeOf, fromBytea,
+        reserveAttempt, claimTotpStep, saveChallenge, takeChallenge, challengeFlood, challengeOf, fromBytea,
       });
       // تفعيل الكتابة في جلسة المالك كدخوله: يصله بريد أمني
       if (r.status === 200 && r.body.elevated && session.isOwner) {
@@ -561,19 +555,22 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       if (action !== "setup-totp" && !enabled) return json({ success: false, message: "TOTP غير مفعّل" });
       if (action !== "disable-totp") { const blocked = await totpEnrollBlocked(); if (blocked) return blocked; }
       if (enabled && action !== "setup-totp") {
-        if (await tooManyFails(sb, adminEmail, clientCtx(req).ip)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
-        const ok = await verifyTotp(String(us?.[0]?.totp_secret || ""), String(body.code || ""));
-        await sb.from("totp_attempts").insert({ email: adminEmail, success: ok, ip: clientCtx(req).ip || null });
+        const attempt = await reserveAttempt(sb, adminEmail, clientCtx(req).ip);
+        if (!attempt.ok) return json(RATE_MSG, 429);
+        const ok = await useTotp(sb, String(session.userId), String(us?.[0]?.totp_secret || ""), String(body.code || ""));
+        await attempt.done(ok);
         if (!ok) return json({ success: false, message: "أدخل الرمز الحالي من تطبيق المصادقة" }, 403);
       }
       if (action === "disable-totp") {
         await sb.from("admin_users").update({ totp_secret: null, totp_enabled: false }).eq("id", session.userId);
+        await resetTotpStep(sb, String(session.userId));
         await audit("disable-totp");
         await notifyAccountAndOwners("عُطّل تطبيق المصادقة على حساب إدارة");
         return json({ success: true, message: "تم تعطيل TOTP" });
       }
       const secret = genSecret();
       await sb.from("admin_users").update({ totp_secret: secret, totp_enabled: false }).eq("id", session.userId);
+      await resetTotpStep(sb, String(session.userId));
       await audit(action);
       return json({ success: true, secret, uri: totpUri(secret, adminEmail) });
     }
@@ -588,13 +585,14 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       }
       if (!SECOND_FACTOR && (await myPasskeys()).length) return json(NEED_PASSKEY, 403);
       const code = String(body.code || "");
-      if (await tooManyFails(sb, adminEmail, clientCtx(req).ip)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
+      const attempt = await reserveAttempt(sb, adminEmail, clientCtx(req).ip);
+      if (!attempt.ok) return json(RATE_MSG, 429);
       const { data: us } = await sb.from("admin_users").select("totp_secret, totp_enabled").eq("id", session.userId).limit(1);
       if (us?.[0]?.totp_enabled) return json({ success: false, message: "TOTP مفعّل بالفعل" });
       const secret = us?.[0]?.totp_secret as string | undefined;
       if (!secret) return json({ success: false, message: "ابدأ الإعداد أولاً" });
-      const ok = await verifyTotp(secret, code);
-      await sb.from("totp_attempts").insert({ email: adminEmail, success: ok, ip: clientCtx(req).ip || null });
+      const ok = await useTotp(sb, String(session.userId), secret, code);
+      await attempt.done(ok);
       if (!ok) return json({ success: false, message: "الرمز غير صحيح، تأكد من الوقت وأعد المحاولة" });
       await sb.from("admin_users").update({ totp_enabled: true }).eq("id", session.userId);
       await audit("confirm-totp");
@@ -886,6 +884,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         // يُحذف معه كل مفتاح مرور قديم (الجهاز المفقود)، فيصير الحساب بلا عامل ثانٍ ويسجّل صاحبه أول عامل برمز البريد،
         // ويُبلَّغ المالكون بتسجيله
         await sb.from("admin_users").update({ passkey_only: false, totp_enabled: false, totp_secret: null }).eq("id", tid);
+        await resetTotpStep(sb, String(tid));
         await sb.from("admin_passkeys").delete().eq("admin_id", tid);
         await revokeSessions(sb, tid);
         await audit("reset-access", { targetId: tid });
