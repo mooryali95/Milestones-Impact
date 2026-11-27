@@ -9,7 +9,7 @@
 // المصدر واحد: وثيقة الخادم (capstone.doc أو لقطة الاعتماد)؛ ملف العمل الكامل من المصدر نفسه في capstone.js capstoneReport.
 // المسودة الحية تُعلَّم بتاريخ بنائها وبصمتها، والمعتمدة بتاريخ اعتمادها وبصمتها المجمّدة ورابط تحققها.
 import { footerLine, qrSvg, verifyMark, verifyUrl, VERIFY_STYLE } from './verify-mark.js';
-import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, LIVE_RING, structuralAccent, TYPE_SCALE as TS } from './doc.js';
+import { contrastRatio, controlStrip, C, esc, lockup, isRaw, kpis, raw, section, LIVE_RING, structuralAccent, TYPE_SCALE as TS } from './doc.js';
 // تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
@@ -45,8 +45,8 @@ body { font-weight: 400; }
 .in-open h2 { margin: 0; font-weight: 600; font-size: ${TS.chapter}pt; line-height: 1.3; color: #0B272F; }
 .in-open p { margin: 1.5mm 0 0; font-size: ${TS.small}pt; color: #5F7176; line-height: 1.7; }
 .in-open p.ask { font-size: ${TS.h3}pt; color: #0B272F; padding-inline-start: 3mm; border-inline-start: 2pt solid var(--acc); }
-/* المرحلة 29: حالة العمل كل باب في صفحة؛ الميثاق انسياب متصل، وحاجز 60 مم غير مرئي قبل الفاتحة يمنع بدء باب في أسفل صفحة */
-.in-keep { display: block; height: 60mm; margin-bottom: -60mm; break-inside: avoid; visibility: hidden; }
+/* المرحلة 29: حالة العمل كل باب في صفحة؛ الميثاق انسياب متصل، وحاجز 40 مم غير مرئي قبل الفاتحة يمنع بدء باب في أسفل صفحة */
+.in-keep { display: block; height: 40mm; margin-bottom: -40mm; break-inside: avoid; visibility: hidden; }
 .in-toc { margin-top: 6mm; padding-top: 2.5mm; border-top: 1px solid #DCE2E1; break-inside: avoid; }
 .in-toc span { font-size: ${TS.caption}pt; font-weight: 600; color: #8A6424; margin-inline-end: 2mm; }
 .in-toc ol { display: inline; list-style: none; margin: 0; padding: 0; }
@@ -104,6 +104,15 @@ body { font-weight: 400; }
 .in-90 > div { border-top: 0.6mm solid var(--acc); padding-top: 3mm; break-inside: avoid; }
 .in-90 h3 { margin: 0; font-size: ${TS.h3}pt; font-weight: 500; } .in-90 small { color: #5F7176; font-size: ${TS.small}pt; }
 .in-90 ul { margin: 2mm 0 0; padding-inline-start: 4mm; font-size: ${TS.body}pt; line-height: 1.75; }
+.in-lock .top { display: flex; align-items: center; justify-content: flex-start; direction: rtl; margin-bottom: 6mm; }
+.in-lock .org { display: flex; align-items: center; } .in-lock .org.plate { padding: 2.5mm 3.5mm; border: 0.25mm solid #DCE2E1; border-radius: 0; box-shadow: none; background: #FFFFFF; }
+.in-lock .org.plate.light { background: #0B272F; }
+.in-lock .org img, .in-lock .by svg { height: 12mm; width: auto; max-width: 48mm; object-fit: contain; display: block; }
+.in-lock .org.t img { max-width: 14mm; } .in-lock .by svg { height: 7mm; }
+.in-lock .org .nm { font-size: ${TS.h3}pt; font-weight: 500; color: #0B272F; }
+.in-lock .dv { display: block; width: 0.3mm; align-self: stretch; margin: 0 6mm; background: #B08D57; }
+.in-lock .org.plate + .dv { align-self: center; height: 12mm; }
+.in-lock .by { display: flex; flex-direction: column; align-items: flex-start; gap: 1mm; color: #5F7176; } .in-lock .by span { font-size: ${TS.footer}pt; line-height: 1; }
 .in-approve { border: 1px solid #DCE2E1; border-top: 0.6mm solid #0B272F; padding: 7mm 7mm 6mm; break-inside: avoid; }
 .in-approve .st { display: inline-block; border: 1px solid var(--acc); color: #0B272F; padding: 1.2mm 5mm; font-size: ${TS.body}pt; font-weight: 500; margin-bottom: 6mm; }
 .in-approve .st.live { border-style: dashed; color: #5F7176; }
@@ -463,7 +472,7 @@ export function institutionalReport(input, options = {}) {
   const url = mark?.url || null;
   // المعتمدة تطبع البصمة المجمّدة وحدها (مصدر الرمز نفسه)؛ بلا مجمّدة لا بصمة مطبوعة تُكتب باليد فلا تُطابَق
   const shownFp = approved ? mark?.fingerprint || null : fp;
-  add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">${esc(DOC_APPROVED_AR)} · ${esc(fmt(m.approved_at) || '')}</span>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
+  add('Approval', 'الاعتماد', `<div class="in-approve"><div class="in-lock">${lockup(identityOf(m).brand)}</div>${approved ? `<span class="st">${esc(DOC_APPROVED_AR)} · ${esc(fmt(m.approved_at) || '')}</span>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
     <div class="in-sign">${signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('')}</div>
     <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span>${shownFp ? `<span>FINGERPRINT <b>${esc(shownFp)}</b></span>` : ''}</p>
     ${mark ? mark.html : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p>${LIVE_RING()}</div>`}</div>`,

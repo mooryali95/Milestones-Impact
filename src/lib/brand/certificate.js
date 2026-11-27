@@ -8,6 +8,7 @@
 // كل نص يمر عبر esc().
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 import { C, esc } from './doc.js';
+import { logoClass } from './logo.js';
 
 const LOGO = LOGO_SRC.replace(/<\?xml[^>]*>\s*/, '');
 
@@ -132,12 +133,13 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 40
 .lattice { position: absolute; inset: 12mm; opacity: .5;
   background-image: url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22'><path d='M0 11 11 0 22 11 11 22Z' fill='none' stroke='${C.graphite}' stroke-width='.35' opacity='.07'/></svg>`)}"); }
 .content { position: absolute; inset: 18mm 24mm 23mm; display: grid; grid-template-rows: auto 1fr auto; text-align: center; }
-.brands { display: flex; align-items: center; justify-content: center; gap: 8mm; direction: ltr; height: 17mm; }
+.brands { display: flex; align-items: center; justify-content: center; gap: 8mm; direction: ltr; height: 22mm; }
 .brands .mi svg { height: 15mm; width: auto; display: block; }
-.brands .sep { width: 1px; height: 12mm; background: ${C.gold}; opacity: .6; }
+.brands .sep { width: 0.3mm; height: 15mm; background: ${C.gold}; opacity: .8; }
 .brands .org { display: grid; justify-items: center; gap: 1mm; }
-.brands .org img { max-height: 13mm; max-width: 48mm; object-fit: contain; display: block; }
-.brands .org small { font: 400 8pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; direction: rtl; }
+.brands .org img { height: 15mm; width: auto; max-width: 48mm; object-fit: contain; display: block; }
+.brands .org.t img { max-width: 18mm; }
+.brands .org small { font: 400 9pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; direction: rtl; }
 .main { align-self: center; }
 .kind-en { font: 400 8pt "Noto Sans", sans-serif; letter-spacing: .28em; color: ${C.gold}; text-transform: uppercase; margin: 0 0 1.5mm; }
 .kind { font-weight: 400; font-size: 28pt; line-height: 1.2; margin: 0; }
@@ -185,7 +187,7 @@ ${opts.print ? '' : `<div class="toolbar"><button class="pri" data-act="pdf">ت�
   <div class="content">
     <header class="brands">
       <div class="mi">${LOGO}</div>
-      ${co ? `<i class="sep"></i><div class="org"><img src="${esc(c.org.logo)}" alt="${esc(c.org.name)}"><small>بالشراكة مع ${esc(c.org.name)}</small></div>` : ''}
+      ${co ? `<i class="sep"></i><div class="org ${logoClass(c.org.logo)}"><img src="${esc(c.org.logo)}" alt="${esc(c.org.name)}"><small>بالشراكة مع ${esc(c.org.name)}</small></div>` : ''}
     </header>
     <section class="main">
       <p class="kind-en">${kindEn}</p>

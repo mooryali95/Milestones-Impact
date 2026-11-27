@@ -85,11 +85,12 @@ describe('الغلاف الفاخر (المرحلة 25)', () => {
     expect(mast).toMatch(/class="ctlrow">.*<span class="stamp">مسودة للمراجعة<\/span>/);
     expect(cr(C.goldText, C.paper)).toBeGreaterThanOrEqual(4.5);
   });
-  it('لوحة بيضاء تحمي الشعار بحدود 18 مم ارتفاعًا و30 مم عرضًا أدنى', () => {
-    expect(mast).toContain('class="org plate"');
+  // قرار المالك 2026-11-27: المقاس بفئة أبعاد الشعار (logo.js) بدل حد أدنى ثابت للعرض؛ لا ارتفاع يتجاوز 24 مم
+  it('لوحة بيضاء تحمي الشعار، والمقاس بفئة الأبعاد بلا حد أدنى للعرض', () => {
+    expect(mast).toMatch(/class="org plate [wst]"/);
     expect(get('.mast.co .org.plate')).toContain(`background-color: ${C.paper}`);
-    expect(get('.mast.co .org img')).toMatch(/max-height: 18mm/);
-    expect(get('.mast.co .org img')).toMatch(/min-width: 30mm/);
+    for (const k of ['w', 's', 't']) expect(Number(get(`.mast.co .org.${k} img`).match(/height: ([\d.]+)mm/)[1])).toBeLessThanOrEqual(24);
+    expect(css(h)).not.toMatch(/min-width: 30mm/);
   });
   it('خط الجهة 1.6 مم عبر structuralAccent، وحد جرافيتي حين يقل التباين عن 1.5:1', () => {
     expect(get('.mast .accent')).toMatch(/height: 1\.6mm/);

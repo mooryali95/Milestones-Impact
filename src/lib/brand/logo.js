@@ -113,8 +113,74 @@ export async function processLogo(file, { maxSide = 1600 } = {}) {
   const trimmed = outCtx.getImageData(0, 0, box.w, box.h);
   const ink = inkColor(trimmed.data);
   const report = inspect({ width: box.w, height: box.h, bg, cleared, ink });
+  const small = document.createElement('canvas');
+  const k = Math.min(1, 64 / Math.max(box.w, box.h));
+  small.width = Math.max(1, Math.round(box.w * k)); small.height = Math.max(1, Math.round(box.h * k));
+  const sctx = small.getContext('2d', { willReadFrequently: true });
+  sctx.drawImage(out, 0, 0, small.width, small.height);
+  const light = isLightLogo(sctx.getImageData(0, 0, small.width, small.height).data);
   const dataUrl = out.toDataURL('image/png');
   monochrome(trimmed.data);
   outCtx.putImageData(trimmed, 0, 0);
-  return { dataUrl, mono: out.toDataURL('image/png'), report, width: box.w, height: box.h, background: bg.kind };
+  return { dataUrl, mono: out.toDataURL('image/png'), report, width: box.w, height: box.h, background: bg.kind, light, aspect: aspectClass(box.w / box.h) };
+}
+
+// ── أبعاد الشعار وفئته (تُحسب مرة هنا، وتستعملها الوثيقة والشهادة) ──
+// عريض (نسبة > 3) · مربع (0.8 إلى 3) · طويل (< 0.8). الفئة تحدد الارتفاع والعرض الأقصى في CSS (.org.w/.org.s/.org.t)
+export const aspectClass = (ratio) => (!(ratio > 0) ? 's' : ratio > 3 ? 'w' : ratio < 0.8 ? 't' : 's');
+
+const decode = (src) => {
+  const m = /^data:image\/([a-z+]+);base64,(.*)$/i.exec(String(src || ''));
+  if (!m) return null;
+  try { return { type: m[1].toLowerCase(), bin: atob(m[2]) }; } catch { return null; }
+};
+const u32 = (s, i) => ((s.charCodeAt(i) << 24) | (s.charCodeAt(i + 1) << 16) | (s.charCodeAt(i + 2) << 8) | s.charCodeAt(i + 3)) >>> 0;
+const u16 = (s, i) => (s.charCodeAt(i) << 8) | s.charCodeAt(i + 1);
+
+function svgDims(text) {
+  const vb = /viewBox\s*=\s*["']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text);
+  if (vb) return { w: +vb[1], h: +vb[2] };
+  const w = /<svg[^>]*\swidth\s*=\s*["']([\d.]+)/i.exec(text), h = /<svg[^>]*\sheight\s*=\s*["']([\d.]+)/i.exec(text);
+  return w && h ? { w: +w[1], h: +h[1] } : null;
+}
+
+// الأبعاد الطبيعية من رابط data: (ترويسة PNG، مقطع SOF في JPEG، viewBox في SVG)؛ وإلا null
+export function logoDims(src) {
+  const d = decode(src);
+  if (!d) return null;
+  const s = d.bin;
+  if (d.type === 'svg+xml') return svgDims(s);
+  if (d.type === 'png' && s.slice(12, 16) === 'IHDR') return { w: u32(s, 16), h: u32(s, 20) };
+  if (/jpe?g/.test(d.type)) {
+    for (let i = 2; i + 9 < s.length;) {
+      if (s.charCodeAt(i) !== 0xff) return null;
+      const mk = s.charCodeAt(i + 1);
+      if (mk >= 0xc0 && mk <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(mk)) return { w: u16(s, i + 7), h: u16(s, i + 5) };
+      i += 2 + u16(s, i + 2);
+    }
+  }
+  return null;
+}
+
+export const logoClass = (src, dims = logoDims(src)) => aspectClass(dims && dims.h ? dims.w / dims.h : null);
+
+// الشعار الفاتح: متوسط الإضاءة النسبية للبكسلات المعتمة فوق 0.85 (عينة على canvas صغير في المتصفح)
+export function isLightLogo(data, threshold = 0.85) {
+  let s = 0, n = 0;
+  for (let i = 0; i < data.length; i += 4) if (data[i + 3] > 200) { s += lum([data[i], data[i + 1], data[i + 2]]); n += 1; }
+  return n > 0 && s / n > threshold;
+}
+
+const hexRgb = (h) => { let x = h.replace('#', ''); if (x.length === 3) x = x.split('').map((c) => c + c).join(''); return [0, 2, 4].map((i) => parseInt(x.slice(i, i + 2), 16)); };
+// SVG بألوان التعبئة الصريحة (fill="#..." أو fill:#...)؛ بلا ألوان يُعد غير فاتح
+export function svgIsLight(text, threshold = 0.85) {
+  const cols = [...String(text).matchAll(/fill\s*[:=]\s*["']?\s*(#[0-9a-f]{6}|#[0-9a-f]{3})\b/gi)].map((m) => hexRgb(m[1]));
+  if (!cols.length) return false;
+  return cols.reduce((a, c) => a + lum(c), 0) / cols.length > threshold;
+}
+
+// تزامني للوثيقة: SVG بألوانه، والنقطي null (يُكشف في processLogo ويُحفظ مع الشعار)
+export function logoIsLight(src) {
+  const d = decode(src);
+  return d && d.type === 'svg+xml' ? svgIsLight(d.bin) : null;
 }

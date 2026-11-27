@@ -7,6 +7,7 @@
 // المرجع: Milestone-Impact-Brand-Brief (الألوان، الخطوط الخفيفة، الماسة، الختم مرة واحدة).
 // كل نص يدخل الوثيقة يمر عبر esc(): النافذة ترث نطاق التطبيق.
 import { pdfServer } from './pdf-source.js';
+import { logoClass, logoIsLight } from './logo.js';
 import { DOC_LIVE_HEAD_AR, DOC_WATERMARK_AR, REPORT_RIGHTS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 
@@ -126,15 +127,22 @@ export function structuralAccent(...candidates) {
 }
 
 // ── قواعد التشارك (قرار المالك 2026-11-25): الجهة في الصدارة، والبرنامج (هوية الدفعة) سطر توقيع صغير، وMilestone علامة خافتة.
-// شعار الجهة: ارتفاع أقصى 18 مم وعرض أقصى 70 مم ومساحة أمان 3 مم حوله. شعار الدفعة: ارتفاع أقصى 9 مم. علامة Milestone: 6 مم
+// شعار الجهة بفئة أبعاده (logo.js): عريض 14 مم بعرض أقصى 64 مم، مربع 20 مم، طويل 24 مم بعرض أقصى 20 مم، داخل لوحة 4×5 مم. شعار الدفعة 9 مم. علامة Milestone 9 مم
 function coBrand(b, id, kindLabel, ctl) {
-  const logo = safeLogo(b.logo);
-  const org = logo ? `<img src="${esc(logo)}" alt="${esc(b.name || '')}">`
-    : `<span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span>`;
   const plogo = safeLogo(b.programLogo);
   const program = b.program || plogo ? `<div class="prog">${plogo ? `<img src="${esc(plogo)}" alt="${esc(b.program || '')}">` : ''}${b.program ? `<span>${esc(b.program)}</span>` : ''}</div>` : '';
   const ref = ctl ? '' : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
-  return `<div class="top"><div class="org${logo ? ' plate' : ''}">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>${program}${ref}`;
+  return `${lockup(b)}${program}${ref}`;
+}
+
+// العلامة المشتركة (الغلاف وصفحة الاعتماد): شعار الجهة بفئة أبعاده، فاصل ذهبي بارتفاعه، ثم «بإعداد» فوق علامة المنصة.
+// الفئة والكشف الفاتح من logo.js مرة واحدة؛ b.logoLight (من processLogo) يقدَّم على كشف SVG
+export function lockup(b) {
+  const logo = safeLogo(b.logo);
+  const light = logo && (b.logoLight ?? logoIsLight(logo));
+  const org = logo ? `<div class="org plate ${logoClass(logo)}${light ? ' light' : ''}"><img src="${esc(logo)}" alt="${esc(b.name || '')}"></div>`
+    : `<div class="org"><span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span></div>`;
+  return `<div class="top">${org}<i class="dv"></i><div class="by"><span>بإعداد</span>${LOGO}</div></div>`;
 }
 
 // ── المرحلة 25: خط لون الجهة أسفل الغلاف (1.6 مم موحدًا). يمر بـ structuralAccent، وإن لم يجتزه يُرسم بلون الجهة الخام
@@ -283,18 +291,24 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .mast > .stamp { position: absolute; top: 6mm; inset-inline-end: 18mm; }
 .mast .ctlrow { display: flex; align-items: center; justify-content: space-between; gap: 4mm; margin-top: 3mm; flex-wrap: wrap; }
 .mast .ctl { font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .14em; color: ${C.muted}; direction: ltr; unicode-bidi: isolate; }
-.mast.co .top { direction: rtl; align-items: center; }
-.mast.co .org { padding: 3mm; margin: -3mm; }
-.mast.co .org.plate { background: ${C.paper}; background-color: ${C.paper}; margin: 0; border-radius: 1mm; }
-.mast.co .org img { max-height: 18mm; min-width: 30mm; max-width: 70mm; display: block; object-fit: contain; }
+.mast.co .top { direction: rtl; align-items: center; justify-content: flex-start; }
+.mast.co .org { display: flex; align-items: center; }
+.mast.co .org.plate { background: ${C.paper}; background-color: ${C.paper}; margin: 0; padding: 4mm 5mm; border: 0.25mm solid ${C.line}; border-radius: 0; box-shadow: none; }
+.mast.co .org.plate.light { background: ${C.graphite}; background-color: ${C.graphite}; }
+.mast.co .org img { display: block; width: auto; object-fit: contain; }
+.mast.co .org.w img { height: 14mm; max-width: 64mm; }
+.mast.co .org.s img { height: 20mm; max-width: 60mm; }
+.mast.co .org.t img { height: 24mm; max-width: 20mm; }
+.mast.co .dv { display: block; width: 0.3mm; align-self: stretch; margin: 0 6mm; background: ${C.gold}; }
+.mast.co .org.w + .dv { align-self: center; height: 14mm; } .mast.co .org.s + .dv { align-self: center; height: 20mm; } .mast.co .org.t + .dv { align-self: center; height: 24mm; }
 .mast.co .prog { display: flex; align-items: center; gap: 2.5mm; margin-top: 6mm; direction: rtl; font-size: ${TS.small}pt; font-weight: 400; color: ${C.slate}; }
 .mast.co .prog img { max-height: 9mm; max-width: 40mm; object-fit: contain; display: block; }
 .mast.co .meta { grid-template-columns: repeat(var(--n, 3), 1fr); row-gap: 4mm; }
 .mast.co .meta div:first-child { border-inline-start: 0; padding-inline-start: 0; }
-.mast.co .org .nm { font-weight: 400; font-size: ${TS.chapter}pt; line-height: 1.3; color: ${C.graphite}; display: block; }
-.mast.co .org .nm small { display: block; font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.muted}; text-transform: uppercase; }
-.mast.co .by { display: flex; align-items: center; gap: 2mm; direction: rtl; font-size: ${TS.footer}pt; color: ${C.muted}; }
-.mast.co .by svg { height: 6mm; width: auto; display: block; }
+.mast.co .org .nm { font-weight: 500; font-size: ${TS.h3}pt; line-height: 1.4; color: ${C.graphite}; display: block; }
+.mast.co .by { display: flex; flex-direction: column; align-items: flex-start; gap: 1mm; direction: rtl; color: ${C.muted}; }
+.mast.co .by span { font-size: ${TS.footer}pt; line-height: 1; }
+.mast.co .by svg { height: 9mm; width: auto; display: block; }
 .mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.6mm; }
 .mast .accent.guard { box-shadow: 0 .3mm 0 ${C.graphite}; }
 .mast.co { padding: 14mm 18mm 12mm; }
@@ -353,9 +367,9 @@ function runningHead(meta) {
   const color = (b && brandColor(b.color)) || C.gold;
   const org = b ? (logo ? `<img src="${esc(logo)}" alt="">` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
   return `<div id="pdf-head" style="position:absolute;top:0;left:0;width:794px;height:${mmPx(PAGE_MM.top)}px;background:#fff;direction:rtl;display:flex;align-items:center;gap:10px;padding:14px ${mmPx(PAGE_MM.side)}px 0;font:400 ${TYPE_SCALE.footer}pt 'Noto Kufi Arabic',sans-serif;color:${C.muted}">
-<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:22px">${org}</span>` : ''}</span>${b ? '' : `<span style="display:flex;align-items:center;direction:ltr" class="ph-mi">${LOGO}</span>`}
+<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:6mm">${org}</span>` : ''}</span><span style="display:flex;align-items:center;direction:ltr;margin-inline-start:auto" class="ph-mi">${LOGO}</span>
 <i style="position:absolute;bottom:12px;left:${mmPx(PAGE_MM.side)}px;right:${mmPx(PAGE_MM.side)}px;height:1px;background:${color};opacity:.7"></i>
-</div><style>#pdf-head img{max-height:22px;max-width:150px;object-fit:contain;display:block}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:17px;width:auto;display:block}</style>`;
+</div><style>#pdf-head .ph-org img{height:6mm;max-width:40mm;object-fit:contain;display:block}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:4mm;width:auto;display:block}</style>`;
 }
 
 // يفتح الوثيقة في نافذة مستقلة بشريط «طباعة أو حفظ PDF». يعيد false إن حُجبت النافذة.
