@@ -178,7 +178,7 @@ for (const width of [1440, 390]) {
     const calls = await admin(page, width, { attendance });
     await open(page, '#/leaders/activities');
     // زر الحضور في «الحضور والجلسات» يحمل العدد
-    await page.getByRole('button', { name: '1 حاضر' }).click();
+    await page.getByRole('button', { name: /^سجّل الحضور \(1/ }).click();
     const sheet = page.getByRole('dialog', { name: 'ورقة الحضور' });
     await expect(sheet.getByRole('heading', { name: 'اليوم 1' })).toBeVisible();
     await expect(sheet.locator('.ats-count')).toContainText('1 من 3 حضروا');

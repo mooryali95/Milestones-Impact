@@ -14,7 +14,7 @@
 // confirmDelete() ← سؤال الحذف بالشكل نفسه (معاينة من الخادم)، وقيمة مربعه تمر إلى onDelete({ [name]: قيمة })
 // choice ← اختيار واحد صريح بأزرار راديو: options [{ value, label, help, disabled?, note? }]، وrequired نص الخطأ إن لم يُختر (بلا قيمة مسبقة)
 // الإغلاق دون حفظ (Esc أو النقر خارجه أو «إلغاء») يسأل أولًا إن تغيّر شيء، فلا يضيع ما كُتب سهوًا.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useEscape, useGuardedClose, useUI } from './ui.jsx';
 
 // ISO ← قيمة حقل datetime-local بتوقيت المتصفح
@@ -24,7 +24,7 @@ export const toLocal = (iso) => {
   return isNaN(d) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
 };
 
-export default function Form({ title, fields, values = {}, onSave, onDelete, onClose, notes = null, confirmSave = null, confirmDelete = null, saveLabel = 'حفظ' }) {
+export default function Form({ title, fields, values = {}, onSave, onDelete, onClose, notes = null, confirmSave = null, confirmDelete = null, saveLabel = 'حفظ', focusField = null }) {
   const { confirm } = useUI();
   const [start] = useState(() => Object.fromEntries(fields.map((f) => [f.name,
     f.type === 'check' ? !!values[f.name]
@@ -37,6 +37,8 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
   const [busy, setBusy] = useState(false);
   const close = useGuardedClose(JSON.stringify(v) !== JSON.stringify(start), () => onClose());
   useEscape(close);
+  // focusField: يفتح النموذج على حقل بعينه (مثل «حدد الموعد» على حقل البدء، المرحلة 12)
+  useEffect(() => { if (!focusField) return; const el = document.getElementById(`f-${focusField}`); (el?.matches('input,select,textarea') ? el : el?.querySelector('input:not([disabled]),select,textarea'))?.focus(); }, [focusField]);
 
   const set = (name) => (e) => setV({ ...v, [name]: e.target.value });
   const submit = async (e) => {

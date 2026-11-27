@@ -558,7 +558,7 @@ export async function overview() {
     db.from('stage_requirements').select('id, program_id, code, title_ar, stage_key, kind, config, dimension, level, active, required').in('kind', VERIFIED_KINDS).order('sort'),
     // بـ* لتحمل invited_at بعد الترحيل 20261110140000 وتعمل قبله؛ والسر لا يخرج إلى اللوحة (يُحذف أدناه)
     db.from('workshop_sessions').select('*').order('starts_at', { nullsFirst: false }),
-    listed(db.from('workshop_attendance').select('session_id, participants!inner(is_demo)'), 'participants'),
+    listed(db.from('workshop_attendance').select('session_id, participant_id, participants!inner(is_demo)'), 'participants'),
     // group-once-exempt: قائمة عرض للجلسات الفردية لا جمع لخبير، وصفوف الجلسات الجماعية تُحذف منها أدناه وتُعرض بكيانها
     db.from('coaching_sessions').select('*, participants(full_name, email), experts(full_name)').or(`starts_at.gte.${since},status.in.(booked,requested)`)
       .order('starts_at', { ascending: true }).limit(500),
@@ -582,11 +582,16 @@ export async function overview() {
   const delivery = cohortIds.length ? ((await db.from('cohorts').select('id, delivery').in('id', cohortIds)).data || []) as any[] : [];
   const deliveryOf = Object.fromEntries(delivery.map((c: any) => [c.id, c.delivery || {}]));
   const reqOf = Object.fromEntries((reqs.data || []).map((r: any) => [r.id, r]));
+  // المتوقع لكل جلسة (المرحلة 12، «سجّل الحضور (0 من n)»): بـattendancePeople نفسها التي تعدّ بها ورقة الحضور. تعذّرها لا يسقط الشاشة: الزر بالعدد وحده
+  const attOf: Record<string, any[]> = {};
+  for (const a of att.data || []) (attOf[a.session_id] ||= []).push(a);
+  const expectedOf: Record<string, number> = await attendanceWorld(true).then((w) => Object.fromEntries((ws.data || []).filter((s: any) => reqOf[s.requirement_id])
+    .map((s: any) => [s.id, attendancePeople(reqOf[s.requirement_id], w, s.cohort_id || null, attOf[s.id] || []).length]))).catch((e) => { console.error('activities expected', e); return {}; });
   const verifyOf = (s: any) => sessionVerify(reqOf[s.requirement_id], deliveryOf[s.cohort_id]);
   return {
     success: true,
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
-    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s), outside: (outside as any)[s.id] || [], trainer: (s.expert_id && trainerOf[s.expert_id]) || null }; delete row.secret; return row; }),
+    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row: any = { ...s, attended: counts[s.id] || 0, ...(s.id in expectedOf ? { expected: expectedOf[s.id] } : {}), verify: verifyOf(s), outside: (outside as any)[s.id] || [], trainer: (s.expert_id && trainerOf[s.expert_id]) || null }; delete row.secret; return row; }),
     // صفوف الجلسات الجماعية تُعرض بكيانها في coaching_groups لا صفًّا صفًّا بين الفردية
     coaching: (coach.data || []).filter((x: any) => !x.group_id),
     coaching_groups: groups.groups || [], groups_ready: groups.ready !== false, ...(groups.failed ? { groups_failed: true } : {}),

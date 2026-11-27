@@ -150,7 +150,13 @@ test('الإدارة: جلسات الورشة ورمز الحضور وتأكيد
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'الحضور والجلسات' }).click();
-  await expect(page.getByText('12 حاضر')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'سجّل الحضور (12)' })).toBeVisible();
+  // المرحلة 12: زر الحضور يقول ما يفتح ويفتح حوارًا، ويُعطل للجلسة التي لم تبدأ بسبب ظاهر
+  await expect(page.getByRole('button', { name: 'سجّل الحضور (12)' })).toHaveAttribute('aria-haspopup', 'dialog');
+  const future = page.getByRole('button', { name: 'سجّل الحضور (0)' });
+  await expect(future).toBeDisabled();
+  await expect(page.locator('.ws-att-why')).toHaveText('يُفتح عند بدء الجلسة');
+  if (process.env.P12_SHOTS) await page.locator('.la-body').screenshot({ path: `${process.env.P12_SHOTS}/p12-activities.png` });
   if (SHOTS) await page.locator('.la-body').screenshot({ path: `${SHOTS}/admin-workshops.png` });
   await expect(page.getByText('عن بعد', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'اعرض رمز الحضور' }).first().click();
