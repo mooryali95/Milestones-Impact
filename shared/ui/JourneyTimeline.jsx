@@ -8,8 +8,8 @@
 // السحب (D1، تصور 2026-11-18 ب5.3): بـeditable وحده (وضع تحرير خطة الدفعة لمن يكتب) يصير الشريط قابلًا للسحب بالمؤشر
 // (فأرة وقلم ولمس) وطرفه لتغيير مدته، وبلوحة المفاتيح من زر المقبض. المكوّن يقيس المؤشر نسبةً على المسار ويرسم الشبح
 // والسطر وحدهما، والمعنى كله عند المضيف (dropToEdit في cohort-journey.js). على الحاسوب وحده: الهاتف بلا مقابض.
-import React, { useEffect, useRef, useState } from 'react';
-import { BOARD_COL_MIN, boardMinWidth } from '../../supabase/functions/leaders-api/journey-timeline.js';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { BOARD_COL_MIN, boardMinWidth, tickShortAr } from '../../supabase/functions/leaders-api/journey-timeline.js';
 
 // أيقونات الأنواع بالخط نفسه الذي في Ico.jsx (سماكة واحدة تأخذ لون النص)، زخرفية دائمًا والمعنى في aria-label
 const PATHS = {
@@ -38,7 +38,22 @@ function Glyph({ name, size = 18 }) {
 }
 
 // النشاط: مربع مملوء للإلزامي ومفرغ متقطع للاختياري، وشارة الطريقة، وساعة لما ينقصه موعد
-function Act({ a, sel, onPick, onOpen }) {
+// pop (المرحلة 19، محرر الرحلة): البلاطة زر إفصاح بـaria-expanded، وتحت الأيقونة اسم النشاط القصير من title_ar (يُقص بالنقاط
+// في CSS والاسم كاملًا في DOM، فيبدأ aria-label بالنص المرئي نفسه)، والنقر يفتح التفاصيل ملاصقة لها لا في لوحة ثابتة
+function Act({ a, sel, onPick, onOpen, pop = null }) {
+  if (pop) {
+    return (
+      <button type="button" className={`jt-act jt-tile${a.required ? ' req' : ' opt'}${a.undated ? ' tbd' : ''}${sel ? ' on' : ''}`}
+        aria-label={a.aria_ar} aria-expanded={sel} aria-controls={sel ? pop.id : undefined} data-act={a.id}
+        onClick={(e) => pop.toggle(a.id, e.currentTarget)} onDoubleClick={() => onOpen?.(a)}>
+        <span className="jt-tile-ico"><Glyph name={a.icon} />
+          {a.mode && <span className="jt-badge mode"><Glyph name={a.mode} size={10} /></span>}
+          {a.undated && <span className="jt-badge tbd"><Glyph name="clock" size={10} /></span>}
+        </span>
+        <span className="jt-tile-name">{a.title}</span>
+      </button>
+    );
+  }
   return (
     <button type="button" className={`jt-act${a.required ? ' req' : ' opt'}${a.undated ? ' tbd' : ''}${sel ? ' on' : ''}`}
       aria-label={a.aria_ar} aria-pressed={sel} data-act={a.id}
@@ -68,7 +83,30 @@ function measureNow(ref, k) {
   return { top: br.top - tr.top, height: br.height };
 }
 
-function Panel({ a, model, onOpen, openLabel }) {
+function Panel({ a, model, onOpen, openLabel, pop = null }) {
+  if (pop) {
+    if (!a) return null;
+    return (
+      <div className="jt-panel jt-pop" id={pop.id} role="dialog" aria-modal="false" aria-labelledby={`${pop.id}-t`} tabIndex={-1} ref={pop.ref}
+        style={pop.at ? { top: `${pop.at.top}px`, insetInlineStart: `${pop.at.start}px` } : undefined}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); pop.close(); } }}>
+        <p className="jt-eyebrow">النشاط</p>
+        <h4 id={`${pop.id}-t`}>{a.title}</h4>
+        <p className="jt-chips">
+          <span>مرحلة {a.stage_title}</span><span>{a.kind_ar}</span>
+          <span className={a.required ? 'jt-chip req' : 'jt-chip opt'}>{a.required ? 'إلزامي' : 'اختياري'}</span>
+          {a.mode_ar && <span>{a.mode_ar}</span>}{a.level_ar && <span className="jt-chip">{a.level_ar}</span>}
+        </p>
+        <p className={`jt-when${a.undated ? ' tbd' : ''}`}>{a.undated && <Glyph name="clock" size={14} />} {a.when_ar}</p>
+        {a.outside && <p className="jt-when tbd">{model.outside_ar}</p>}
+        <p className="jt-muted">{a.owner_ar}</p>
+        <div className="jt-pop-acts">
+          {onOpen && <button type="button" className="jt-open" onClick={() => { pop.close(false); onOpen(a); }}>{openLabel(a)}</button>}
+          <button type="button" className="jt-open ghost" onClick={() => pop.close()}>أغلق</button>
+        </div>
+      </div>
+    );
+  }
   if (!a) return <div className="jt-panel" aria-live="polite"><p className="jt-muted">مرر المؤشر أو اضغط أي نشاط لترى تفاصيله.</p></div>;
   return (
     <div className="jt-panel" aria-live="polite">
@@ -118,8 +156,18 @@ function Grips({ k, title, editable, pointer, clicked }) {
 // usage: مؤشر استخدام كل خدمة بمفتاحها («استفاد 7 من 20») من خريطة الدفعة، إن قُرئت (T2)
 // add (المرحلة 4، كما في JourneyAxis): وضع إضافة ورشة بزر صريح. فيه يغطي كل شريط مرحلة ممر يُختار منه يوم بالمؤشر أو بالأسهم،
 // والنقرة تسلّم المرحلة واليوم للمضيف (add.onPick). لا يجتمع مع السحب (editable)، وعلى الحاسوب وحده كاللوحة نفسها
-export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [], editable = null, usage = null, add = null }) {
-  const [sel, setSel] = useState(model?.selected || null);
+// pop (المرحلة 19): بلاطات بأسمائها وتفاصيل ملاصقة للبلاطة (ودرج سفلي على الهاتف) بدل اللوحة الثابتة؛ لمحرر الرحلة وحده،
+// فتبقى لوحة الدفعة كما اعتُمدت (تبدأ بأول نشاط ينقصه موعد)
+export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [], editable = null, usage = null, add = null, pop: popMode = false }) {
+  const [sel, setSel] = useState(popMode ? null : model?.selected || null);
+  // الإطار المتمرر: الحافتان (هل بقي ما يُمرر نحو البداية أو النهاية) وموضع التفاصيل الملاصقة للبلاطة
+  const scrollRef = useRef(null);
+  const deskRef = useRef(null);
+  const secRef = useRef(null);
+  const popRef = useRef(null);
+  const tileRef = useRef(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
+  const [popAt, setPopAt] = useState(null);
   // اليوم تحت المؤشر أو المختار بالأسهم على شريط مرحلة في وضع الإضافة: { key, info, kbd, band }
   const [addPick, setAddPick] = useState(null);
   const adding = !!add?.on && !editable;
@@ -138,6 +186,76 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
     window.addEventListener('keydown', esc, true);
     return () => window.removeEventListener('keydown', esc, true);
   }, [dragging, editable]);
+  // الحافتان: التدرج وزرا التمرير يظهران حيث بقي ما يُمرر. scrollLeft في RTL سالب، فالمقياس قيمته المطلقة
+  const readEdges = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const x = Math.abs(el.scrollLeft);
+    setEdges((o) => { const n = { start: max > 1 && x > 1, end: max > 1 && x < max - 1 }; return o.start === n.start && o.end === n.end ? o : n; });
+  };
+  // موضع التفاصيل على الشاشة العريضة: تحت البلاطة ولا تخرج عن عرض .jt-desk. التفاصيل ابنة القسم (.jt) لا .jt-desk،
+  // فتبقى ظاهرة على الهاتف حيث .jt-desk مخفي، وتصير هناك درجًا سفليًا بـCSS (الموضع المحسوب يُتجاهل)
+  const placePop = () => {
+    const t = tileRef.current, d = deskRef.current, sc = secRef.current;
+    if (!t || !d || !sc || !t.isConnected || !d.offsetWidth) return;
+    const tr = t.getBoundingClientRect(), dr = d.getBoundingClientRect(), sr = sc.getBoundingClientRect();
+    const w = Math.min(320, dr.width);
+    const rtl = getComputedStyle(d).direction === 'rtl';
+    const fromStart = rtl ? dr.right - tr.right : tr.left - dr.left;
+    const deskStart = (rtl ? sr.right - dr.right : dr.left - sr.left) - sc.clientLeft;
+    setPopAt({ top: Math.round(tr.bottom - sr.top - sc.clientTop + 8), start: Math.round(deskStart + Math.max(0, Math.min(fromStart, dr.width - w))) });
+  };
+  // عند الفتح: المرحلة الحالية إلى داخل الإطار (الجارية في الدفعة، وأول مراحل التأهيل في البرنامج)، بتمرير الإطار وحده لا الصفحة
+  const firstKey = model && !model.empty ? (model.stages.find((x) => x.status === 'active') || model.stages.find((x) => x.phase === 'qualification'))?.key : null;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const bar = firstKey && el.querySelector(`[data-stage="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(firstKey) : firstKey}"]`);
+    if (bar && el.scrollWidth > el.clientWidth) {
+      const er = el.getBoundingClientRect(), br = bar.getBoundingClientRect();
+      if (br.left < er.left || br.right > er.right) {
+        const rtl = getComputedStyle(el).direction === 'rtl';
+        el.scrollLeft += rtl ? br.right - er.right + 24 : br.left - er.left - 24;
+      }
+    }
+    readEdges();
+    return undefined;
+  }, [firstKey]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    readEdges();
+    const on = () => {
+      readEdges();
+      if (!(popMode && sel)) return;
+      // البلاطة خرجت من الإطار: تُغلق التفاصيل بلا إعادة تركيز، فلا تشير إلى بلاطة غير ظاهرة
+      const t = tileRef.current;
+      if (t && t.isConnected && el.offsetWidth && el.contains(t)) {
+        const tr = t.getBoundingClientRect(), er = el.getBoundingClientRect();
+        if (tr.right <= er.left || tr.left >= er.right) { setSel(null); return; }
+      }
+      placePop();
+    };
+    el.addEventListener('scroll', on, { passive: true });
+    window.addEventListener('resize', on);
+    return () => { el.removeEventListener('scroll', on); window.removeEventListener('resize', on); };
+  }, [popMode, sel, model]);
+  // التفاصيل الملاصقة: يأخذها التركيز عند الفتح، وEsc أو «أغلق» أو النقر خارجها يغلقها ويعيد التركيز إلى البلاطة
+  useLayoutEffect(() => {
+    if (!popMode || !sel) return undefined;
+    placePop();
+    popRef.current?.focus({ preventScroll: true });
+    const out = (e) => { if (!popRef.current?.contains(e.target) && !tileRef.current?.contains(e.target)) setSel(null); };
+    document.addEventListener('pointerdown', out);
+    return () => document.removeEventListener('pointerdown', out);
+  }, [popMode, sel]);
+  const nudge = (dir) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const rtl = getComputedStyle(el).direction === 'rtl';
+    el.scrollBy({ left: dir * (rtl ? -1 : 1) * Math.round(el.clientWidth * 0.8), behavior: 'smooth' });
+  };
   if (!model) return null;
   const head = `${id}-h`;
   if (model.empty) {
@@ -151,9 +269,14 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   }
   const acts = new Map(model.activities.map((a) => [a.id, a]));
   const stageBy = new Map(model.stages.map((s) => [s.key, s]));
-  const current = acts.get(sel) || acts.get(model.selected) || null;
+  const current = acts.get(sel) || (popMode ? null : acts.get(model.selected)) || null;
   const cohort = model.context === 'cohort';
   const pick = (k) => setSel(k);
+  const pop = popMode ? {
+    id: `${id}-pop`, ref: popRef, at: popAt,
+    toggle: (k, el) => { tileRef.current = el; setSel((o) => (o === k ? null : k)); },
+    close: (refocus = true) => { const t = tileRef.current; setSel(null); if (refocus) t?.focus(); },
+  } : null;
   // ── السحب بالمؤشر: النسبة على المسار باتجاه الزمن، وما تحت المؤشر (الصف والشريط)، وعتبة قبل البدء ──
   const pctOf = (x) => {
     const el = trackRef.current;
@@ -262,7 +385,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
       </div>
       <div className="jt-acts">
         {s.empty ? <span className="jt-none">لا أنشطة بعد</span>
-          : s.activities.map((k) => <Act key={k} a={acts.get(k)} sel={current?.id === k} onPick={pick} onOpen={onOpen} />)}
+          : s.activities.map((k) => <Act key={k} a={acts.get(k)} sel={current?.id === k} onPick={pick} onOpen={onOpen} pop={pop} />)}
       </div>
     </div>
   );
@@ -292,7 +415,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   );
 
   return (
-    <section className={`jt ctx-${model.context}${editable ? ' jt-editable' : ''}${dragging ? ' jt-dragging' : ''}${adding ? ' jt-adding' : ''}`} aria-labelledby={head}
+    <section ref={secRef} className={`jt ctx-${model.context}${pop ? ' jt-popmode' : ''}${editable ? ' jt-editable' : ''}${dragging ? ' jt-dragging' : ''}${adding ? ' jt-adding' : ''}`} aria-labelledby={head}
       onKeyDown={adding ? (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); add.onToggle(); } } : undefined}>
       <header className="jt-head">
         <div>
@@ -308,7 +431,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
       {model.notice && <p className="jt-notice" role="note">{model.notice}</p>}
 
       {/* الحاسوب: المسار على مقياس واحد، يتمرر وحده إن ضاق الحاوي */}
-      <div className="jt-desk">
+      <div className="jt-desk" ref={deskRef}>
         {add && !editable && (
           <div className="jt-addbar">
             <button type="button" className={`jt-add${adding ? ' on' : ''}`} aria-pressed={adding} data-testid="jt-add" onClick={add.onToggle}>
@@ -317,7 +440,15 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
             {adding && <span className="jt-add-hint" role="note">اختر يومًا على شريط المرحلة: النقرة تفتح نموذج الورشة بمرحلتها وتاريخها، ولا يُحفظ شيء قبل تأكيدك. بلوحة المفاتيح: انتقل إلى الشريط بمفتاح Tab، وغيّر اليوم بالأسهم، وافتح النموذج بمفتاح Enter، وأنهِ بمفتاح Esc.</span>}
           </div>
         )}
-        <div className="jt-scroll" tabIndex={0} role="group" aria-label="الخط الزمني، يتحرك بالأسهم">
+        {/* الإطار المتمرر (المرحلة 19): تدرج على حافتي البداية والنهاية حيث بقي ما يُمرر، ومحاذاة للخانات، وزرا تمرير */}
+        <div className={`jt-scrollbox${edges.start ? ' more-start' : ''}${edges.end ? ' more-end' : ''}`}>
+        <button type="button" className="jt-nudge start" title="مرر نحو البداية" aria-disabled={!edges.start} tabIndex={edges.start ? 0 : -1} onClick={() => nudge(-1)} data-testid="jt-nudge-start">
+          <span aria-hidden="true">›</span><span className="jt-sr">مرر نحو البداية</span>
+        </button>
+        <button type="button" className="jt-nudge end" title="مرر نحو النهاية" aria-disabled={!edges.end} tabIndex={edges.end ? 0 : -1} onClick={() => nudge(1)} data-testid="jt-nudge-end">
+          <span aria-hidden="true">‹</span><span className="jt-sr">مرر نحو النهاية</span>
+        </button>
+        <div className="jt-scroll" ref={scrollRef} tabIndex={0} role="group" aria-label="الخط الزمني، يتحرك بالأسهم">
           <div className="jt-track" ref={trackRef} style={{ minWidth: `${boardMinWidth(model.slots)}px` }} onPointerMove={editable ? onPointerMove : undefined} onPointerUp={editable ? onPointerUp : undefined}
             onPointerCancel={editable ? onPointerCancel : undefined} onLostPointerCapture={editable ? onPointerUp : undefined}>
             {model.today && <div className="jt-today" style={{ insetInlineStart: `${model.today.at}%` }}><span>{model.today.label}</span></div>}
@@ -347,7 +478,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                     {trackHead(s)}
                     <div className="jt-acts">
                       {s.empty ? <span className="jt-none">لا أنشطة بعد</span>
-                        : s.activities.map((k) => <Act key={k} a={acts.get(k)} sel={current?.id === k} onPick={pick} onOpen={onOpen} />)}
+                        : s.activities.map((k) => <Act key={k} a={acts.get(k)} sel={current?.id === k} onPick={pick} onOpen={onOpen} pop={pop} />)}
                     </div>
                   </div>
                 ))}
@@ -368,7 +499,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                       </div>
                       <div className="jt-acts">
                         {s.empty ? <span className="jt-none">لا أنشطة بعد</span>
-                          : s.activities.map((k) => <Act key={k} a={acts.get(k)} sel={current?.id === k} onPick={pick} onOpen={onOpen} />)}
+                          : s.activities.map((k) => <Act key={k} a={acts.get(k)} sel={current?.id === k} onPick={pick} onOpen={onOpen} pop={pop} />)}
                       </div>
                     </li>
                   ))}
@@ -396,9 +527,10 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
               <GhostBar ghost={ghost} band={bandNow || measureNow(trackRef, kbdBand)} />
             )}
             <div className="jt-row jt-ruler">
-              {model.ticks.map((t) => <span key={`${t.at}-${t.label}`} style={{ insetInlineStart: `${t.at}%` }}>{t.label}</span>)}
+              {model.ticks.map((t) => { const short = tickShortAr(t.label); return <span key={`${t.at}-${t.label}`} style={{ insetInlineStart: `${t.at}%` }} title={short ? t.label : undefined}>{short || t.label}</span>; })}
             </div>
           </div>
+        </div>
         </div>
         {adding && <p className="sr-only" aria-live="polite">{addPick?.kbd ? `${stageBy.get(addPick.key)?.title || ''}، ${addPick.info.label}` : ''}</p>}
         {editable && (
@@ -414,7 +546,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
             {services.length > 0 && <li><i className="sq svc" />خدمة لمن يريد، لا تأخذ من الرحلة أيامًا</li>}
             {model.today && <li><i className="ln" />اليوم</li>}
           </ul>
-          <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} />
+          {!pop && <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} />}
         </div>
       </div>
 
@@ -475,6 +607,11 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                                   {a.undated && <span className="jt-chip tbd"><Glyph name="clock" size={11} /> يُحدد لاحقًا</span>}
                                 </p>
                                 <small>{a.when_ar}، {a.owner_ar}</small>
+                                {pop && (
+                                  <button type="button" className={`jt-open sm ghost jt-m-more${sel === a.id ? ' on' : ''}`} data-act-m={a.id}
+                                    aria-expanded={sel === a.id} aria-controls={sel === a.id ? pop.id : undefined} aria-label={`التفاصيل: ${a.title}`}
+                                    onClick={(e) => pop.toggle(a.id, e.currentTarget)}>التفاصيل</button>
+                                )}
                                 {onOpen && <button type="button" className="jt-open sm" onClick={() => onOpen(a)} aria-label={`${openLabel(a)}: ${a.title}`}>{openLabel(a)}</button>}
                               </div>
                             </li>
@@ -489,6 +626,9 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
           </li>
         ))}
       </ol>
+
+      {/* التفاصيل الملاصقة (pop): ملاصقة للبلاطة على العريضة، ودرج سفلي على الهاتف */}
+      {pop && <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} pop={pop} />}
 
       <details className="jt-table">
         <summary>عرض الرحلة جدولًا</summary>

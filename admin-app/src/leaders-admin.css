@@ -1760,3 +1760,12 @@ details.how-it-works[open] > summary { margin-bottom: 12px; }
 .hb-nums b { font-family: var(--font-en); font-size: 1.05rem; color: var(--ink); margin-inline-end: 3px; }
 .hb-ch .hb-meta { color: var(--ink-faint, var(--ink-light)); }
 .hb-ch.empty .hb-meta > span:nth-child(2) { color: inherit; font-weight: inherit; }
+
+/* سطر حالة محرر الرحلة (المرحلة 19): شارة النسخة ثم «لا تمس الدفعة الجارية» ثم عدد ملاحظات الاتساق، و«التفاصيل» مطوية */
+.j-status { display: grid; gap: 6px; width: 100%; }
+.j-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; font-size: .86rem; }
+.j-safe { color: var(--ink-light); }
+.j-details > summary { cursor: pointer; font-size: .84rem; color: var(--ink-light); width: fit-content; }
+.j-details > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+.j-details[open] > summary { margin-bottom: 6px; }
+.j-issues .la-link { text-align: start; }

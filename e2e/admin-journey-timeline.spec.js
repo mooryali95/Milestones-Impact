@@ -88,11 +88,14 @@ test('البرنامج على الحاسوب: المحاور والمراحل ا
   // لا مواعيد ولا خط يوم في البرنامج
   await expect(tl.locator('.jt-dates')).toHaveCount(0);
   await expect(tl.locator('.jt-today')).toHaveCount(0);
-  // كل نشاط زر بوصف كامل، والتركيز يملأ اللوحة
+  // كل نشاط بلاطة باسمها وزر إفصاح بوصف كامل (المرحلة 19)، والنقر يفتح التفاصيل ملاصقة لها
   const act = tl.getByRole('button', { name: /^يوم ورشة عن بعد، مرحلة التدريب، تدريب، إلزامي/ });
   await expect(act).toHaveAttribute('aria-label', 'يوم ورشة عن بعد، مرحلة التدريب، تدريب، إلزامي، الموعد والرابط يُحددان في الدفعة، يكمله الأدمن بتسجيل الحضور');
-  await act.focus();
-  const panel = tl.locator('.jt-panel');
+  await expect(act).toHaveAttribute('aria-expanded', 'false');
+  await expect(act.locator('.jt-tile-name')).toHaveText('يوم ورشة عن بعد');
+  await act.click();
+  await expect(act).toHaveAttribute('aria-expanded', 'true');
+  const panel = tl.locator('.jt-pop');
   await expect(panel.getByRole('heading', { name: 'يوم ورشة عن بعد' })).toBeVisible();
   await expect(panel).toContainText('الموعد والرابط يُحددان في الدفعة');
   await expect(panel.locator('.jt-when.tbd')).toHaveCount(0);

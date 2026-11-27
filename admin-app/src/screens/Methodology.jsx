@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { ASSESSMENT_MISSING_AR, completionSource, journeyCoherence, journeyCtx, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { COMPLETION_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { COMPLETION_AR, JOURNEY_ISSUE_AR, JOURNEY_ISSUE_TONE, JOURNEY_SAFE_AR, journeyIssuesAr, PROGRAM_VERSION_STATE, PROGRAM_VERSION_STATE_TONE } from '../../../supabase/functions/leaders-api/labels.js';
 import {
   CELL_FIELDS, INST_FIELDS, KIND, LVLS, lockReqCode, MODE, MODEL_DEFAULT, PHASE, QUESTIONS_LOCK_AR, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
@@ -15,7 +15,9 @@ import {
 import Form from '../Form.jsx';
 import ItemQuality from './ItemQuality.jsx';
 import { ProgramMilestones } from './Milestones.jsx';
-import { Move, moveKeys, useUI } from '../ui.jsx';
+import { Missing, Move, moveKeys, StatusChip, useUI } from '../ui.jsx';
+import { ScreenHead } from '../PageHeader.jsx';
+import { versionState } from '../program-state.js';
 import { keepSpot, saveQueue, takeSpot } from '../review-queue.js';
 import { readQuery, writeQuery } from '../route.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
@@ -67,7 +69,7 @@ function useSpot(dep) {
     const s = takeSpot(SPOT_SCOPE);
     if (!s) return;
     window.scrollTo?.({ top: s.y });
-    const row = s.id && document.querySelector(`[data-mt-row="${CSS.escape ? CSS.escape(s.id) : s.id}"]`);
+    const row = s.id && [...document.querySelectorAll('[data-mt-row]')].find((e) => e.dataset.mtRow === s.id);
     if (row && !row.contains(document.activeElement)) {
       const btns = row.querySelectorAll(':scope .la-move-btn');
       const btn = btns[spotDir > 0 ? 1 : 0];
@@ -92,23 +94,51 @@ function ProgramBar({ current, onProgram, programs }) {
   );
 }
 
-// فحص الاتساق: هل تتسع كل مرحلة لجلساتها، وهل لكل رمز في النصوص مصدر
-function Coherence({ stages, reqs, opts }) {
-  const issues = journeyCoherence(stages, reqs, opts);
-  if (!issues.length) return <p className="la-chip ok" role="status">الرحلة متسقة: كل رقم في النصوص من إعداد نشاطه، وكل مرحلة تتسع لجلساتها</p>;
+// سطر الحالة الواحد في الترويسة (المرحلة 19): شارة النسخة من versionState (المرحلة 11)، ثم «لا تمس الدفعة الجارية»،
+// ثم «التفاصيل» مطوية: من يصله التعديل (P9، من admin.programs نفسه عبر program-reach.js) وملاحظات الاتساق.
+// لا تُقال العبارة حين يصل التعديل دفعة فورًا (غير مثبتة): يظهر تنبيهها مكانها خارج الطي، فلا يُخفى ما يمس مشاركين.
+// والاتساق صامت بلا ملاحظات، وإلا عددها في السطر ومعه رابط لكل ملاحظة إلى مرحلتها أو متطلبها في القائمة
+export function JourneyStatus({ pid, data, issues = [], onIssue }) {
+  const ok = !!data?.success;
+  const prog = ok ? (data.programs || []).find((p) => p.id === pid) : null;
+  const lines = ok ? journeyAudienceAr(journeyAudience(pid, data.programs, data.cohorts)) : [];
+  const warn = lines.filter((l) => l.tone === 'warn');
+  const info = lines.filter((l) => l.tone !== 'warn');
+  const errors = issues.some((x) => x.level === 'error');
+  const lvl = errors ? 'error' : 'warn';
+  const detailsRef = useRef(null);
   return (
-    <section className="la-card" role="alert" aria-label="اتساق الرحلة">
-      <h3>اتساق الرحلة <small className="la-muted">· {issues.length} ملاحظة</small></h3>
-      <ul className="la-reqs">{issues.map((x, i) => <li key={i}><span className={`la-chip ${x.level === 'error' ? 'bad' : 'warn'}`}>{x.level === 'error' ? 'خطأ' : 'تنبيه'}</span> {x.msg}</li>)}</ul>
-    </section>
+    <div className="j-status">
+      <p className="j-status-line">
+        {!data ? <Missing state="loading" /> : prog ? <StatusChip status={versionState(prog)} labels={PROGRAM_VERSION_STATE} tones={PROGRAM_VERSION_STATE_TONE} /> : null}
+        {ok && !warn.length && <span className="j-safe">{JOURNEY_SAFE_AR}</span>}
+        {issues.length > 0 && (
+          <button type="button" className="la-link j-issues-btn" aria-label={`${journeyIssuesAr(issues.length)}، اعرضها`}
+            onClick={() => { const d = detailsRef.current; if (!d) return; d.open = true; (d.querySelector('.j-issues button') || d.querySelector('summary'))?.focus(); }}>
+            <StatusChip status={lvl} labels={{ [lvl]: journeyIssuesAr(issues.length) }} tones={JOURNEY_ISSUE_TONE} />
+          </button>
+        )}
+      </p>
+      <div className="j-audience" aria-label="من يصله التعديل">
+        {warn.map((l, i) => <p key={i} className="la-note" role="note">{l.text}</p>)}
+        <details className="j-details" ref={detailsRef}>
+          <summary>التفاصيل</summary>
+          {ok ? info.map((l, i) => <p key={i} className="la-muted">{l.text}</p>)
+            : <p className="la-muted">ما تحرره هنا مسودة البرنامج، ولا يصل إلى الدفعات المثبتة على نسخة حتى تحفظه نسخة وترقّيها إليها من «البرامج والدفعات».</p>}
+          {issues.length > 0 && (
+            <ul className="la-reqs j-issues" aria-label="اتساق الرحلة">
+              {issues.map((x, i) => (
+                <li key={i}>
+                  <StatusChip status={x.level === 'error' ? 'error' : 'warn'} labels={JOURNEY_ISSUE_AR} tones={JOURNEY_ISSUE_TONE} />{' '}
+                  {onIssue && (x.req || x.stage) ? <button type="button" className="la-link" onClick={() => onIssue(x)}>{x.msg}</button> : x.msg}
+                </li>
+              ))}
+            </ul>
+          )}
+        </details>
+      </div>
+    </div>
   );
-}
-
-// من يصله ما يُحرَّر هنا (P9): كل دفعة على البرنامج باسمها ونسختها وأعضائها، من admin.programs نفسه (program-reach.js)
-function JourneyAudience({ pid, data }) {
-  if (!data?.success) return <p className="la-muted">ما تحرره هنا مسودة البرنامج، ولا يصل إلى الدفعات المثبتة على نسخة حتى تحفظه نسخة وترقّيها إليها من «البرامج والدفعات».</p>;
-  const lines = journeyAudienceAr(journeyAudience(pid, data.programs, data.cohorts));
-  return <div className="j-audience" aria-label="من يصله التعديل">{lines.map((l, i) => <p key={i} className={l.tone === 'warn' ? 'la-note' : 'la-muted'} role={l.tone === 'warn' ? 'note' : undefined}>{l.text}</p>)}</div>;
 }
 
 // نص الرحلة كما يُعرض للمحرر: مدة القياس بلا قيمة تظهر شارة تنبيه لا رمزًا خامًا (الرمز يُرى في حقل التحرير وحده)
@@ -156,6 +186,15 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
     if (add === 'workshop' && canWrite && first) newReq(first.key, 'workshop');
   }, [pid]);
   // الرحلة الفارغة: زر الخط الزمني ينقل إلى أول «+ مرحلة» (لمن يملك الكتابة)
+  // ملاحظة الاتساق: الرابط ينقل إلى متطلبها (برمزه) أو إلى بطاقة مرحلتها في القائمة، ويضع التركيز فيها
+  const issues = journeyCoherence(stages, reqs, { readyMin: READY_MIN, assessmentMinutes: catalog.assessment_minutes });
+  const toIssue = (x) => {
+    const r = x.req && reqs.find((q) => q.code === x.req);
+    const el = r ? document.getElementById(`jreq-${r.id}`) : x.stage ? [...document.querySelectorAll('[data-mt-row]')].find((e) => e.dataset.mtRow === x.stage) : null;
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    (el.querySelector('button') || el).focus?.({ preventScroll: true });
+  };
   const toAddStage = () => {
     const btn = document.querySelector('[data-add-stage]');
     if (!btn) return;
@@ -164,10 +203,10 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   };
   return (
     <>
-      {onProgram && <ProgramBar current={pid} onProgram={onProgram} programs={pdata?.success ? pdata.programs : null} />}
-      <JourneyAudience pid={pid} data={pdata} />
-      <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} />
-      <Coherence stages={stages} reqs={reqs} opts={{ readyMin: READY_MIN, assessmentMinutes: catalog.assessment_minutes }} />
+      {/* الترويسة الموحدة (المرحلة 7 و18) وسطر حالتها الواحد (المرحلة 19) */}
+      <ScreenHead title="الرحلة والمتطلبات" status={<JourneyStatus pid={pid} data={pdata} issues={issues} onIssue={toIssue} />}
+        actions={onProgram ? <ProgramBar current={pid} onProgram={onProgram} programs={pdata?.success ? pdata.programs : null} /> : null} />
+      <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} pop />
       <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} />
       <p className="la-muted">الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الحاجة، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
       {Object.entries(PHASE).map(([ph, phl]) => (
