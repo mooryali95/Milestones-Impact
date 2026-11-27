@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { pdfPath } from '../../scripts/pdf-path.mjs';
-import { RASTER_SCALE, SCANNED_NOTE_AR } from '../../src/lib/brand/pdf.js';
+import { CHUNK_PX, PAGE, RASTER_SCALE, SCANNED_NOTE_AR } from '../../src/lib/brand/pdf.js';
 
 const root = join(__dirname, '../..');
 const read = (f) => readFileSync(join(root, f), 'utf8');
@@ -44,6 +44,12 @@ describe('البديل المصور: مقياس 3 ومعلَّم نسخة مصو
     const src = read('src/lib/brand/pdf.js');
     expect(src).toMatch(/scale = RASTER_SCALE/);
     expect(src).toMatch(/keywords: 'scanned-copy'/);
+  });
+  it('مساحة لوحة المقطع دون حد Safari (16777216 بكسل) بالمقياس 2 و3', () => {
+    for (const s of [2, RASTER_SCALE]) {
+      expect(Math.ceil(PAGE.w * s) * Math.ceil(CHUNK_PX(s) * s)).toBeLessThanOrEqual(16777216);
+      expect(CHUNK_PX(s)).toBeGreaterThan(PAGE.h);
+    }
   });
 });
 

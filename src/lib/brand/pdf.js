@@ -120,7 +120,9 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
 // (scripts/pdf-path.mjs يقرؤها). المقاطع تقصر بالمقياس فتبقى اللوحة دون حد مساحتها في Safari
 export const RASTER_SCALE = 3;
 export const SCANNED_NOTE_AR = 'نسخة مصورة';
-const CHUNK_PX = (scale) => Math.floor(9000 / scale);
+// حد Safari مساحة لا ارتفاع: 16777216 بكسل للوحة، فعرض الصفحة 794 بمقياس 3 يحتمل نحو 2340 بكسل CSS (صفحتان إلا قليلًا)، لا 3000
+const CANVAS_AREA = 16 * 1024 * 1024;
+export const CHUNK_PX = (scale) => Math.min(Math.floor(9000 / scale), Math.floor(CANVAS_AREA / (Math.ceil(PAGE.w * scale) * scale)) - 1);
 const sanitize = (s) => String(s || 'وثيقة').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 
 // المرحلة 30: الترويسة والتذييل يُرسمان على لوحات من مستند الإطار (حيث حُمّلت خطوط الوثيقة) بعد انتظار الخطين بوزنهما وحجمهما،
@@ -232,7 +234,7 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RAS
     // ترويسة الصفحات بعد الغلاف (doc.js runningHead): تُرسم مرة وتتكرر
     const headEl = doc.getElementById('pdf-head');
     const runHead = headEl ? await toCanvas(headEl, { width: PAGE.w, height: PAGE.top, pixelRatio: scale, fontEmbedCSS, backgroundColor: '#ffffff', cacheBust: false }) : null;
-    // المقاطع: صفحات متتالية حتى CHUNK_PX في كل رسم (3000 بكسل بمقياس 3)، لحد مساحة اللوحة في المتصفحات
+    // المقاطع: صفحات متتالية حتى CHUNK_PX في كل رسم (نحو 2340 بكسل بمقياس 3)، لحد مساحة اللوحة في المتصفحات
     const chunks = [];
     for (let i = 0; i < plan.length;) {
       let j = i;
