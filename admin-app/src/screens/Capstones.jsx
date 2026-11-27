@@ -10,12 +10,12 @@ import { copiedFromExamples } from '../../../supabase/functions/leaders-api/exam
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { CHAPTER_STANDING_AR, PRIORITY_WEIGHT, SPONSOR_STATE_AR, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { DOC_QR_AR, LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
+import { CAPSTONE_STATUS_TONE, CHAPTER_STANDING_TONE, DOC_QR_AR, LEVEL_AR, NO_TITLE, RUBRIC_LEVEL_AR, SPONSOR_STATE_TONE, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
 import { ADMIN_QR_CHOICES, REASON_MAX } from '../../../supabase/functions/leaders-api/doc-options.js';
 // حالة الفصل في صفحة الوثيقة: الفصول يقرؤها المستشار في كتاب القائد لا المالك، فالتقديم والقراءة بلسانه،
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
 export const SECTION_STATUS_AR = { ...SUBMISSION_STATUS_ADMIN, submitted: SUBMISSION_STATUS.submitted, reviewed: SUBMISSION_STATUS.reviewed, returned: STATUS_TITLES_ADMIN.returned };
-import { DocLevelMeter, Empty, Spinner, useUI } from '../ui.jsx';
+import { DocLevelMeter, Empty, foldEmptyColumns, Missing, Spinner, StatusChip, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, isFiltered, presetCounts, sortRows } from '../filters.js';
@@ -70,7 +70,14 @@ export function ExpertSpine({ sections, checks, canWrite, onSaved }) {
 }
 
 const STATUS = STATUS_TITLES_ADMIN;
-const CHIP = { submitted: 'warn', accepted: 'warn', approved: 'ok' };
+// الشارات بـStatusChip والنبرة من labels (المرحلة 17)، فلا نبرة في سطر الشاشة
+const CapChip = ({ status }) => <StatusChip status={status} labels={STATUS} tones={CAPSTONE_STATUS_TONE} />;
+const SponsorChip = ({ state }) => <StatusChip status={state} labels={SPONSOR} tones={SPONSOR_STATE_TONE} />;
+const HealthChip = ({ t }) => (t ? <StatusChip status={t.health} labels={{ [t.health]: t.health_title }} tones={HEALTH_CHIP} /> : null);
+// المبادرة بلا اسم: NO_TITLE خافتًا ومعه اسم المشارك (المرحلة 17)
+export const Untitled = ({ name }) => <span className="cps-untitled"><span className="la-muted">{NO_TITLE}</span>{name ? <small className="la-muted"> ({name})</small> : null}</span>;
+// أسباب الخانة الغائبة، يقرؤها Missing في title ونصه المقروء
+export const CAP_MISSING = { org: 'بلا جهة', scope: 'لم يُحدد النوع', ready: 'لم تُحسب', score: 'لم تُقيَّم', at: 'لم تُسلَّم', lead: 'لم يُحسب' };
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 // حالة الراعي من الخادم (sponsor_state): «انتهت مهلة الرابط» مشتقة هناك من sponsor_expires_at (تصور المرحلة 2، 2.2)
 const SPONSOR = SPONSOR_STATE_AR;
@@ -167,7 +174,7 @@ export function ChapterLevel({ s }) {
   return (
     <span className="cps-lvl">
       {LEVEL_AR[s.level] && <span className="la-chip" title={crit ? `معيار المستوى (الدرجة العليا)\n${crit}` : undefined}>{LEVEL_AR[s.level]}</span>}
-      <span className={`la-chip ${s.standing === 'kept' ? 'warn' : ''}`}>{CHAPTER_STANDING_AR[s.standing]}</span>
+      <StatusChip status={s.standing} labels={CHAPTER_STANDING_AR} tones={CHAPTER_STANDING_TONE} />
       {s.kept_fields > 0 && <span className="la-chip warn">{s.kept_fields === 1 ? 'حقل باقٍ مما كتبه' : `${s.kept_fields} حقول باقية مما كتبه`}</span>}
       {crit && <small className="la-muted cps-crit-line">{(s.criteria || []).map((r) => r.anchor).join(' · ')}</small>}
     </span>
@@ -288,7 +295,7 @@ function Sponsor({ d, canWrite, onSaved }) {
   return (
     <section className="la-card">
       <h3>تأييد الراعي</h3>
-      <p>{c.sponsor_name || 'الراعي'} {c.sponsor_email && <span className="la-muted" dir="ltr">{c.sponsor_email}</span>} · {c.sponsor_state ? <span className={`la-chip ${c.sponsor_state === 'expired' ? 'bad' : ''}`}>{SPONSOR[c.sponsor_state]}</span> : 'لم يُدعَ'}{c.sponsor_invited_at ? ` · دُعي ${date(c.sponsor_invited_at)}` : ''}</p>
+      <p>{c.sponsor_name || 'الراعي'} {c.sponsor_email && <span className="la-muted" dir="ltr">{c.sponsor_email}</span>} · {c.sponsor_state ? <SponsorChip state={c.sponsor_state} /> : 'لم يُدعَ'}{c.sponsor_invited_at ? ` · دُعي ${date(c.sponsor_invited_at)}` : ''}</p>
       {canWrite && (
         <div className="la-row">
           <button className="btn-sm ghost" disabled={!!busy} onClick={() => act('invite')}>{busy === 'invite' ? 'لحظة…' : 'أعد الدعوة'}</button>
@@ -316,10 +323,10 @@ function Detail({ id, canWrite, onBack, onPerson }) {
       <button className="la-link" onClick={onBack}>→ كل المشاريع</button>
       <section className="la-card cps-head">
         <div>
-          <small className="la-muted">{m.participant?.name} · {m.org?.name || 'بلا جهة'} · {m.scope_title || 'نطاق غير محدد'} · {m.track?.title || ''}</small>
-          <h2>{m.initiative || 'بلا اسم بعد'}</h2>
+          <small className="la-muted">{m.participant?.name} · {m.org?.name || <Missing reason={CAP_MISSING.org} />} · {m.scope_title || <Missing reason={CAP_MISSING.scope} />} · {m.track?.title || ''}</small>
+          <h2>{m.initiative || <Untitled name={m.participant?.name} />}</h2>
           <div className="la-row">
-            <span className={`la-chip ${CHIP[c.status] || ''}`}>{STATUS[c.status] || c.status}</span>
+            <CapChip status={c.status} />
             <span className="la-chip">الجاهزية {d.readiness}%</span>
             {c.revisions > 0 && <span className="la-chip">تحسين {c.revisions}</span>}
             {c.score != null && <span className="la-chip ok">المعيار {c.score} من 100</span>}
@@ -363,7 +370,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           {/* D05: مصدر واحد هو التقييم الختامي (معادلة البرنامج نفسها)، لا نتيجة موازية */}
           <h3>التقييم الختامي</h3>
           <p className="la-muted">{lead?.frozen ? 'اللقطة المرفوعة للاعتماد' : 'الحساب الحي بمعادلة البرنامج'}{lead?.config_version != null ? ` · الإصدار ${lead.config_version}` : ''}. منه قرار الشهادة.</p>
-          <p className="cps-big">{lead?.score ?? '·'}<small> من 100</small></p>
+          <p className="cps-big">{lead?.score ?? <Missing reason={CAP_MISSING.lead} />}<small> من 100</small></p>
           <table className="la-table"><tbody>
             {(lead?.components || []).map((x) => <tr key={x.key}><td>{x.label}</td><td>{x.weight}%</td><td>{x.value ?? 'لم يُقس'}</td></tr>)}
           </tbody></table>
@@ -400,38 +407,54 @@ const CAP_COLS = [
   { key: 'ready', label: 'الجاهزية %', width: 12, get: (x) => x.readiness }, { key: 'score', label: 'المعيار', width: 10, get: (x) => x.score },
   { key: 'health', label: 'صحة التنفيذ', width: 16, get: (x) => x.tracking?.health_title }, { key: 'at', label: 'قُدّمت', width: 16, get: (x) => date(x.submitted_at) },
 ];
+// أعمدة الجدول المعروض (المرحلة 17): fold للأعمدة التي تُطوى إن خلت، وget لفحص الخلو
+const CAP_TABLE = [
+  { key: 'name', label: 'المبادرة', sort: true, cell: (x) => <span className="la-link">{x.initiative || <Untitled name={x.full_name} />}</span> },
+  { key: 'lead', label: 'القائد', sort: true, cell: (x) => x.full_name },
+  { key: 'org', label: 'الجهة', sort: true, cell: (x) => x.organization || <Missing reason={CAP_MISSING.org} /> },
+  { key: 'scope', label: 'النوع', sort: true, fold: true, get: (x) => SCOPE[x.scope], cell: (x) => SCOPE[x.scope] || <Missing reason={CAP_MISSING.scope} /> },
+  { key: 'status', label: 'الحالة', sort: true, cell: (x) => (<>
+    <CapChip status={x.status} />
+    {x.sponsor_state && x.status === 'accepted' ? (x.sponsor_state === 'expired' ? <> <SponsorChip state={x.sponsor_state} /></> : <small className="la-muted"> {SPONSOR[x.sponsor_state]}</small>) : null}
+    {x.tracking && <> <HealthChip t={x.tracking} /></>}
+  </>) },
+  { key: 'ready', label: 'الجاهزية', sort: true, cell: (x) => (x.readiness != null ? `${x.readiness}%` : <Missing reason={CAP_MISSING.ready} />) },
+  { key: 'score', label: 'المعيار', sort: true, fold: true, get: (x) => x.score, cell: (x) => x.score ?? <Missing reason={CAP_MISSING.score} /> },
+  { key: 'at', label: 'سُلّمت', sort: true, fold: true, get: (x) => x.submitted_at, cell: (x) => (x.submitted_at ? date(x.submitted_at) : <Missing reason={CAP_MISSING.at} />) },
+];
 const CAP_SORTS = {
   name: (x) => x.initiative, lead: (x) => x.full_name, org: (x) => x.organization, scope: (x) => SCOPE[x.scope],
   status: (x) => STATUS[x.status], ready: (x) => x.readiness, score: (x) => x.score, at: (x) => x.submitted_at,
 };
 
 export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'org', 'scope', 'sort'], {}, { scope: 'capstones', defaults: { view: 'submitted' } });
   const [list, setList] = useState(null);
-  useEffect(() => { if (!capId) L('admin.capstones', {}).then(setList); }, [capId]);
   const all = (list?.success && list.capstones) || [];
+  const counts = useMemo(() => presetCounts(all, CAP_PRESETS), [all]);
+  // الافتراضي «بانتظار مراجعتك»، وإن كان فارغًا والعرض آليًا اختارت firstNonEmpty أول عرض فيه وثائق (الدالة نفسها في الخبراء)
+  const [f, setF, clearF, replaceF, picked] = useFilters(['q', 'view', 'org', 'scope', 'sort'], {}, { scope: 'capstones', defaults: { view: 'submitted' }, autoView: { presets: CAP_PRESETS, counts: list?.success ? counts : {} } });
+  useEffect(() => { if (!capId) L('admin.capstones', {}).then(setList); }, [capId]);
   const fields = useMemo(() => [
     { key: 'org', label: 'الجهات', get: (x) => x.organization || '', options: [...new Set(all.map((x) => x.organization).filter(Boolean))].sort().map((o) => [o, o]) },
     { key: 'scope', label: 'الأنواع', get: (x) => x.scope, options: Object.entries(SCOPE) },
   ], [all]);
   const rows = useMemo(() => sortRows(applyFilters(all, { fields, presets: CAP_PRESETS, text: (x) => [x.initiative, x.full_name, x.organization].join(' ') }, f), CAP_SORTS, f.sort), [all, f, fields]);
+  // النوع والمعيار وسُلّمت تُطوى إن خلت في كل الصفوف المعروضة (foldEmptyColumns)، والتصدير كامل من CAP_COLS
+  const cols = useMemo(() => foldEmptyColumns(CAP_TABLE, rows), [rows]);
   if (capId) return <Detail id={capId} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} />;
   return (
     <section className="la-card">
       <h3>وثائق المبادرات</h3>
       <p className="la-muted">فصول كل وثيقة نماذج تعليمية يقرؤها المستشار ويكتب ملاحظاته عليها في «كتاب القائد». هنا قرار الوثيقة كاملة: إعادة للتحسين مرة، أو قبول بالمعيار ثم تأييد الراعي.</p>
-      {list?.success && <FilterBar scope="capstones" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={CAP_PRESETS} counts={presetCounts(all, CAP_PRESETS)}
+      {list?.success && <FilterBar scope="capstones" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={CAP_PRESETS} counts={counts} collapseZero auto={picked}
         shown={rows.length} total={all.length} noun="وثيقة" placeholder="ابحث بالمبادرة أو القائد أو الجهة"
         actions={<ExportButton scope="capstones" meta={{ kind: 'CAP', title: 'وثائق المبادرات', sheet: 'المبادرات', file: 'Capstones' }} columns={CAP_COLS} all={all} filtered={rows} noun="وثيقة" />} />}
       {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !rows.length ? <Empty compact {...capEmpty(f, all.length)} /> : (
-        <table className="la-table">
-          <thead><tr><SortTh k="name" state={f} set={setF}>المبادرة</SortTh><SortTh k="lead" state={f} set={setF}>القائد</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><SortTh k="scope" state={f} set={setF}>النوع</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="ready" state={f} set={setF}>الجاهزية</SortTh><SortTh k="score" state={f} set={setF}>المعيار</SortTh><SortTh k="at" state={f} set={setF}>سُلّمت</SortTh></tr></thead>
+        <table className="la-table cps-table">
+          <thead><tr>{cols.map((c) => (c.sort ? <SortTh key={c.key} k={c.key} state={f} set={setF}>{c.label}</SortTh> : <th key={c.key}>{c.label}</th>))}</tr></thead>
           <tbody>{rows.map((x) => (
-            <tr key={x.participant_id}>
-              <td><button className="la-link" onClick={() => onOpen(x.participant_id)}>{x.initiative || 'بلا اسم'}</button></td>
-              <td>{x.full_name}</td><td>{x.organization || '·'}</td><td>{SCOPE[x.scope] || '·'}</td>
-              <td><span className={`la-chip ${CHIP[x.status] || ''}`}>{STATUS[x.status]}</span>{x.sponsor_state && x.status === 'accepted' ? (x.sponsor_state === 'expired' ? <> <span className={`la-chip ${x.sponsor_state === 'expired' ? 'bad' : ''}`}>{SPONSOR[x.sponsor_state]}</span></> : <small className="la-muted"> · {SPONSOR[x.sponsor_state]}</small>) : null}{x.tracking && <> <span className={`la-chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span></>}</td>
-              <td>{x.readiness != null ? `${x.readiness}%` : '·'}</td><td>{x.score ?? '·'}</td><td>{date(x.submitted_at)}</td>
+            <tr key={x.participant_id} className="la-click" data-row={x.participant_id} tabIndex={0} onClick={() => onOpen(x.participant_id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(x.participant_id); } }}>
+              {cols.map((c) => <td key={c.key} data-col={c.key}>{c.cell(x)}</td>)}
             </tr>
           ))}</tbody>
         </table>

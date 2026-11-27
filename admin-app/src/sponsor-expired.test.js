@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { applyFilters, presetCounts } from './filters.js';
 import { CAP_PRESETS, capEmpty } from './screens/Capstones.jsx';
 import { SPONSOR_STATE_AR } from '../../supabase/functions/leaders-api/capstone.js';
+import { SPONSOR_STATE_TONE } from '../../supabase/functions/leaders-api/labels.js';
 
 const src = readFileSync(join(__dirname, 'screens/Capstones.jsx'), 'utf8');
 const caps = [
@@ -25,8 +26,11 @@ describe('انتهاء مهلة الراعي في الإدارة', () => {
   it('الشارة حمراء من القاموس الواحد، بلا قاموس محلي للحالة', () => {
     expect(SPONSOR_STATE_AR.expired).toBe('انتهت مهلة الرابط');
     expect(src).not.toMatch(/const SPONSOR = \{/);
-    expect(src).toMatch(/x\.sponsor_state === 'expired' \? 'bad'/);
-    expect(src).toMatch(/c\.sponsor_state === 'expired' \? 'bad'/);
+    // المرحلة 17: النبرة من SPONSOR_STATE_TONE عبر StatusChip، لا من سطر الشاشة
+    expect(SPONSOR_STATE_TONE.expired).toBe('bad');
+    expect(src).toMatch(/tones=\{SPONSOR_STATE_TONE\}/);
+    expect(src).toMatch(/<SponsorChip state=\{x\.sponsor_state\} \/>/);
+    expect(src).toMatch(/<SponsorChip state=\{c\.sponsor_state\} \/>/);
   });
   it('زرّا الإعادة والاعتماد دون تأييد متجاوران', () => {
     expect(src).toMatch(/'أعد الدعوة'\}<\/button>\n\s+<input aria-label="سبب الاعتماد دون تأييد"[^\n]+\n\s+<button[^\n]+>اعتمد دون تأييد<\/button>/);

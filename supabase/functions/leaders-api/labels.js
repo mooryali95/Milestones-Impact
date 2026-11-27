@@ -317,6 +317,11 @@ export const EXPERT_REQUEST_STATUS_TONE = { open: 'warn', offered: 'warn', accep
 // اكتمال لجنة الحوكمة في شريط اللجان (committees.js يعطي ready وgaps)
 export const COMMITTEE_STATE = { ready: 'مكتملة', gaps: 'ناقصة' };
 export const COMMITTEE_STATE_TONE = { ready: 'ok', gaps: 'warn' };
+// نبرة شارات المبادرات (المرحلة 17): حالة الوثيقة (مفاتيح STATUS_TITLES في capstone.js) وحالة راعيها (SPONSOR_STATE_AR)
+export const CAPSTONE_STATUS_TONE = { draft: '', submitted: 'warn', returned: '', accepted: 'warn', approved: 'ok' };
+export const SPONSOR_STATE_TONE = { pending: '', expired: 'bad', endorsed: 'ok', declined: 'warn' };
+// موقع الفصل من مستوى الوثيقة (CHAPTER_STANDING_AR): الباقي بقاعدة «لا فقد» ينبَّه عليه
+export const CHAPTER_STANDING_TONE = { kept: 'warn' };
 // ما تعنيه كل حالة للمشارك وما يحدث بعدها، كما يجري فعلًا على الخادم (experts.ts): الاعتذار ينقل الطلب للتالي،
 // والمقبول يغلقه فريق البرنامج بعد الخدمة، و«لا خبير مطابق» يراه الفريق في قائمة الطلبات (p-capstone-4)
 export const EXPERT_REQUEST_HINT = {

@@ -230,3 +230,37 @@ test('الراعي: يقرأ ملخص المبادرة من رابطه ويؤي�
   await expect(page.getByText('سُجّل تأييدك، واعتُمدت الوثيقة.')).toBeVisible();
   expect(calls.find((c) => c.action === 'sponsor.submit')).toMatchObject({ t: 'tok-sponsor-00000000000000000000', decision: 'endorse' });
 });
+
+// المرحلة 17: جدول المبادرات (الأعمدة الفارغة تُطوى، NO_TITLE خافتًا، Missing بسببه، والصف كله يفتح الوثيقة)
+test('المبادرات: الافتراض الفارغ ينتقل إلى أول عرض فيه وثائق، والأعمدة الفارغة مطوية، والصف يفتح بـEnter', async ({ page }) => {
+  const caps = [
+    { participant_id: 'p1', initiative: '', full_name: 'ليلى', organization: '', status: 'draft', readiness: null },
+    { participant_id: 'p2', initiative: 'تحول رقمي', full_name: 'عمر', organization: 'وزارة', status: 'draft', readiness: 40 },
+  ];
+  await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    const replies = { 'admin.orgs': { success: true, orgs: [], unassigned: {} }, 'admin.capstones': { success: true, capstones: caps } };
+    await route.fulfill({ json: replies[b.action] ?? { success: true } });
+  });
+  await page.goto(ADMIN);
+  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مستشار', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
+  await page.reload();
+  await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.evaluate(() => { location.hash = '#/leaders/capstones'; });
+  const table = page.locator('.cps-table');
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(page.locator('.flt-auto')).toContainText('«قيد البناء»');
+  await expect(table.locator('thead th')).toHaveCount(5);
+  await expect(table.locator('tr[data-row="p1"] .cps-untitled')).toHaveText('لم تُسمَّ بعد (ليلى)');
+  await expect(table.locator('tr[data-row="p1"] td[data-col="org"] .la-missing')).toHaveAttribute('title', 'بلا جهة');
+  await expect(table).not.toContainText('·');
+  for (const w of [1280, 375]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    await page.screenshot({ path: process.env.P17_SHOTS ? `${process.env.P17_SHOTS}/p17-capstones-${w}.png` : test.info().outputPath(`p17-capstones-${w}.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await table.locator('tr[data-row="p2"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/leaders\/capstones\/p2/);
+});

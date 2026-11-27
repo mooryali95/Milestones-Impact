@@ -270,6 +270,13 @@ export function Missing({ state = 'none', reason = '', text = 'لم يحدث ب�
   );
 }
 
+// طي الأعمدة الفارغة (المرحلة 17، قاعدة عامة لأي جدول): العمود الموسوم fold يُطوى إن خلا في كل الصفوف المعروضة.
+// الخلو: get(row) يعطي null أو undefined أو نصًا فارغًا. لا يمس التصدير، فأعمدته تبقى كاملة من تعريفها.
+export const isBlank = (v) => v == null || (typeof v === 'string' && v.trim() === '');
+export function foldEmptyColumns(cols = [], rows = []) {
+  return cols.filter((c) => !c.fold || (rows || []).some((r) => !isBlank(c.get ? c.get(r) : r?.[c.key])));
+}
+
 // نقل صف لأعلى أو لأسفل (المرحلة 15): هدف 32px على الأقل، وtitle يسمي ما يُنقل («انقل الباب X لأعلى»)،
 // والاسم المقروء نص sr-only مطابق للـtitle (بلا aria-label يخالف المرئي). يظهر لمن يملك canWrite فقط.
 // onMove(dir) يعيد الموضع الجديد (1..total) أو null، فيُعلن عبر aria-live («صار في الموضع n من m»).
