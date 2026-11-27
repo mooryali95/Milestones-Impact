@@ -5,7 +5,7 @@
 // والحالة من expert_requests وحدها. لا منطق ترشيح في الواجهة.
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Empty, NoMatch, Spinner, StatusChip, useUI } from '../ui.jsx';
+import { Empty, Missing, NoMatch, Spinner, StatusChip, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, decodeState, isFiltered, presetCounts, sortRows } from '../filters.js';
@@ -203,7 +203,7 @@ export function RequestsBoard({ canWrite, onPerson, view = '', data = undefined,
             <tr key={x.id}>
               <td data-label="المشارك"><button className="link" onClick={() => onPerson(x.participant_id)}>{x.participants?.full_name}</button></td>
               <td data-label="الخدمة">{roleAr(x.role)}{x.dimension ? <small className="la-muted"> · {DIM_AR[x.dimension]}</small> : null}</td>
-              <td data-label="الخبير">{x.experts?.full_name || <span className="la-muted">·</span>}{x.score != null && <small className="la-muted"> · {x.score}</small>}{x.manual_reason && <small className="la-muted" title={x.manual_reason}> · يدوي</small>}</td>
+              <td data-label="الخبير">{x.experts?.full_name || <Missing reason="لم يُسنَد خبير" />}{x.score != null && <small className="la-muted"> · {x.score}</small>}{x.manual_reason && <small className="la-muted" title={x.manual_reason}> · يدوي</small>}</td>
               <td data-label="الحالة"><ReqChip status={x.status} />{x.status === 'offered' && <small className="la-muted"> حتى {date(x.expires_at)}</small>}{f.view === 'attention' && attentionReason(x, now) && <small className="xm-why">{attentionReason(x, now)}</small>}</td>
               <td className="ce-act">{canWrite && <>
                 {x.status === 'accepted' && <button className="btn-sm ghost" onClick={() => act('admin.expert-request-complete', x, 'أُغلق الطلب')}>اكتملت الخدمة</button>}

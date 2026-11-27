@@ -624,6 +624,9 @@
 .vs-head .today-sec { margin: 0; }
 .vs-stale { opacity: .55; transition: opacity .15s; pointer-events: none; }
 .vs-chart-card { min-height: 250px; }
+.vs-skel .sk { display: block; margin: 6px 0; }
+.vs-skel .sk-lg { height: 1.6em; width: 50%; }
+.vs-skel-panel { min-height: 220px; }
 .vs-tip { margin: 0 0 6px; font-size: .84rem; min-height: 1.4em; }
 .vs-chart { position: relative; padding-inline-start: 0; }
 .vs-chart svg { display: block; width: 100%; height: 150px; overflow: visible; cursor: crosshair; touch-action: pan-y; }

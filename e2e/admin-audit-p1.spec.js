@@ -80,11 +80,15 @@ test('الشريط الجانبي: داخل الشاشة بتمرير داخلي
 test('رأس الصفحة سطر واحد مضغوط، ومبدّل المنتج باقٍ', async ({ page }) => {
   await open(page, '#/leaders/participants');
   const head = page.locator('.page-header').first();
-  await expect(head.getByRole('heading', { level: 1, name: 'تطبيق القادة' })).toBeVisible();
+  await expect(head.getByRole('heading', { level: 1, name: 'المشاركون' })).toBeVisible();
   expect((await head.boundingBox()).height).toBeLessThan(60);
   // النطاق في عنوان المستند لا في الترويسة (تصور 2026-11-26، المرحلة 4)
   await expect(head).not.toContainText('sunkvalue');
-  await expect(page).toHaveTitle(/leaders\.sunkvalue\.com/);
+  await expect(page).toHaveTitle(/^المشاركون \(leaders\.sunkvalue\.com\)/);
+  // العنوان يتبع القسم (المرحلة 7)
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'الجهات', exact: true }).click();
+  await expect(page.locator('.page-header').first().getByRole('heading', { level: 1, name: 'الجهات' })).toBeVisible();
+  await expect(page).toHaveTitle(/^الجهات \(leaders\.sunkvalue\.com\)/);
   await expect(page.locator('.ctx-tab').first()).toBeVisible();
   // أول المحتوى قبل 200 بكسل من أعلى الصفحة (كان نحو 250 للرأس وحده)
   const nav = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
