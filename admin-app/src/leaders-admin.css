@@ -1741,3 +1741,22 @@ details.how-it-works[open] > summary { margin-bottom: 12px; }
 .la-table tr.la-click:hover .la-link, .la-table tr.la-click:focus-visible .la-link, .la-table tr.la-click:focus-within .la-link { text-decoration: underline; text-underline-offset: 3px; }
 .la-table tr.la-click:focus-visible { outline: 2px solid var(--petrol-soft); outline-offset: -2px; }
 .la-table tr.la-click:focus-visible td, .la-table tr.la-click:focus-within td { background: var(--sand-light); }
+
+/* ══ ترويسة الشاشة الموحدة داخل القسم (المرحلة 18): سطح فاتح بلا بطل، وسطر حالة ══ */
+.screen-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.screen-head-main { flex: 1 1 320px; min-width: 0; }
+.screen-head-title { margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--ink); line-height: 1.4; }
+.screen-head-desc { margin: 2px 0 0; color: var(--ink-light); font-size: .86rem; line-height: 1.7; }
+.screen-head-acts { display: flex; gap: 6px; align-items: center; }
+.screen-head-status { flex-basis: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* كتاب القائد: الأرقام بالبطاقة الموحدة، والتبويبات ملتصقة تحت الترويسة العامة */
+.hb-stats { margin-bottom: 12px; }
+.hb-tabs { position: sticky; top: calc(var(--la-head-h) + 8px); z-index: 5; background: var(--paper, #fff); padding: 6px 0; margin-bottom: 14px; }
+.hb-tabs button:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+/* صف الباب: العنوان وشارة الجاهزية، ثم رقمان بارزان، ثم سطر خافت */
+.hb-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hb-tiered { color: var(--ink-light); font-size: .9rem; }
+.hb-nums { display: flex; gap: 16px; font-size: .78rem; color: var(--ink-light); }
+.hb-nums b { font-family: var(--font-en); font-size: 1.05rem; color: var(--ink); margin-inline-end: 3px; }
+.hb-ch .hb-meta { color: var(--ink-faint, var(--ink-light)); }
+.hb-ch.empty .hb-meta > span:nth-child(2) { color: inherit; font-weight: inherit; }

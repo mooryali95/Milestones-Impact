@@ -121,8 +121,17 @@ test('الرحلة: متطلب جديد بمربعات الاختيار، وتر
   await page.getByLabel('يعتمده المستشار بعد الإنجاز').check();
   await page.getByRole('button', { name: 'حفظ' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ stage_key: 's1', code: 'T-9', needs_review: true, required: true, dimension: null, sort: 3 });
-  await page.getByRole('button', { name: 'نقل لأسفل' }).nth(1).click();
+  await page.getByRole('button', { name: 'انقل المتطلب T-1 لأسفل' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
+});
+
+test('المرحلة 18: Alt مع السهم على صف المتطلب ينقله وحده دون مرحلته', async ({ page }) => {
+  const calls = await setup(page);
+  await tab(page, 'الرحلة والمتطلبات');
+  await page.getByRole('button', { name: 'انقل المتطلب T-1 لأسفل' }).focus();
+  await page.keyboard.press('Alt+ArrowDown');
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.reorder')).toHaveLength(1);
+  expect(calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
 });
 
 test('القياس: الفقرة وخياراتها ودرجاتها من المستودع، واللوحة تحرر التلميح وحده (D01)', async ({ page }) => {

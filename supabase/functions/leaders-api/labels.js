@@ -322,6 +322,10 @@ export const CAPSTONE_STATUS_TONE = { draft: '', submitted: 'warn', returned: ''
 export const SPONSOR_STATE_TONE = { pending: '', expired: 'bad', endorsed: 'ok', declined: 'warn' };
 // موقع الفصل من مستوى الوثيقة (CHAPTER_STANDING_AR): الباقي بقاعدة «لا فقد» ينبَّه عليه
 export const CHAPTER_STANDING_TONE = { kept: 'warn' };
+// جاهزية باب كتاب القائد في صفه (المرحلة 18): شارة واحدة بدل «بلا محتوى بعد» و«بلا اختبار» متفرقتين
+export const CHAPTER_READY = { ready: 'جاهز', no_quiz: 'بلا اختبار', no_body: 'بلا محتوى' };
+export const CHAPTER_READY_TONE = { ready: 'ok', no_quiz: 'warn', no_body: 'bad' };
+export const chapterReady = (words, quiz) => (!words ? 'no_body' : !quiz ? 'no_quiz' : 'ready');
 // ما تعنيه كل حالة للمشارك وما يحدث بعدها، كما يجري فعلًا على الخادم (experts.ts): الاعتذار ينقل الطلب للتالي،
 // والمقبول يغلقه فريق البرنامج بعد الخدمة، و«لا خبير مطابق» يراه الفريق في قائمة الطلبات (p-capstone-4)
 export const EXPERT_REQUEST_HINT = {

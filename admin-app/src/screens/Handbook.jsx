@@ -16,29 +16,51 @@ import Md from '../Md.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, sortRows } from '../filters.js';
-import { Empty, NoMatch, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
-import { countAr, DIM_ROMAN, RUBRIC_SCALE, TERMS, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
+import { Empty, Move, moveKeys, NoMatch, Spinner, StatusChip, useEscape, useGuardedClose, useUI } from '../ui.jsx';
+import { ScreenHead } from '../PageHeader.jsx';
+import { keepSpot, saveQueue, takeSpot } from '../review-queue.js';
+import { CHAPTER_READY, CHAPTER_READY_TONE, chapterReady, countAr, DIM_ROMAN, levelFrom, RUBRIC_SCALE, TERMS, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
-
-// أسماء المستويات في سطر شرط الإلزام
-const LEVEL_AR_COND = { intermediate: 'المتوسط', advanced: 'الاحترافي' };
 
 const pad = (n) => String(n).padStart(2, '0');
 // العدد بتمييزه («بابان» و«5 أبواب» و«12 بابًا»)، والإطار باسمه العربي ورقمه من labels.js وحده
 export const chaptersAr = (n) => (n ? countAr(n, 'باب واحد', 'بابان', 'أبواب', 'بابًا') : 'لا أبواب');
 export const modelsAr = (n) => (n ? countAr(n, 'نموذج واحد', 'نموذجان', 'نماذج', 'نموذجًا') : 'لا نماذج');
 
-function Move({ rows, entity, id, reload, canWrite }) {
+// نقل الباب أو النموذج (المرحلة 18): مكون Move المشترك (ui.jsx) بهدف 32px وtitle يسمي الباب، وAlt مع الأسهم على الصف
+// (moveKeys)، وإعلان الموضع الجديد. الكتابة عبر admin.reorder القائم، ويُحفظ الترتيب الجديد بـsaveQueue، وkeepSpot يحفظ موضع القائمة فلا يقفز التمرير بعد إعادة التحميل
+export const SPOT_SCOPE = 'handbook';
+function RowMove({ rows, entity, id, kind, name, index, total, reload, canWrite, keysRef }) {
   const { toast } = useUI();
-  if (!canWrite) return null;
-  const go = async (dir) => {
+  const onMove = async (dir) => {
     const ids = reorderIds(rows, entity, id, dir);
-    if (!ids) return;
+    if (!ids) return null;
     const r = await L('admin.reorder', { entity, ids });
-    if (!r.success) return toast(r.message);
+    if (!r.success) { toast(r.message); return null; }
+    saveQueue(ids, `${kind} ${name}`);
+    keepSpot(typeof window === 'undefined' ? 0 : window.scrollY, id, SPOT_SCOPE);
+    spotDir = dir;
     reload();
+    return ids.indexOf(id) + 1;
   };
-  return <><button className="la-mv" onClick={() => go(-1)} aria-label="نقل لأعلى">▲</button><button className="la-mv" onClick={() => go(1)} aria-label="نقل لأسفل">▼</button></>;
+  return <Move name={`${kind} ${name}`} onMove={onMove} canWrite={canWrite} first={index === 0} last={index === total - 1} total={total} keysRef={keysRef} />;
+}
+// بعد إعادة التحميل: يعود التمرير إلى موضعه، والتركيز إلى صف ما نُقل إن لم يكن التركيز داخله
+// اتجاه آخر نقل: يعود التركيز إلى زر الاتجاه نفسه، فإن صار معطلًا فإلى عنوان الصف
+let spotDir = 0;
+function useSpot(dep) {
+  useEffect(() => {
+    const s = takeSpot(SPOT_SCOPE);
+    if (!s) return;
+    window.scrollTo?.({ top: s.y });
+    const row = s.id && document.querySelector(`[data-hb-row="${CSS.escape ? CSS.escape(s.id) : s.id}"]`);
+    if (row && !row.contains(document.activeElement)) {
+      const btn = row.querySelectorAll('.la-move-btn')[spotDir > 0 ? 1 : 0];
+      const to = btn && btn.getAttribute('aria-disabled') !== 'true' ? btn : row.querySelector('.hb-main') || btn;
+      to?.focus({ preventScroll: true });
+    }
+    spotDir = 0;
+  }, [dep]);
 }
 
 // إطار المحررين: نافذة كبيرة فوق الصفحة، Esc يغلقها. الحفظ ينتظر رده (busy) فلا تُرسله نقرتان مرتين
@@ -57,7 +79,7 @@ function LevelSeg({ value, onChange, disabled }) {
   return (
     <div className="hb-seg" role="radiogroup" aria-label="يظهر لمن مستواه">
       {LVLS.map((l) => (
-        <label key={l}><input type="radio" name="min_level" value={l} checked={value === l} disabled={disabled} onChange={() => onChange(l)} /><span>{LVL[l]}{l === 'advanced' ? '' : ' فأعلى'}</span></label>
+        <label key={l}><input type="radio" name="min_level" value={l} checked={value === l} disabled={disabled} onChange={() => onChange(l)} /><span>{levelFrom(l)}</span></label>
       ))}
     </div>
   );
@@ -224,7 +246,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
                 <span className="hb-ed-wc">{words(filterHandbookMd(v.body_md, view, scope))} كلمة لهذا القارئ</span></div>
               <article className="hb-page"><h3 className="hb-page-t">{v.title_ar || 'عنوان الباب'}</h3>
                 <div className="la-md">{RANK[view] < RANK[v.min_level]
-                  ? <p className="la-muted">هذا الباب لا يظهر لمستوى {LVL[view]}؛ يبدأ من {LVL[v.min_level]}.</p>
+                  ? <p className="la-muted">هذا الباب لا يظهر لمستوى {LVL[view]}؛ هو {levelFrom(v.min_level)}.</p>
                   : filterHandbookMd(v.body_md, view, scope) ? <Md text={filterHandbookMd(v.body_md, view, scope)} /> : <p className="la-muted">لا محتوى بعد.</p>}</div>
               </article>
             </div>
@@ -262,7 +284,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
 function ModelGuide({ m }) {
   return (
     <div className="mp-hero"><span className="mp-icon">{m.icon || '◆'}</span>
-      <div><small>{DIM[m.dimension]} · من مستوى {LVL[m.min_level]}</small><h3>{m.title_ar}</h3><p>{m.summary_ar || ''}</p></div>
+      <div><small>{DIM[m.dimension]} · {levelFrom(m.min_level)}</small><h3>{m.title_ar}</h3><p>{m.summary_ar || ''}</p></div>
       <span className="mp-pts"><b>{m.points}</b>نقطة</span>
     </div>
   );
@@ -404,10 +426,10 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
                 </>}
                 <label className="fb-req"><input type="checkbox" checked={f.required !== false} onChange={(e) => setField(i, { required: e.target.checked })} /> إلزامي</label>
                 {/* إلزام بشرط (مصفوفة الوثيقة بحسب المستوى): تأشير «إلزامي» يجعله مطلوبًا من الجميع ويلغي الشرط فعليًا */}
-                {f.required === false && (f.required_from || f.required_after) && <small className="fb-cond" title="تأشير «إلزامي» يجعله مطلوبًا من الجميع">{[f.required_from && `مطلوب من المستوى ${LEVEL_AR_COND[f.required_from] || f.required_from}`, f.required_after && `مطلوب للمعتمدين بعد ${String(f.required_after).slice(0, 10)}`].filter(Boolean).join('، و')}</small>}
+                {f.required === false && (f.required_from || f.required_after) && <small className="fb-cond" title="تأشير «إلزامي» يجعله مطلوبًا من الجميع">{[f.required_from && `مطلوب ${levelFrom(f.required_from)}`, f.required_after && `مطلوب للمعتمدين بعد ${String(f.required_after).slice(0, 10)}`].filter(Boolean).join('، و')}</small>}
                 <div className="fb-more">
                   <select aria-label={`مستوى الحقل ${i + 1}`} value={f.min_level || 'beginner'} onChange={(e) => setField(i, { min_level: e.target.value })}>
-                    {LVLS.map((l) => <option key={l} value={l}>{l === 'beginner' ? 'لكل المستويات' : `من مستوى ${LVL[l]}`}</option>)}</select>
+                    {LVLS.map((l) => <option key={l} value={l}>{levelFrom(l)}</option>)}</select>
                   <span className="me-scopes" role="group" aria-label={`نطاقات الحقل ${i + 1}`}>{SCOPE_VIEW.map(([k, l]) => <label key={k}><input type="checkbox" checked={!(f.scopes || []).length || f.scopes.includes(k)}
                     onChange={() => setField(i, { scopes: toggle(f.scopes || [], k) })} /> {l}</label>)}</span>
                   <label title="يظهر لمن محور الأولوية في مساره هو محور هذا النموذج"><input type="checkbox" checked={f.track === true} onChange={(e) => setField(i, { track: e.target.checked || undefined })} /> تعمق المسار فقط</label>
@@ -508,9 +530,44 @@ export function Submission({ id, canWrite, onClose }) {
 }
 
 // ══ القوائم ══
+// صف الباب (المرحلة 18): شارة جاهزية واحدة بنبرة StatusChip، ورقمان بارزان (الكلمات ومن أتمّه)، والبقية في سطر ثانٍ خافت.
+// «فقرات مخصصة» أيقونة مسماة لا نص. Alt مع الأسهم على الصف تنقله (لمن يملك canWrite)
+function ChapterRow({ m, i, list, mods, s, catalog, reload, canWrite, open }) {
+  const keys = useRef(null);
+  const n = words(m.body_md);
+  const q = parseQuiz(m.quiz_md).length;
+  const lint = chapterLint(m);
+  const errs = lint.filter((x) => x.level === 'error').length;
+  const labs = chapterLabs(catalog, m).length;
+  return (
+    <li className={`hb-ch${n ? '' : ' empty'}`} data-hb-row={m.id} onKeyDown={moveKeys(keys)}>
+      <span className="hb-num">{pad(i + 1)}</span>
+      <button className="hb-main" onClick={() => open({ kind: 'chapter', m })}>
+        <span className="hb-title"><b>{m.title_ar}</b> <StatusChip status={chapterReady(n, q)} labels={CHAPTER_READY} tones={CHAPTER_READY_TONE} />
+          {tiered(m.body_md) && <span className="hb-tiered" role="img" aria-label="فقرات مخصصة لكل مستوى" title="فقرات مخصصة لكل مستوى">◧</span>}</span>
+        <span className="hb-nums">
+          <span><b>{n ? n.toLocaleString('ar') : 0}</b> كلمة</span>
+          <span><b>{(s.done || 0).toLocaleString('ar')}</b> أتمّه</span>
+        </span>
+        <span className="hb-meta">
+          <span>{levelFrom(m.min_level)}</span>
+          {q > 0 && <span>اختبار {q} أسئلة</span>}
+          {labs > 0 && <span>{labs} مختبر</span>}
+          {lint.length > 0 && <span className="hb-warn">{errs ? `${errs} خطأ · ` : ''}{lint.length - errs ? `${lint.length - errs} تنبيه` : ''}</span>}
+          {s.done > 0 && <span>متوسط {Math.round((s.score / Math.max(1, s.total)) * 100)}%</span>}
+        </span>
+      </button>
+      <span className="hb-acts"><RowMove rows={mods} entity="handbook_modules" id={m.id} kind="الباب" name={m.title_ar} index={i} total={list.length} reload={reload} canWrite={canWrite} keysRef={keys} />
+        <button className="btn-sm ghost" onClick={() => open({ kind: 'chapter', m })}>{canWrite ? 'تحرير' : 'قراءة'}</button>
+      </span>
+    </li>
+  );
+}
+
 function Chapters({ catalog, reload, canWrite, open }) {
   const mods = catalog.handbook_modules || [];
   const cs = (id) => catalog.book_stats?.chapters?.[id] || {};
+  useSpot(catalog);
 
   return DIMS.map((d) => {
     const list = mods.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort);
@@ -519,39 +576,37 @@ function Chapters({ catalog, reload, canWrite, open }) {
         <header><span className="tx-roman">{DIM_ROMAN[d]}</span><div><small>{TERMS.framework}</small><b>{DIM[d]}</b></div>
           <span className="hb-dim-n">{chaptersAr(list.length)}</span>
 </header>
-        {list.length ? <ol className="hb-list">{list.map((m, i) => {
-          const n = words(m.body_md);
-          const q = parseQuiz(m.quiz_md).length;
-          const s = cs(m.id);
-          const lint = chapterLint(m);
-          const errs = lint.filter((x) => x.level === 'error').length;
-          const labs = chapterLabs(catalog, m).length;
-          return (
-            <li key={m.id} className={`hb-ch${n ? '' : ' empty'}`}>
-              <span className="hb-num">{pad(i + 1)}</span>
-              <button className="hb-main" onClick={() => open({ kind: 'chapter', m })}>
-                <b>{m.title_ar}</b>
-                <span className="hb-meta"><span className={`la-lvl ${m.min_level}`}>من {LVL[m.min_level]}</span>
-                  <span>{n ? `${n.toLocaleString('ar')} كلمة` : 'بلا محتوى بعد'}</span>{tiered(m.body_md) && <span>فقرات مخصصة لكل مستوى</span>}
-                  <span className={q ? '' : 'hb-warn'}>{q ? `اختبار ${q} أسئلة` : 'بلا اختبار'}</span>
-                  {labs > 0 && <span>{labs} مختبر</span>}
-                  {lint.length > 0 && <span className="hb-warn">{errs ? `${errs} خطأ · ` : ''}{lint.length - errs ? `${lint.length - errs} تنبيه` : ''}</span>}
-                  {s.done > 0 && <span className="hb-stat">أتمّه {s.done} · متوسط {Math.round((s.score / Math.max(1, s.total)) * 100)}%</span>}</span>
-              </button>
-              <span className="hb-acts"><Move rows={mods} entity="handbook_modules" id={m.id} reload={reload} canWrite={canWrite} />
-                <button className="btn-sm ghost" onClick={() => open({ kind: 'chapter', m })}>{canWrite ? 'تحرير' : 'قراءة'}</button>
-</span>
-            </li>
-          );
-        })}</ol> : <p className="la-muted hb-none">لا أبواب في هذا الإطار بعد.</p>}
+        {list.length ? <ol className="hb-list">{list.map((m, i) => (
+          <ChapterRow key={m.id} m={m} i={i} list={list} mods={mods} s={cs(m.id)} catalog={catalog} reload={reload} canWrite={canWrite} open={open} />
+        ))}</ol> : <p className="la-muted hb-none">لا أبواب في هذا الإطار بعد.</p>}
       </section>
     );
   });
 }
 
+function ModelRow({ m, i, items, list, x, reload, canWrite, open, onReview }) {
+  const keys = useRef(null);
+  return (
+    <li className={`hb-ch${m.active ? '' : ' empty'}`} data-hb-row={m.id} onKeyDown={moveKeys(keys)}>
+      <span className="hb-num hb-icon">{m.icon || '◆'}</span>
+      <button className="hb-main" onClick={() => open({ kind: 'model', m })}>
+        <b>{m.title_ar}{!m.active && <small className="la-chip"> موقوف</small>}</b>
+        <span className="hb-meta"><span>{levelFrom(m.min_level)}</span><span>{m.points} نقطة</span><span>{(m.fields || []).length} حقول</span>
+          {x.submitted || x.reviewed || x.draft
+            ? <span className="hb-stat">مسودات {x.draft || 0} · مسلّمة {x.submitted || 0} · مقيّمة {x.reviewed || 0}{x.rated ? ` · متوسط ${(x.rating / x.rated).toFixed(1)} من ${RUBRIC_SCALE.levels.length}` : ''}</span>
+            : <span>لا أعمال بعد</span>}</span>
+      </button>
+      <span className="hb-acts"><RowMove rows={list} entity="learning_models" id={m.id} kind="النموذج" name={m.title_ar} index={i} total={items.length} reload={reload} canWrite={canWrite} keysRef={keys} />
+        {x.submitted > 0 && <button className="btn-sm primary" onClick={() => onReview(m.id)}>قيّم {x.submitted}</button>}
+        {canWrite && <button className="btn-sm ghost" onClick={() => open({ kind: 'model', m })}>تحرير</button>}</span>
+    </li>
+  );
+}
+
 function Models({ catalog, reload, canWrite, open, onReview }) {
   const list = catalog.learning_models || [];
   const ms = catalog.book_stats?.models || {};
+  useSpot(catalog);
   return DIMS.map((d) => {
     const items = list.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort);
     return (
@@ -559,24 +614,9 @@ function Models({ catalog, reload, canWrite, open, onReview }) {
         <header><span className="tx-roman">{DIM_ROMAN[d]}</span><div><small>{TERMS.framework}</small><b>{DIM[d]}</b></div>
           <span className="hb-dim-n">{modelsAr(items.length)}</span>
           {canWrite && <button className="tx-btn gold" onClick={() => open({ kind: 'model', dim: d })}>+ نموذج جديد</button>}</header>
-        {items.length ? <ol className="hb-list">{items.map((m) => {
-          const x = ms[m.id] || {};
-          return (
-            <li key={m.id} className={`hb-ch${m.active ? '' : ' empty'}`}>
-              <span className="hb-num hb-icon">{m.icon || '◆'}</span>
-              <button className="hb-main" onClick={() => open({ kind: 'model', m })}>
-                <b>{m.title_ar}{!m.active && <small className="la-chip"> موقوف</small>}</b>
-                <span className="hb-meta"><span className={`la-lvl ${m.min_level}`}>من {LVL[m.min_level]}</span><span>{m.points} نقطة</span><span>{(m.fields || []).length} حقول</span>
-                  {x.submitted || x.reviewed || x.draft
-                    ? <span className="hb-stat">مسودات {x.draft || 0} · مسلّمة {x.submitted || 0} · مقيّمة {x.reviewed || 0}{x.rated ? ` · متوسط ${(x.rating / x.rated).toFixed(1)} من ${RUBRIC_SCALE.levels.length}` : ''}</span>
-                    : <span>لا أعمال بعد</span>}</span>
-              </button>
-              <span className="hb-acts"><Move rows={list} entity="learning_models" id={m.id} reload={reload} canWrite={canWrite} />
-                {x.submitted > 0 && <button className="btn-sm primary" onClick={() => onReview(m.id)}>قيّم {x.submitted}</button>}
-                {canWrite && <button className="btn-sm ghost" onClick={() => open({ kind: 'model', m })}>تحرير</button>}</span>
-            </li>
-          );
-        })}</ol> : <p className="la-muted hb-none">لا نماذج في هذا الإطار بعد.</p>}
+        {items.length ? <ol className="hb-list">{items.map((m, i) => (
+          <ModelRow key={m.id} m={m} i={i} items={items} list={list} x={ms[m.id] || {}} reload={reload} canWrite={canWrite} open={open} onReview={onReview} />
+        ))}</ol> : <p className="la-muted hb-none">لا نماذج في هذا الإطار بعد.</p>}
       </section>
     );
   });
@@ -592,7 +632,7 @@ function Preview({ catalog, canWrite, open }) {
   const master = track === MASTER;
   useEffect(() => { if (master) return; setFetched(null); L('admin.book-preview', { track, scope: scope || undefined }).then(setFetched); }, [track, scope]);
   useEffect(() => setCur({}), [track]);
-  const labsOf = (c) => c.labs || chapterLabs(catalog, c).map((l) => ({ key: l.key, title: `${l.title_ar}${l.min_level !== 'beginner' ? ` (من ${LVL[l.min_level]})` : ''}` }));
+  const labsOf = (c) => c.labs || chapterLabs(catalog, c).map((l) => ({ key: l.key, title: `${l.title_ar}${l.min_level !== 'beginner' ? ` (${levelFrom(l.min_level)})` : ''}` }));
   const r = master ? masterBook(catalog.handbook_modules, catalog.learning_models) : fetched;
   if (!r) return <Spinner />;
   if (!r.success) return <div className="la-err" role="alert">{r.message}</div>;
@@ -603,7 +643,7 @@ function Preview({ catalog, canWrite, open }) {
   const editModel = () => open({ kind: 'model', m: (catalog.learning_models || []).find((x) => x.id === model.id) });
   const page = (c) => (
     <React.Fragment key={c.id}>
-      <div className="pv-acts"><span className="la-muted">{DIM[c.dimension]} · من {LVL[c.min_level]}</span>{canWrite && <button className="btn-sm ghost" onClick={() => editCh(c)}>تحرير الباب واختباره</button>}</div>
+      <div className="pv-acts"><span className="la-muted">{DIM[c.dimension]} · {levelFrom(c.min_level)}</span>{canWrite && <button className="btn-sm ghost" onClick={() => editCh(c)}>تحرير الباب واختباره</button>}</div>
       <article className="hb-page"><h3 className="hb-page-t">{c.title}</h3><div className="la-md"><Md text={c.md} tierLabel={master ? tierLabel : undefined} /></div></article>
       <section className="pv-review">
         {labsOf(c).length > 0 && <p className="pv-labs"><b>المختبرات أسفل هذا الباب:</b> {labsOf(c).map((l) => l.title).join('، ')}</p>}
@@ -755,28 +795,41 @@ export default function Handbook({ catalog, reload, canWrite }) {
   const sc = Object.values(bs.chapters || {}).reduce((a, c) => [a[0] + c.score, a[1] + c.total], [0, 0]);
   const close = (saved) => { setEditing(null); if (saved) reload(); };
   const p = { catalog, reload, canWrite, open: setEditing };
+  const wait = (bs.to_review || 0) + (bs.to_approve || 0);
+  const keysOf = HB_VIEWS.map(([k]) => k);
+  const tabKey = (ev) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(ev.key)) return;
+    ev.preventDefault();
+    const i = keysOf.indexOf(view);
+    const next = keysOf[ev.key === 'Home' ? 0 : ev.key === 'End' ? keysOf.length - 1 : (i + (ev.key === 'ArrowLeft' ? 1 : -1) + keysOf.length) % keysOf.length];
+    setView(next);
+    ev.currentTarget.querySelector(`#hb-tab-${next}`)?.focus();
+  };
 
   return (
     <>
-      <section className="tx-hero">
-        <div className="tx-hero-head">
-          <div><span className="tx-eyebrow">The Leader&apos;s Book</span><h2>كتاب القائد</h2>
-            <p>الكتاب التفاعلي والنماذج التعليمية في مكان واحد: تحرر المحتوى والاختبارات، وترى الكتاب كما يراه أي مسار، وتتابع تقدم المشاركين وتقيّم أعمالهم.</p></div>
-        </div>
-        <div className="tx-kpis">
-          <div><b>{mods.length}</b><span>بابًا في الكتاب · {models.length} نماذج تعليمية</span></div>
-          <div><b>{done}</b><span>إتمام باب{sc[1] ? ` · دقة ${Math.round((sc[0] / sc[1]) * 100)}%` : ''}</span></div>
-          <div><b>{bs.points?.participants || 0}</b><span>مشارك بدأ يجمع النقاط{bs.points?.avg ? ` · متوسط ${bs.points.avg}` : ''}</span></div>
-          <div className={bs.to_review ? 'warn' : ''}><b>{bs.to_review || 0}</b><span>نموذج للقراءة{bs.to_approve ? ` · ${bs.to_approve} بطاقة للاعتماد` : ''}</span></div>
-        </div>
-        <nav className="hb-views" aria-label="أقسام الكتاب">{HB_VIEWS.map(([k, l]) => (
-          <button key={k} className={view === k ? 'on' : ''} aria-current={view === k ? 'page' : undefined} onClick={() => setView(k)}>{l}{k === 'reviews' && (bs.to_review || bs.to_approve) ? <i> {(bs.to_review || 0) + (bs.to_approve || 0)}</i> : null}</button>
-        ))}</nav>
-      </section>
+      {/* الترويسة الموحدة (المرحلة 18) بدل البطل الداكن: العنوان وسطر وصفه، وسطر الحالة ما ينتظر القراءة، ثم الأرقام بالبطاقة الموحدة */}
+      <ScreenHead title="كتاب القائد" desc="الكتاب التفاعلي والنماذج التعليمية: تحرير المحتوى والاختبارات، ومعاينة الكتاب لكل مسار، وتقييم الأعمال."
+        status={wait ? <StatusChip status="wait" labels={{ wait: `${wait} بانتظار القراءة أو الاعتماد` }} tones={{ wait: 'warn' }} /> : null} />
+      <div className="stats-grid hb-stats">
+        <div className="stat-card"><div className="stat-label">الأبواب</div><div className="stat-value">{mods.length}</div><div className="stat-sub">{modelsAr(models.length)} تعليمية</div></div>
+        <div className="stat-card"><div className="stat-label">إتمام الأبواب</div><div className="stat-value">{done}</div>{sc[1] > 0 && <div className="stat-sub">دقة {Math.round((sc[0] / sc[1]) * 100)}%</div>}</div>
+        <div className="stat-card"><div className="stat-label">بدأ يجمع النقاط</div><div className="stat-value">{bs.points?.participants || 0}</div>{bs.points?.avg ? <div className="stat-sub">متوسط {bs.points.avg}</div> : null}</div>
+        <div className={`stat-card${bs.to_review ? ' s-warn' : ''}`}><div className="stat-label">للقراءة</div><div className="stat-value">{bs.to_review || 0}</div>{bs.to_approve ? <div className="stat-sub">{bs.to_approve} بطاقة للاعتماد</div> : null}</div>
+      </div>
+      {/* تبويبات ملتصقة تحت --la-head-h بنمط role=tablist: الأسهم وHome وEnd تتنقل، والتبويب المختار وحده في ترتيب Tab */}
+      <div className="la-subtabs hb-tabs" role="tablist" aria-label="أقسام الكتاب" onKeyDown={tabKey}>
+        {HB_VIEWS.map(([k, l]) => (
+          <button key={k} id={`hb-tab-${k}`} type="button" role="tab" aria-selected={view === k} aria-controls="hb-panel" tabIndex={view === k ? 0 : -1}
+            className={view === k ? 'on' : ''} onClick={() => setView(k)}>{l}{k === 'reviews' && wait ? <small> ({wait})</small> : null}</button>
+        ))}
+      </div>
+      <div id="hb-panel" role="tabpanel" aria-labelledby={`hb-tab-${view}`}>
       {view === 'models' ? <Models {...p} onReview={(id) => { setSubModel(id); setView('reviews'); }} />
         : view === 'preview' ? <Preview {...p} />
           : view === 'reviews' ? <Reviews key={subModel} catalog={catalog} canWrite={canWrite} model={subModel} onSaved={reload} />
             : <Chapters {...p} />}
+      </div>
       {editing?.kind === 'chapter' && <ChapterEditor m={editing.m} dim={editing.dim} catalog={catalog} canWrite={canWrite} onClose={close} />}
       {editing?.kind === 'model' && <ModelEditor m={editing.m} dim={editing.dim} catalog={catalog} canWrite={canWrite} onClose={close} />}
     </>

@@ -129,7 +129,7 @@ test('النموذج العام: الإغلاق بتعديلات لم تُحفظ
 test('تقييم عمل المشارك: ملاحظات لم تُعتمد لا تضيع بـEsc', async ({ page }) => {
   await setup(page);
   await leaders(page, 'كتاب القائد');
-  await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: /التقييم/ }).click();
+  await page.getByRole('tablist', { name: 'أقسام الكتاب' }).getByRole('tab', { name: /التقييم/ }).click();
   await page.getByLabel('حالة التقديم').selectOption('');   // القائمة تبدأ بما ينتظر التقييم، والعمل هنا مقيَّم
   await page.getByRole('button', { name: 'عرض' }).click();
   const rev = page.getByRole('dialog', { name: 'تقييم عمل سارة الأحمد' });
@@ -236,7 +236,7 @@ test('البحث الشامل والإعدادات: Tab لا يخرج منهما
 test('النموذج التعليمي الجديد: نقرتان على «حفظ النموذج» ترسلان طلب إنشاء واحدًا', async ({ page }) => {
   const calls = await setup(page, { delay: { 'admin.save': 1200 } });
   await leaders(page, 'كتاب القائد');
-  await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: 'النماذج التعليمية' }).click();
+  await page.getByRole('tablist', { name: 'أقسام الكتاب' }).getByRole('tab', { name: 'النماذج التعليمية' }).click();
   await page.getByRole('button', { name: '+ نموذج جديد' }).first().click();
   const ed = page.getByRole('dialog', { name: 'نموذج جديد' });
   await ed.getByLabel('اسم النموذج').fill('خريطة أصحاب المصلحة');
@@ -248,7 +248,7 @@ test('النموذج التعليمي الجديد: نقرتان على «حفظ
 test('التقييم بالسلّم الرباعي: الجدول يعرض اسم الدرجة لا نجومًا خمسًا، والتنبيه لا يذكر خامسة', async ({ page }) => {
   await setup(page);
   await leaders(page, 'كتاب القائد');
-  await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: /التقييم/ }).click();
+  await page.getByRole('tablist', { name: 'أقسام الكتاب' }).getByRole('tab', { name: /التقييم/ }).click();
   await page.getByLabel('حالة التقديم').selectOption('');   // القائمة تبدأ بما ينتظر التقييم، والعمل هنا مقيَّم
   const cell = page.locator('td.stars-c');
   await expect(cell).toContainText('متميز (4 من 4)');

@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كلها تقرأ من admin.catalog وتكتب عبر admin.save / admin.delete / admin.reorder.
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { ASSESSMENT_MISSING_AR, completionSource, journeyCoherence, journeyCtx, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
@@ -15,7 +15,8 @@ import {
 import Form from '../Form.jsx';
 import ItemQuality from './ItemQuality.jsx';
 import { ProgramMilestones } from './Milestones.jsx';
-import { useUI } from '../ui.jsx';
+import { Move, moveKeys, useUI } from '../ui.jsx';
+import { keepSpot, saveQueue, takeSpot } from '../review-queue.js';
 import { readQuery, writeQuery } from '../route.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import { journeyAudience, journeyAudienceAr } from '../program-reach.js';
@@ -34,22 +35,46 @@ function useEditor(reload) {
   return [setForm, node];
 }
 
-function Move({ catalog, entity, id, reload, canWrite }) {
+// النقل بمكون Move المشترك (ui.jsx، المرحلة 18): هدف 32px وtitle يسمي ما يُنقل، وإعلان الموضع الجديد، ولمن يملك canWrite فقط.
+// Alt مع الأسهم على الصف (KeyRow وmoveKeys)، ويُحفظ الترتيب بـsaveQueue والموضع بـkeepSpot فلا يقفز التمرير بعد إعادة التحميل
+export const SPOT_SCOPE = 'methodology';
+let spotDir = 0;
+function RowMove({ catalog, entity, id, name, reload, canWrite, keysRef }) {
   const { toast } = useUI();
-  if (!canWrite) return null;
-  const go = async (dir) => {
+  const ids0 = reorderIds(catalog[entity], entity, id, 0) || [];
+  const i = ids0.indexOf(id);
+  const onMove = async (dir) => {
     const ids = reorderIds(catalog[entity], entity, id, dir);
-    if (!ids) return;
+    if (!ids) return null;
     const r = await L('admin.reorder', { entity, ids, program_id: catalog.program_id });
-    if (!r.success) return toast(r.message);
+    if (!r.success) { toast(r.message); return null; }
+    saveQueue(ids, name);
+    keepSpot(typeof window === 'undefined' ? 0 : window.scrollY, id, SPOT_SCOPE);
+    spotDir = dir;
     reload();
+    return ids.indexOf(id) + 1;
   };
-  return (
-    <>
-      <button className="la-mv" onClick={() => go(-1)} aria-label="نقل لأعلى" title="أعلى">▲</button>
-      <button className="la-mv" onClick={() => go(1)} aria-label="نقل لأسفل" title="أسفل">▼</button>
-    </>
-  );
+  return <Move name={name} onMove={onMove} canWrite={canWrite} first={i === 0} last={i === ids0.length - 1} total={ids0.length} keysRef={keysRef} />;
+}
+// صف قابل للنقل بلوحة المفاتيح: يملك keysRef الذي يربطه Move، وdata-mt-row لاستعادة التركيز بعد إعادة التحميل
+function KeyRow({ as: Tag = 'li', rowId, children, ...rest }) {
+  const keys = useRef(null);
+  return <Tag data-mt-row={rowId} onKeyDown={moveKeys(keys)} {...rest}>{children(keys)}</Tag>;
+}
+// بعد إعادة التحميل: يعود التمرير إلى موضعه، والتركيز إلى زر الاتجاه نفسه في صف ما نُقل
+function useSpot(dep) {
+  useEffect(() => {
+    const s = takeSpot(SPOT_SCOPE);
+    if (!s) return;
+    window.scrollTo?.({ top: s.y });
+    const row = s.id && document.querySelector(`[data-mt-row="${CSS.escape ? CSS.escape(s.id) : s.id}"]`);
+    if (row && !row.contains(document.activeElement)) {
+      const btns = row.querySelectorAll(':scope .la-move-btn');
+      const btn = btns[spotDir > 0 ? 1 : 0];
+      (btn && btn.getAttribute('aria-disabled') !== 'true' ? btn : btns[0])?.focus({ preventScroll: true });
+    }
+    spotDir = 0;
+  }, [dep]);
 }
 
 // ══ الرحلة والمتطلبات ══
@@ -102,6 +127,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   const stages = [...catalog.journey_stages].sort((a, b) => a.sort - b.sort);
   const reqs = catalog.stage_requirements;
   const mv = { catalog, reload, canWrite };
+  useSpot(catalog);
   // سياق واحد (journeyCtx): مدة القياس من رد admin.catalog (baselineMinutes على الخادم)، لا قيمة ثابتة هنا
   const ctxOf = (s) => journeyCtx({ reqs, readyMin: READY_MIN, assessmentMinutes: catalog.assessment_minutes }, s);
   const shown = (t, s) => <JourneyText text={renderJourneyText(t, ctxOf(s))} />;
@@ -158,11 +184,11 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
             }}>+ مرحلة</button>}
           </div>
           {stages.filter((s) => s.phase === ph).map((s) => (
-            <section key={s.key} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>
+            <KeyRow as="section" key={s.key} rowId={s.key} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>{(skeys) => (<>
               <div className="la-row between">
                 <div><b>{s.sort}. {shown(s.title_ar, s)}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
                 <div className="la-row">
-                  <Move {...mv} entity="journey_stages" id={s.key} />
+                  <RowMove {...mv} entity="journey_stages" id={s.key} name={`المرحلة ${s.sort}`} keysRef={skeys} />
                   {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs, stages, s.key, catalog.assessment_minutes), values: stageToForm(s), onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) })}>تحرير</button>}
                 </div>
               </div>
@@ -170,7 +196,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
               {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
               <ul className="la-reqs">
                 {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (
-                  <li key={r.id} id={`jreq-${r.id}`} className={r.active ? '' : 'off'}>
+                  <KeyRow key={r.id} rowId={r.id} id={`jreq-${r.id}`} className={r.active ? '' : 'off'}>{(rkeys) => (<>
                     <span>
                       <code>{r.code}</code> {shown(r.title_ar)} <small className="la-chip">{KIND[r.kind]}</small> <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
                       {r.dimension && <small className="la-chip">{DIM[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small>}
@@ -178,16 +204,16 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
                       {r.needs_review && <small className="la-chip warn">مراجعة</small>}
                     </span>
                     <span className="la-row">
-                      <Move {...mv} entity="stage_requirements" id={r.id} />
+                      <RowMove {...mv} entity="stage_requirements" id={r.id} name={`المتطلب ${r.code}`} keysRef={rkeys} />
                       {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: lockReqCode(reqFields(stages, catalog.learning_models || [], catalog.lab_links || [])), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
                     </span>
-                  </li>
+                  </>)}</KeyRow>
                 ))}
               </ul>
               {canWrite && (
                 <button className="la-link" onClick={() => newReq(s.key)}>+ متطلب</button>
               )}
-            </section>
+            </>)}</KeyRow>
           ))}
         </React.Fragment>
       ))}
@@ -202,6 +228,7 @@ export const tierGroups = (qs) => Object.entries(TIER).map(([t, title]) => ({ t,
 
 export function Assessment({ catalog, reload, canWrite }) {
   const [edit, editor] = useEditor(reload);
+  useSpot(catalog);
   const insts = [...catalog.instruments].sort((a, b) => (a.kind + b.version).localeCompare(b.kind + a.version));
   const [instId, setInstId] = useState(() => (insts.find((i) => i.active && i.kind === 'baseline') || insts[0])?.id);
   const [dim, setDim] = useState('milestone');
@@ -235,11 +262,11 @@ export function Assessment({ catalog, reload, canWrite }) {
           <h4 className="la-phase">{title}</h4>
           <ol className="la-qs">
             {list.map((q) => (
-              <li key={q.id} className={q.active ? '' : 'off'}>
+              <KeyRow key={q.id} rowId={q.id} className={q.active ? '' : 'off'}>{(qkeys) => (<>
                 <div className="la-row between">
                   <span><code>{q.code}</code> {q.text_ar}</span>
                   <span className="la-row">
-                    <Move catalog={catalog} reload={reload} canWrite={canWrite} entity="questions" id={q.id} />
+                    <RowMove catalog={catalog} reload={reload} canWrite={canWrite} entity="questions" id={q.id} name={`السؤال ${q.code}`} keysRef={qkeys} />
                     {canWrite && <button className="la-link" onClick={() => edit({
                       title: `سؤال ${q.code}`, fields: Q_SAFE, values: q,
                       onSave: save('questions', { id: q.id }), onDelete: null,
@@ -247,7 +274,7 @@ export function Assessment({ catalog, reload, canWrite }) {
                   </span>
                 </div>
                 <div className="la-qopts">{(q.options || []).map((o, i) => <span key={i} className={Number(o.score) > 0 ? 'good' : ''}>{o.label} <b>{o.score}</b></span>)}</div>
-              </li>
+              </>)}</KeyRow>
             ))}
           </ol>
         </React.Fragment>

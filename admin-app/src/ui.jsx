@@ -289,6 +289,7 @@ export function moveKeys(target) {
   return (e) => {
     if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     e.preventDefault();
+    e.stopPropagation?.(); // صف داخل صف (المتطلب داخل المرحلة): ينقل الأقرب وحده
     const fn = typeof target === 'function' ? target : target?.current;
     if (fn) fn(e.key === 'ArrowUp' ? -1 : 1);
   };
