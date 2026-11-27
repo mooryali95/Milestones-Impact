@@ -1713,3 +1713,14 @@ tr.ct-on > td { background: var(--gold-pale); }
 .prog-archived { margin-top: 20px; }
 .prog-archived > summary, details.how-it-works > summary { cursor: pointer; font-weight: 700; }
 details.how-it-works[open] > summary { margin-bottom: 12px; }
+
+/* المرحلة 15: الخانة الغائبة (Missing) ونقل الصف (Move) */
+.la-missing { color: var(--ink-light); }
+.la-missing.loading .sk { display: inline-block; inline-size: 3em; block-size: .8em; vertical-align: middle; }
+.la-missing.later { font-size: .8rem; }
+.la-move { display: inline-flex; gap: 2px; }
+.la-move-btn { min-inline-size: 32px; min-block-size: 32px; display: inline-grid; place-items: center; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--ink-light); cursor: pointer; font-size: .75rem; }
+.la-move-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sand-light); color: var(--ink); }
+.la-move-btn:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 1px; }
+.la-move-btn:disabled, .la-move-btn[aria-disabled="true"] { opacity: .35; cursor: default; }
+.la-missing-mark { display: inline-block; inline-size: .9em; block-size: 1.5px; background: currentColor; opacity: .55; vertical-align: middle; border-radius: 1px; }

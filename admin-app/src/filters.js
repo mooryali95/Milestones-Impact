@@ -53,7 +53,8 @@ export function activeChips(state, fields) {
   return fields.filter((f) => state[f.key] !== '' && state[f.key] != null).map((f) => {
     const opts = f.type === 'period' ? PERIODS : f.options || [];
     const hit = opts.find(([v]) => String(v) === String(state[f.key]));
-    return { key: f.key, label: `${f.label}: ${hit ? hit[1] : state[f.key]}` };
+    // chip: اسم الحقل بالمفرد في الرقاقة حين يكون label جمعًا للقائمة («كل الجهات» ← «الجهة: …»)
+    return { key: f.key, label: `${f.chip || f.label}: ${hit ? hit[1] : state[f.key]}` };
   });
 }
 
@@ -94,14 +95,34 @@ export function rememberState(scope, state) {
   try { sessionStorage.setItem(keptKey(scope), JSON.stringify(shareable(state))); } catch { /* التخزين محجوب: تبقى للشاشة المفتوحة فقط */ }
 }
 // ما تبدأ به الشاشة، بالأولوية: العنوان (رابط مشارَك)، ثم ما جاء به التنقل (initial)، ثم ما تُرك آخر مرة، ثم الافتراضي
-export function startState(keys, { fromUrl = '', initial = {}, kept = null, defaults = {} } = {}) {
+export function startState(keys, opts = {}) {
+  return startWith(keys, opts).state;
+}
+// startState مع مصدرها: url أو initial أو kept أو defaults. viewIsAuto: العرض لم يأت من الرابط ولا من التنقل ولا مما تُرك
+// ولا من اختيار صريح، فيجوز لـfirstNonEmpty أن تختار غيره (ما تُرك بلا view هو عرض اختير آليًا ولم يُحفظ)
+export function startWith(keys, { fromUrl = '', initial = {}, kept = null, defaults = {} } = {}) {
   const empty = decodeState('', keys);
   const any = (o) => Object.values(o || {}).some((v) => v !== '' && v != null);
   const url = decodeState(fromUrl, keys);
-  if (any(url)) return url;
-  if (any(initial)) return { ...empty, ...initial };
-  if (kept) return { ...empty, ...Object.fromEntries(keys.filter((k) => kept[k] != null).map((k) => [k, String(kept[k])])) };
-  return { ...empty, ...defaults };
+  if (any(url)) return { state: url, from: 'url', viewIsAuto: false };
+  if (any(initial)) return { state: { ...empty, ...initial }, from: 'initial', viewIsAuto: false };
+  if (kept) {
+    const state = { ...empty, ...Object.fromEntries(keys.filter((k) => kept[k] != null).map((k) => [k, String(kept[k])])) };
+    const autoView = keys.includes('view') && kept.view == null;
+    if (autoView && defaults.view != null) state.view = String(defaults.view);
+    return { state, from: 'kept', viewIsAuto: autoView };
+  }
+  return { state: { ...empty, ...defaults }, from: 'defaults', viewIsAuto: keys.includes('view') };
+}
+
+// الافتراضي غير الفارغ (المرحلة 15، دالة واحدة للخبراء والمبادرات): المفضَّل إن كان فيه شيء، وإلا أول عرض سريع
+// عداده أكبر من صفر بترتيب presets، وإلا المفضَّل نفسه. null ما دامت العدادات لم تُحمَّل (لا قفز قبل معرفة الأرقام).
+// لا تُستدعى إلا حين يكون العرض آليًا (startWith().viewIsAuto)، فأي عرض صريح في الرابط يُحترم ولو كان فارغًا.
+export function firstNonEmpty(presets = [], counts = {}, prefer = '') {
+  if (!presets.length || presets.some((p) => typeof (counts || {})[p.key] !== 'number')) return null;
+  if (prefer && counts[prefer] > 0) return prefer;
+  const hit = presets.find((p) => counts[p.key] > 0);
+  return hit ? hit.key : prefer;
 }
 
 // ── الحفظ في عنوان الصفحة: #/leaders/participants?status=placed&view=idle ──

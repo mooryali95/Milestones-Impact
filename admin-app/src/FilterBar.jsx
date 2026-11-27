@@ -1,19 +1,38 @@
 // شريط الفلترة الموحّد: بحث، وعروض سريعة بعدّاداتها، وحقول، ورقائق للفلاتر المفعّلة،
 // وعروض محفوظة باسم. المنطق في filters.js، والحالة في عنوان الصفحة عبر useFilters.
 import React, { useEffect, useRef, useState } from 'react';
-import { activeChips, decodeState, deleteView, encodeState, isFiltered, loadViews, ltrDigits, nextSort, PERIODS, recallState, rememberState, saveView, splitPresets, startState } from './filters.js';
+import { activeChips, decodeState, deleteView, encodeState, firstNonEmpty, isFiltered, loadViews, ltrDigits, nextSort, PERIODS, recallState, rememberState, saveView, splitPresets, startWith } from './filters.js';
 import { readQuery, writeQuery } from './route.js';
 
 // حالة الفلاتر لشاشة واحدة، مقروءة من العنوان ومكتوبة إليه.
 // scope: تبقى الفلاتر عند العودة للشاشة. defaults: ما تبدأ به أول مرة. url=false لقائمة داخل صفحة لها عنوانها.
-export function useFilters(keys, initial = {}, { scope = '', defaults = {}, url = true } = {}) {
-  const [state, setState] = useState(() => startState(keys, { fromUrl: url ? readQuery() : '', initial, kept: scope ? recallState(scope) : null, defaults }));
-  useEffect(() => { if (url) writeQuery(encodeState(state)); if (scope) rememberState(scope, state); }, [state]); // eslint-disable-line
+// autoView: { presets, counts } (المرحلة 15): إن لم يأت العرض من الرابط ولا من التنقل ولا مما تُرك ولا من اختيار صريح،
+// اختارت firstNonEmpty أول عرض غير فارغ بدل الافتراضي الفارغ، مرة واحدة بعد تحميل العدادات. العرض الآلي لا يُكتب
+// في الرابط ولا يُحفظ للعودة، فيبقى أي رابط صريح ثابتًا. العنصر الخامس auto = { from, to } حين اختير غير الافتراضي.
+export function useFilters(keys, initial = {}, { scope = '', defaults = {}, url = true, autoView = null } = {}) {
+  const [start] = useState(() => startWith(keys, { fromUrl: url ? readQuery() : '', initial, kept: scope ? recallState(scope) : null, defaults }));
+  const [state, setState] = useState(start.state);
+  const [auto, setAuto] = useState(() => (autoView && start.viewIsAuto ? { from: start.state.view || '', to: null } : null));
+  const isAuto = !!auto && state.view === (auto.to ?? auto.from);
+  useEffect(() => {
+    const out = isAuto ? { ...state, view: '' } : state;
+    if (url) writeQuery(encodeState(out));
+    if (scope) { const { view, ...rest } = state; rememberState(scope, isAuto ? rest : state); } // eslint-disable-line no-unused-vars
+  }, [state, isAuto]); // eslint-disable-line
   // مغادرة الشاشة تُفرغ الفلاتر من العنوان
   useEffect(() => () => { if (url) writeQuery(''); }, []); // eslint-disable-line
-  const set = (patch) => setState((s) => ({ ...s, ...patch }));
-  const clear = () => setState((s) => ({ ...decodeState('', keys), ...(s.sort ? { sort: s.sort } : {}) }));   // المسح للفلاتر، والفرز يبقى
-  return [state, set, clear, setState];
+  const pick = autoView && auto && auto.to === null ? firstNonEmpty(autoView.presets, autoView.counts, auto.from) : null;
+  useEffect(() => {
+    if (pick === null) return;
+    setAuto((a) => (a ? { ...a, to: pick } : a));
+    setState((s) => (s.view === pick ? s : { ...s, view: pick }));
+  }, [pick]);
+  // أي اختيار صريح للعرض (أو مسح أو عرض محفوظ) ينهي الاختيار الآلي
+  const set = (patch) => { if ('view' in patch) setAuto(null); setState((s) => ({ ...s, ...patch })); };
+  const clear = () => { setAuto(null); setState((s) => ({ ...decodeState('', keys), ...(s.sort ? { sort: s.sort } : {}) })); };   // المسح للفلاتر، والفرز يبقى
+  const replace = (next) => { setAuto(null); setState(next); };
+  const picked = isAuto && auto.to !== null && auto.to !== auto.from ? { from: auto.from, to: auto.to } : null;
+  return [state, set, clear, replace, picked];
 }
 
 // رأس عمود يُفرز به: نقرة تصاعدي، ثم تنازلي، ثم ترتيب الخادم. الحالة في state.sort فتُحفظ مع الفلاتر
@@ -28,7 +47,7 @@ export function SortTh({ k, state, set, children, ...rest }) {
   );
 }
 
-export default function FilterBar({ scope, state, set, clear, replace, fields = [], presets = [], counts = {}, shown, total, noun, placeholder, actions, capped, sorts, collapseZero = false }) {
+export default function FilterBar({ scope, state, set, clear, replace, fields = [], presets = [], counts = {}, shown, total, noun, placeholder, actions, capped, sorts, collapseZero = false, auto = null, autoNote = '' }) {
   const [views, setViews] = useState(() => loadViews(scope));
   const [more, setMore] = useState(false);
   const [zeroOpen, setZeroOpen] = useState(false);
@@ -92,6 +111,11 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
           )}
         </div>
       )}
+
+      {/* اختيار العرض الآلي (useFilters autoView): سطر هادئ يعلن ما اختير عبر role=status */}
+      <p className="flt-auto la-muted" role="status">{auto && (<>
+          {autoNote || `لا شيء في «${presets.find((p) => p.key === auto.from)?.label || 'العرض الافتراضي'}» الآن`}، فيُعرض «{presets.find((p) => p.key === auto.to)?.label || 'الكل'}».
+        </>)}</p>
 
       <div className="flt-row flt-status">
         <span className="la-muted" aria-live="polite">{shown === total ? `${total} ${noun}` : <><b>{shown}</b> من {total} {noun}</>}</span>

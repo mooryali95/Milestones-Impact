@@ -22,6 +22,15 @@ export const LEVELS = [
 ];
 export const LEVEL_AR = Object.fromEntries(LEVELS.map((l) => [l.key, l.title]));
 
+// المرحلة 15: صياغة واحدة للمستوى الأدنى لمحتوى أو شرط («للمستوى المتوسط فأعلى»)، بدل «(من X)» و«X فأعلى» و«مطلوب من المستوى»
+export function levelFrom(level) {
+  const i = LEVELS.findIndex((l) => l.key === level);
+  if (i <= 0) return 'للمستويات كلها';
+  return `للمستوى ال${LEVELS[i].title}${i < LEVELS.length - 1 ? ' فأعلى' : ''}`;
+}
+// المرحلة 15: مبادرة لم يُكتب اسمها بعد (يُكتب خافتًا ومعه اسم المشارك)
+export const NO_TITLE = 'لم تُسمَّ بعد';
+
 export const TIER_AR = { knowledge: 'المعرفة', skill: 'المواقف', behavior: 'الممارسة' };
 
 export const PARTICIPANT_STATUS = {
