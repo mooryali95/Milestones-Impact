@@ -111,8 +111,25 @@ describe('البلاطات والتفاصيل الملاصقة', () => {
     expect(host.querySelector('.jt-tile')).toBeNull();
     expect(host.querySelector('.jt-foot .jt-panel')).not.toBeNull();
   });
-  it('الهاتف: التفاصيل درج سفلي ثابت', () => {
-    expect(src('../../shared/css/journey-timeline.css')).toMatch(/@media \(max-width: 640px\) \{\n {2}\.jt-pop \{ position: fixed; inset: auto 0 0 0/);
+  it('الهاتف: التفاصيل درج سفلي ثابت باستعلام الحاوي نفسه الذي يخفي .jt-desk', () => {
+    expect(src('../../shared/css/journey-timeline.css')).toMatch(/@container \(max-width: 640px\) \{\n {2}\.jt-pop \{ position: fixed; inset: auto 0 0 0/);
+  });
+  it('التفاصيل خارج .jt-desk فتظهر على الهاتف، وزر «التفاصيل» في بطاقة الهاتف يفتحها وEsc يعيد التركيز إليه', async () => {
+    await mount(<JourneyTimeline model={model()} pop />);
+    const btn = host.querySelector('[data-act-m]');
+    expect(btn).not.toBeNull();
+    await act(async () => { btn.click(); });
+    await flush();
+    const pop = host.querySelector('.jt-pop');
+    expect(pop).not.toBeNull();
+    expect(pop.closest('.jt-desk')).toBeNull();
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+    expect(btn.getAttribute('aria-controls')).toBe(pop.id);
+    expect(document.activeElement).toBe(pop);
+    await act(async () => { pop.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await flush();
+    expect(host.querySelector('.jt-pop')).toBeNull();
+    expect(document.activeElement).toBe(btn);
   });
 });
 

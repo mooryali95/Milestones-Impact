@@ -163,6 +163,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   // الإطار المتمرر: الحافتان (هل بقي ما يُمرر نحو البداية أو النهاية) وموضع التفاصيل الملاصقة للبلاطة
   const scrollRef = useRef(null);
   const deskRef = useRef(null);
+  const secRef = useRef(null);
   const popRef = useRef(null);
   const tileRef = useRef(null);
   const [edges, setEdges] = useState({ start: false, end: false });
@@ -193,15 +194,17 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
     const x = Math.abs(el.scrollLeft);
     setEdges((o) => { const n = { start: max > 1 && x > 1, end: max > 1 && x < max - 1 }; return o.start === n.start && o.end === n.end ? o : n; });
   };
-  // موضع التفاصيل: تحت البلاطة داخل .jt-desk، ولا تخرج عن عرضه
+  // موضع التفاصيل على الشاشة العريضة: تحت البلاطة ولا تخرج عن عرض .jt-desk. التفاصيل ابنة القسم (.jt) لا .jt-desk،
+  // فتبقى ظاهرة على الهاتف حيث .jt-desk مخفي، وتصير هناك درجًا سفليًا بـCSS (الموضع المحسوب يُتجاهل)
   const placePop = () => {
-    const t = tileRef.current, d = deskRef.current;
-    if (!t || !d || !t.isConnected) return;
-    const tr = t.getBoundingClientRect(), dr = d.getBoundingClientRect();
+    const t = tileRef.current, d = deskRef.current, sc = secRef.current;
+    if (!t || !d || !sc || !t.isConnected || !d.offsetWidth) return;
+    const tr = t.getBoundingClientRect(), dr = d.getBoundingClientRect(), sr = sc.getBoundingClientRect();
     const w = Math.min(320, dr.width);
     const rtl = getComputedStyle(d).direction === 'rtl';
     const fromStart = rtl ? dr.right - tr.right : tr.left - dr.left;
-    setPopAt({ top: Math.round(tr.bottom - dr.top + 8), start: Math.round(Math.max(0, Math.min(fromStart, dr.width - w))) });
+    const deskStart = (rtl ? sr.right - dr.right : dr.left - sr.left) - sc.clientLeft;
+    setPopAt({ top: Math.round(tr.bottom - sr.top - sc.clientTop + 8), start: Math.round(deskStart + Math.max(0, Math.min(fromStart, dr.width - w))) });
   };
   // عند الفتح: المرحلة الحالية إلى داخل الإطار (الجارية في الدفعة، وأول مراحل التأهيل في البرنامج)، بتمرير الإطار وحده لا الصفحة
   const firstKey = model && !model.empty ? (model.stages.find((x) => x.status === 'active') || model.stages.find((x) => x.phase === 'qualification'))?.key : null;
@@ -228,7 +231,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
       if (!(popMode && sel)) return;
       // البلاطة خرجت من الإطار: تُغلق التفاصيل بلا إعادة تركيز، فلا تشير إلى بلاطة غير ظاهرة
       const t = tileRef.current;
-      if (t && t.isConnected) {
+      if (t && t.isConnected && el.offsetWidth && el.contains(t)) {
         const tr = t.getBoundingClientRect(), er = el.getBoundingClientRect();
         if (tr.right <= er.left || tr.left >= er.right) { setSel(null); return; }
       }
@@ -412,7 +415,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   );
 
   return (
-    <section className={`jt ctx-${model.context}${pop ? ' jt-popmode' : ''}${editable ? ' jt-editable' : ''}${dragging ? ' jt-dragging' : ''}${adding ? ' jt-adding' : ''}`} aria-labelledby={head}
+    <section ref={secRef} className={`jt ctx-${model.context}${pop ? ' jt-popmode' : ''}${editable ? ' jt-editable' : ''}${dragging ? ' jt-dragging' : ''}${adding ? ' jt-adding' : ''}`} aria-labelledby={head}
       onKeyDown={adding ? (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); add.onToggle(); } } : undefined}>
       <header className="jt-head">
         <div>
@@ -545,7 +548,6 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
           </ul>
           {!pop && <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} />}
         </div>
-        {pop && <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} pop={pop} />}
       </div>
 
       {/* الهاتف: خط رأسي، كل مرحلة details تفتح بطاقات أنشطتها، والمسار المستمر قبلها بشريط «يسير بجانب المراحل» */}
@@ -605,6 +607,11 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                                   {a.undated && <span className="jt-chip tbd"><Glyph name="clock" size={11} /> يُحدد لاحقًا</span>}
                                 </p>
                                 <small>{a.when_ar}، {a.owner_ar}</small>
+                                {pop && (
+                                  <button type="button" className={`jt-open sm ghost jt-m-more${sel === a.id ? ' on' : ''}`} data-act-m={a.id}
+                                    aria-expanded={sel === a.id} aria-controls={sel === a.id ? pop.id : undefined} aria-label={`التفاصيل: ${a.title}`}
+                                    onClick={(e) => pop.toggle(a.id, e.currentTarget)}>التفاصيل</button>
+                                )}
                                 {onOpen && <button type="button" className="jt-open sm" onClick={() => onOpen(a)} aria-label={`${openLabel(a)}: ${a.title}`}>{openLabel(a)}</button>}
                               </div>
                             </li>
@@ -619,6 +626,9 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
           </li>
         ))}
       </ol>
+
+      {/* التفاصيل الملاصقة (pop): ملاصقة للبلاطة على العريضة، ودرج سفلي على الهاتف */}
+      {pop && <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} pop={pop} />}
 
       <details className="jt-table">
         <summary>عرض الرحلة جدولًا</summary>

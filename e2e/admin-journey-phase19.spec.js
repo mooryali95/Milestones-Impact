@@ -112,3 +112,28 @@ test('375: الهاتف بخطه الرأسي بلا تمرير أفقي، وس�
   await expect(page.getByLabel('من يصله التعديل')).toBeVisible();
   await shot(page, 'details');
 });
+
+test('375: التفاصيل درج سفلي على الهاتف، وEsc يغلقه ويعيد التركيز إلى زره', async ({ page }) => {
+  await setup(page, 375);
+  await tab(page, 'الرحلة والمتطلبات');
+  const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  await expect(tl.locator('.jt-desk')).toBeHidden();
+  const stage = tl.locator('.jt-m-stage', { hasText: 'قراءة الباب الأول' }).first();
+  if (!(await stage.locator('details').evaluate((d) => d.open))) await stage.locator('summary').click();
+  const btn = stage.getByRole('button', { name: /^التفاصيل: قراءة الباب الأول/ });
+  await btn.click();
+  await expect(btn).toHaveAttribute('aria-expanded', 'true');
+  const pop = tl.locator('.jt-pop');
+  await expect(pop).toBeVisible();
+  await expect(pop).toBeFocused();
+  // درج سفلي بعرض الشاشة ملتصق بأسفلها
+  const vp = page.viewportSize(), pb = await pop.boundingBox();
+  expect(Math.round(pb.width)).toBe(vp.width);
+  expect(Math.abs(pb.y + pb.height - vp.height)).toBeLessThan(2);
+  expect(await pop.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  await shot(page, 'drawer');
+  await page.keyboard.press('Escape');
+  await expect(pop).toHaveCount(0);
+  await expect(btn).toBeFocused();
+  expect(await noOverflow(page)).toBe(true);
+});
