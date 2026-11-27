@@ -12,6 +12,8 @@ export function lockFields(stored, fields, now = new Date().toISOString()) {
   const out = { ...fields };
   delete out.submitted; delete out.reopenRequested; delete out.submittedAt;
   const wasSubmitted = stored?.submitted === true;
+  // محتوى الخطة المقدمة مقفل كحالتها: لا يُعدَّل إلا بعد فك المشرف القفل
+  if (wasSubmitted) { delete out.dates; delete out.confirmed; }
   if (!wasSubmitted && fields.submitted === true) { out.submitted = true; out.submittedAt = now; }
   if (wasSubmitted && stored?.reopenRequested !== true && fields.reopenRequested === true) out.reopenRequested = true;
   return out;

@@ -2,8 +2,16 @@
   "note": "استثناءات فاحص الترحيلات (scripts/db/migration-lint.mjs) باسم الترحيل، ولكل منها قواعده وسببه. استثناء لا يطابق مخالفة قائمة يُفشل الفحص.",
   "migrations": {
     "20261128180000_leaders_phone_unique": {
-      "rules": ["index-not-concurrent"],
+      "rules": [
+        "index-not-concurrent"
+      ],
       "reason": "جدول المشاركين مئات الصفوف فالفهرس الفريد يُبنى في أجزاء من الثانية، ويجب أن يكون في معاملة واحدة مع حارس التكرار قبله فلا يبقى فهرس INVALID ولا يمر تكرار بين الحارس والبناء"
+    },
+    "20261130050000_leaders_upload_size_limit": {
+      "rules": [
+        "data-backup"
+      ],
+      "reason": "النسخة الاحتياطية leaders.backup_20261130_upload_bucket تُنشأ بـ create table ... as select داخل do المحروس بوجود storage.buckets (القاعدة المحلية للقطة بلا storage)، فلا يراها الفاحص النصي؛ وسطر restore موجود"
     }
   }
 }

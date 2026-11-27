@@ -8,6 +8,8 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { inflateSync, crc32 } from 'node:zlib';
 import { FORMS } from '../supabase/functions/leaders-api/document-forms.js';
 import { DOC_LIVE_HEAD_AR } from '../supabase/functions/leaders-api/labels.js';
+// مطابق لـ SCANNED_NOTE_AR في src/lib/brand/pdf.js (لا يُستورد هنا: pdf.js يستورد أصولًا لا يحملها Node)
+const SCANNED_NOTE_AR = 'نسخة مصورة';
 
 const LEADERS = 'http://localhost:4304/';
 const T = 't'.repeat(40);
@@ -155,10 +157,12 @@ for (const form of ['card', 'charter', 'case']) {
       expect(r.marks).toEqual(Array(r.pages).fill(state === 'live'));
       // الترويسة والتذييل: «صفحة N من M» لكل صفحة، واسم الباب (أو ترويسة الحية) لكل صفحة بعد الغلاف، وكلها والخط العربي محمّل في مستند لوحتها
       const rec = await page.evaluate(() => window.__p30 || []);
-      const foot = rec.filter((x) => /^صفحة \d+ من \d+$/.test(x.text));
-      expect(foot.map((x) => x.text)).toEqual(Array.from({ length: r.pages }, (_, i) => `صفحة ${i + 1} من ${r.pages}`));
+      // تصور الفخامة: البديل المصور معلَّم «نسخة مصورة» بعد الترقيم (المرحلة 1، SCANNED_NOTE_AR)، والغلاف بلا تذييل يمتد إلى حافة الورقة
+      // (المرحلة 5)، فالتذييل من الصفحة الثانية إلى الأخيرة
+      const foot = rec.filter((x) => /^صفحة \d+ من \d+/.test(x.text));
+      expect(foot.map((x) => x.text)).toEqual(Array.from({ length: r.pages - 1 }, (_, i) => `صفحة ${i + 2} من ${r.pages} · ${SCANNED_NOTE_AR}`));
       const kufi = rec.filter((x) => x.kufi);
-      expect(kufi.length).toBeGreaterThanOrEqual(r.pages + (r.pages - 1) + (state === 'live' ? 1 : 0));
+      expect(kufi.length).toBeGreaterThanOrEqual((r.pages - 1) * 2 + (state === 'live' ? 1 : 0));
       expect(kufi.filter((x) => !x.loaded).map((x) => x.text)).toEqual([]);
       if (state === 'live') expect(rec.filter((x) => x.text === DOC_LIVE_HEAD_AR && x.kufi && x.loaded).length === r.pages - 1).toBe(true);
       await shot(browser, `${form}-${state}`, r.firstJpeg, r.mark);

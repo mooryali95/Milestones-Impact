@@ -1,4 +1,4 @@
-// المرحلة 29: أبواب حالة العمل. كل باب صفحة، والميثاق انسياب بحاجز 60 مم، وفاتحة الباب بسؤال صاحب القرار من
+// المرحلة 29: أبواب حالة العمل. كل باب صفحة، والميثاق انسياب بحاجز 40 مم، وفاتحة الباب بسؤال صاحب القرار من
 // decision-questions.json، وفهرس سطر القرار بأرقام target-counter، والافتراضات من RAID، وفصل نجاح المشروع عن نجاح المنافع.
 import { describe, expect, it } from 'vitest';
 import { assumptionsOf, institutionalReport } from '../../src/lib/brand/institutional.js';
@@ -27,14 +27,15 @@ describe('مصدر أسئلة صاحب القرار', () => {
   });
 });
 
-describe('حالة العمل: كل باب يبدأ صفحة', () => {
+describe('حالة العمل: الباب ينساب بحاجز واسع، والاعتماد وحده صفحة مفروضة (ضبط الفراغات 2026-11-27)', () => {
   const r = build('M3I3L3');
   const list = secs(r.body);
-  it('كل باب بعد الأول صفحة مفروضة، والأول بعد صفحة القرار', () => {
+  it('كل باب بعد الأول يكمل في الصفحة إن اتسعت، والأول بعد صفحة القرار', () => {
     expect(r.form.key).toBe('case');
     expect(list.length).toBeGreaterThan(6);
-    expect(list.slice(1).every((x) => x.np)).toBe(true);
-    expect(list.some((x) => x.flow)).toBe(false);
+    expect(list.slice(1, -1).every((x) => !x.np && x.flow)).toBe(true);
+    expect(list.at(-1).np).toBe(true);
+    expect(r.body).toContain('class="in-keep wide"');
     expect(r.body).toContain('class="in-dec"');
   });
   it('كل باب يفتح بسؤال صاحب القرار بخطه الجانبي، ومنه باب الأثر', () => {
@@ -73,13 +74,13 @@ describe('حالة العمل: كل باب يبدأ صفحة', () => {
 });
 
 describe('الميثاق والبطاقة', () => {
-  it('الميثاق انسياب متصل بحاجز 60 مم، وبفهرس سطر، وبلا أسئلة', () => {
+  it('الميثاق انسياب متصل بحاجز 40 مم، وبفهرس سطر، وبلا أسئلة', () => {
     const r = build('M2I2L2');
     expect(r.form.key).toBe('charter');
     const list = secs(r.body);
     expect(list.filter((x) => x.np).map((x) => x.id)).toEqual(['in-approval']);
     expect(list.slice(1).filter((x) => !x.np).every((x) => x.flow)).toBe(true);
-    expect(r.body).toContain('.in-keep { display: block; height: 60mm; margin-bottom: -60mm; break-inside: avoid;');
+    expect(r.body).toContain('.in-keep { display: block; height: 40mm; margin-bottom: -40mm; break-inside: avoid;');
     expect(r.body).toContain('class="in-toc"');
     expect(r.body).not.toContain('class="ask"');
     expect(r.body).not.toContain(IMPACT_Q);

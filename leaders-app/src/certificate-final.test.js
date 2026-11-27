@@ -39,7 +39,7 @@ describe('دورة الشهادة من التقييم الختامي', () => {
     expect(cert).toMatch(/if \(reason\.length < 5\) throw new Fail\('سبب الإلغاء أو التعليق مطلوب'\);/);
   });
   it('التحقق العام لا يرسل لقطة غير السارية، والصفحة تعرض المعلّقة', () => {
-    expect(cert).toMatch(/const shown = authentic && c\.status === 'valid';[\s\S]*certificate: shown \? c\.snapshot : null,/);
+    expect(cert).toMatch(/const shown = authentic && c\.status === 'valid';[\s\S]*certificate: shown \? publicCertificate\(c\.snapshot\) : null,/);
     expect(read('leaders-app/src/screens/Verify.jsx')).toMatch(/suspended: 'شهادة معلّقة/);
   });
   it('اللقطة تحمل النوع والقرار وإصدار المعادلة والبرنامج، وتدخل التوقيع', () => {

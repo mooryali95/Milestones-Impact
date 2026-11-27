@@ -23,10 +23,10 @@ import { APPROVAL_SLA_AR, DOC_VERIFY_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { docFingerprint, freezeIssued, issuedFingerprint, rejectionStats, verifyKey } from './doc-quality.js';
 import { docFormFor } from './doc-form.js';
-import { adminChoice, docOptionsView, effectiveQr, withAdminQr, withOwnerQr } from './doc-options.js';
+import { adminChoice, docOptionsView, effectiveQr, qrExportReason, withAdminQr, withOwnerQr } from './doc-options.js';
 import { missingColumn } from './missing-column.ts';
 import { cohortIdentity } from './cohort-identity.js';
-import { pdfTicket } from './pdf-ticket.ts';
+import { docTicket, pdfTicket } from './pdf-ticket.ts';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
@@ -267,7 +267,7 @@ async function decisionsFor(participantId: string, approvedAt: string | null) {
       db.from('capstone_updates').select('id').eq('participant_id', participantId),
     ]);
     const ids = [participantId, (card as any)?.id, ...((ups || []) as any[]).map((u) => u.id)].filter(Boolean).map(String);
-    const { data: ev } = await db.from('audit_log').select('action, created_at, after').in('entity_id', ids).in('action', GATE_ACTIONS).order('created_at').limit(200);
+    const { data: ev } = await db.from('audit_log').select('action, created_at, after, entity_id').in('entity_id', ids).in('action', GATE_ACTIONS).order('created_at').limit(200);
     return gateDecisions((ev || []) as any[], { approved_at: approvedAt });
   } catch (e) {
     console.error('capstone decisions:', e);
@@ -356,7 +356,8 @@ export const qrStateFor = (row: any) => {
   const o = row?.doc_options || {};
   const eff = effectiveQr(o);
   const issued = row?.status === 'approved' && !!issuedFingerprint(row?.snapshot);
-  return { qr: eff.qr, source: eff.source, forced: eff.forced, owner: typeof o?.owner?.qr === 'boolean' ? o.owner.qr : null, available: issued };
+  return { qr: eff.qr, source: eff.source, forced: eff.forced, owner: typeof o?.owner?.qr === 'boolean' ? o.owner.qr : null, available: issued,
+    reason: qrExportReason({ approved: row?.status === 'approved', issued, qr: eff.qr }) };
 };
 
 // capstone.options: صاحب الوثيقة وحده (p جلسته هو)، ويكتب owner.qr وحده
@@ -529,14 +530,15 @@ export async function adminDocExport(a: Admin, b: Body) {
   return { success: true, doc: document, fingerprint: fp, pdf: await pdfTicket(`admin-${a.id || 'owner'}`, fp).catch(() => null) };
 }
 
-export async function adminGet(b: Body) {
+export async function adminGet(b: Body, a: Admin | null = null) {
   const p = await participantRow(b.participant_id);
   const r = await recordAndBuild(p, 'admin');
   const document = r.doc;
   const state = r.d || await build(p);
   const c = state.capstone;
+  const doc = await withTracking({ ...document, review_levels: levelsView(state, !r.d) }, p.id);
   return {
-    success: true, doc: await withTracking({ ...document, review_levels: levelsView(state, !r.d) }, p.id),
+    success: true, doc, pdf: await docTicket(`admin-${a?.id || 'owner'}`, doc),
     capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined, sponsor_state: sponsorState(c) } : { status: 'draft' },
     // الحالة والجاهزية بالقاعدة نفسها التي تقرأ بها قائمة الوثائق (capstoneState)
     sections: state.sections.map(sectionView), checks: state.checks, readiness: capstoneState(c, state.readiness).readiness ?? 0,
@@ -742,11 +744,12 @@ async function sponsorFrom(t: unknown) {
 
 export async function sponsorGet(b: Body) {
   const c = await sponsorFrom(b.t);
-  return {
+  const out = {
     success: true, done: c.sponsor_status !== 'pending', decision: c.sponsor_status,
     // D18: الراعي لا يرى مستوى الوثيقة ولا مسارها إلا بموافقة المشارك
     sponsor: c.sponsor_name, doc: docLevelsFor(await recordFor(c.participants, 'sponsor'), !!c.participants?.org_share_consented_at),
   };
+  return { ...out, pdf: await docTicket(`sponsor-${c.participants?.id || 'x'}`, out.doc) };
 }
 
 export async function sponsorSubmit(b: Body) {

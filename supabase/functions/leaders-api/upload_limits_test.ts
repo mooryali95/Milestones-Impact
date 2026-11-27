@@ -8,6 +8,11 @@ Deno.test("upload-limits: العدد والحجم", () => {
   assertEquals(uploadRefusal({ issued: 0, files: [{ created_at: ago(2), metadata: { size: UPLOAD_LIMITS.bytesPerDay } }], now: NOW }), "bytes");
   assertEquals(uploadRefusal({ issued: 0, files: [{ created_at: ago(25), metadata: { size: UPLOAD_LIMITS.bytesPerDay } }], now: NOW }), null);
 });
+Deno.test("upload-limits: الروابط غير المستعملة تُحسب بالسقف", () => {
+  assertEquals(uploadRefusal({ issued: 29, files: [], now: NOW }), "bytes");
+  assertEquals(uploadRefusal({ issued: 14, files: [], now: NOW }), null);
+  assertEquals(uploadRefusal({ issued: 15, files: [], now: NOW }), "bytes");
+});
 Deno.test("upload-limits: اليتيم غير المربوط الأقدم من المدة وحده", () => {
   const objs = [{ path: "p/cv/a.pdf", created_at: ago(72) }, { path: "p/cv/b.pdf", created_at: ago(72) }, { path: "p/cv/c.pdf", created_at: ago(2) }];
   assertEquals(orphanPaths(objs, new Set(["p/cv/a.pdf"]), NOW), ["p/cv/b.pdf"]);

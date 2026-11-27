@@ -7,6 +7,7 @@
 // المرجع: Milestone-Impact-Brand-Brief (الألوان، الخطوط الخفيفة، الماسة، الختم مرة واحدة).
 // كل نص يدخل الوثيقة يمر عبر esc(): النافذة ترث نطاق التطبيق.
 import { pdfServer } from './pdf-source.js';
+import { orgLogoHtml, refreshLogos, primeLogos, logosPending, logoInfo, logoIsLight } from './logo.js';
 import { DOC_LIVE_HEAD_AR, DOC_WATERMARK_AR, REPORT_RIGHTS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 
@@ -23,7 +24,10 @@ export const PAGE_MM = Object.freeze({ w: 210, h: 297, top: 22, side: 20, bottom
 /** مم إلى بكسل بدقة 96 (A4 = 794×1123) */
 export const mmPx = (mm) => Math.round((mm * 96) / 25.4);
 // السلم الطباعي للصفحات الداخلية: لا وزن دون 400 في الطباعة
-export const TYPE_SCALE = Object.freeze({ body: 10.5, leading: 1.7, chapter: 18, chapterWeight: 600, h3: 12, h3Weight: 500, label: 8.5, labelWeight: 600, table: 9, footer: 7.5, footerColor: '#5F7176' });
+// المرحلة 4: سبع درجات فقط (TYPE_STEPS)، وكل حجم خط في doc.js وinstitutional.js وcapstone.js مربوط بها (type-scale.test.js)
+export const TYPE_SCALE = Object.freeze({ footer: 7.5, caption: 8.5, small: 9, body: 10.5, h3: 12, chapter: 18, display: 30, leading: 1.7, workLeading: 1.75, chapterWeight: 600, h3Weight: 500, label: 8.5, labelWeight: 600, table: 9, footerColor: '#5F7176' });
+export const TYPE_STEPS = Object.freeze([TYPE_SCALE.footer, TYPE_SCALE.caption, TYPE_SCALE.small, TYPE_SCALE.body, TYPE_SCALE.h3, TYPE_SCALE.chapter, TYPE_SCALE.display]);
+const TS = TYPE_SCALE;
 // المرحلة 28: العلامة المائية للنسخة الحية في كل صفحة (المعتمدة نظيفة): زاوية 30 درجة، 54pt، لون #0B272F، شفافية 0.045.
 // مصدر واحد للطباعة ومولّد الخادم (عنصر ثابت يتكرر في كل صفحة مطبوعة) ولطبقة jsPDF في pdf.js
 export const WATERMARK = Object.freeze({ text: DOC_WATERMARK_AR, angle: 30, size: 54, color: '#0B272F', opacity: 0.045 });
@@ -33,7 +37,12 @@ export const LIVE_RING = () => `<svg class="ring" width="64" height="64" viewBox
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : esc(n));
-export const today = () => new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+// خلية رقمية في الجدول (المرحلة 5): عدد، أو نص أرقام بفواصل ونسبة أو عملة، فلا تلتف ولا تنكسر («480,00» ثم «0»)
+const NUMERIC = /^[+\-−]?[\d٠-٩][\d٠-٩,.٬٫\s]*(%|٪)?(\s*(ريال|ر\.س|SAR))?$/;
+const isNumeric = (v) => typeof v === 'number' || (typeof v === 'string' && NUMERIC.test(v.trim()));
+// المرحلة 5: صيغة تاريخ بشرية واحدة في الوثائق (27 نوفمبر 2026) بأرقام لاتينية وتوقيت الرياض، وISO في البصمة وحدها
+export const humanDate = (d) => { const t = new Date(d); return Number.isNaN(t.getTime()) ? '' : t.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' }); };
+export const today = () => humanDate(new Date());
 
 // رقم وثيقة قابل للتتبع: MI-<نوع>-<تاريخ>-<أربعة رموز>
 export function docId(kind) {
@@ -58,7 +67,8 @@ export const SEAL = (label = 'MILESTONE IMPACT') => `<svg class="seal" width="12
 
 // ── مكونات المحتوى ──
 // القسم القصير لا ينقسم بين صفحتين فلا يبقى عنوانه وحيدًا أسفل الصفحة؛ والجدول الطويل (أكثر من 15 صفًا) ينقسم بصفوفه
-const short = (body) => (body.match(/<tr/g) || []).length <= 16;
+// والنص الطويل (نحو نصف صفحة فأكثر) لا يُعلَّم قصيرًا، فلا يمحو break-inside: avoid كل مواضع الكسر في مساحة كبيرة
+const short = (body) => (body.match(/<tr/g) || []).length <= 16 && String(body).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').length < 1400;
 export const section = (en, ar, body, note) => `<section class="sec${short(body) ? ' keep' : ''}">
   <header><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p class="note">${esc(note)}</p>` : ''}</header>
   ${body}
@@ -78,9 +88,13 @@ export const bars = (rows, total, { ltr = false } = {}) => (rows.length ? `<div 
   return `<div class="bar"><span class="bl"${ltr ? ' dir="ltr"' : ''}>${esc(r.label)}</span><span class="bt"><i style="width:${pct.toFixed(1)}%"></i>${diamond(7)}</span><b>${num(r.value)}</b></div>`;
 }).join('')}</div>` : '<p class="muted">لا بيانات بعد.</p>');
 
+// ضبط الفراغات (2026-11-27): يكمل الباب في الصفحة نفسها إن بقي منها هذا القدر على الأقل (نحو ثلث مساحة المتن). مصدر واحد للحالة والنسخة المؤسسية
+export const SOFT_KEEP_MM = 85;
+// كلمة مفردة في خلية (شهري، ربعي، عالٍ...) لا تنكسر بين سطرين (قرار المالك 2026-11-27)
+export const oneWord = (v) => !isRaw(v) && /^\S{1,16}$/.test(String(v ?? '').trim());
 // جدول: cols [{ label, align?, ltr?, width? }]، rows مصفوفة قيم (نص أو { html })
 export const table = (cols, rows, empty = 'لا بيانات') => `<table class="tbl"><thead><tr>${cols.map((c) => `<th${c.width ? ` style="width:${c.width}"` : ''}>${esc(c.label)}</th>`).join('')}</tr></thead>
-<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : esc(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
+<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${isNumeric(v) ? ' class="num"' : oneWord(v) ? ' class="w1"' : ''}${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : num(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
 
 export const progress = (pct) => `<span class="pg"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span><span class="pgn">${num(Math.round(pct))}%</span>`;
 // علامة HTML الخام رمز لا يُزوَّر (المرحلة 21): كائن قادم من القاعدة أو JSON يحمل html لا يمر خامًا، بل يُهرَّب نصًا
@@ -118,15 +132,24 @@ export function structuralAccent(...candidates) {
 }
 
 // ── قواعد التشارك (قرار المالك 2026-11-25): الجهة في الصدارة، والبرنامج (هوية الدفعة) سطر توقيع صغير، وMilestone علامة خافتة.
-// شعار الجهة: ارتفاع أقصى 18 مم وعرض أقصى 70 مم ومساحة أمان 3 مم حوله. شعار الدفعة: ارتفاع أقصى 9 مم. علامة Milestone: 6 مم
-function coBrand(b, id, kindLabel, ctl) {
-  const logo = safeLogo(b.logo);
-  const org = logo ? `<img src="${esc(logo)}" alt="${esc(b.name || '')}">`
-    : `<span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span>`;
+// شعار الجهة بفئة أبعاده (logo.js): عريض 14 مم بعرض أقصى 64 مم، مربع 20 مم، طويل 24 مم بعرض أقصى 20 مم، داخل لوحة 4×5 مم. شعار الدفعة 9 مم. علامة Milestone 9 مم
+function coBrand(b, id, kindLabel, ctl, refLabel) {
   const plogo = safeLogo(b.programLogo);
   const program = b.program || plogo ? `<div class="prog">${plogo ? `<img src="${esc(plogo)}" alt="${esc(b.program || '')}">` : ''}${b.program ? `<span>${esc(b.program)}</span>` : ''}</div>` : '';
-  const ref = ctl ? '' : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
-  return `<div class="top"><div class="org${logo ? ' plate' : ''}">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>${program}${ref}`;
+  // نسخة الإرسال: الرقم المرجعي بتسمية عربية (refLabel) بلا لاحقة
+  const ref = ctl ? '' : refLabel
+    ? `<div class="ref ar" style="margin-top:4mm;text-align:start;letter-spacing:0;text-transform:none;font-family:'Noto Kufi Arabic',sans-serif">${esc(refLabel)}<b><bdi dir="ltr">${esc(id)}</bdi></b>${esc(kindLabel || '')}</div>`
+    : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
+  return `${lockup(b)}${program}${ref}`;
+}
+
+// العلامة المشتركة (الغلاف وصفحة الاعتماد): شعار الجهة بفئة أبعاده، فاصل ذهبي بارتفاعه، ثم «بإعداد» فوق علامة المنصة.
+// الفئة والفاتح وسقف الحدة من logo.js (orgLogoHtml): من قياس الصورة المحمّلة إن سبق (primeLogos في writeDocument)، وإلا من الترويسة وSVG
+export function lockup(b) {
+  const logo = safeLogo(b.logo);
+  const org = logo ? orgLogoHtml(logo, { escape: esc, alt: b.name || '', base: 'org plate', light: b.logoLight ?? null })
+    : `<div class="org"><span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span></div>`;
+  return `<div class="top">${org}<i class="dv"></i><div class="by"><span>بإعداد</span>${LOGO}</div></div>`;
 }
 
 // ── المرحلة 25: خط لون الجهة أسفل الغلاف (1.6 مم موحدًا). يمر بـ structuralAccent، وإن لم يجتزه يُرسم بلون الجهة الخام
@@ -155,7 +178,7 @@ export function documentHtml(meta, body, opts = {}) {
   const rows = (meta.rows || []).slice(0, meta.brand ? (meta.control ? 3 : 6) : 4);
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
   // opts.print: الوثيقة نفسها لمولّد PDF على الخادم (workers/pdf-render): بلا شريط، وbase لخطوط المنصة وصورها
-  return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
+  return refreshLogos(`<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
 <meta name="color-scheme" content="light"><meta name="darkreader-lock">
 ${opts.base ? `<base href="${esc(opts.base)}">` : ''}
 <title>${esc(meta.title)} · Milestone Impact</title>
@@ -169,6 +192,8 @@ ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link re
 /* الترويسة باسم الباب الحالي (string set) */
 body { string-set: chapter "${cssStr(meta.title)}"; }
 .sec > header h2, .in-open h2 { string-set: chapter content(text); }
+${meta.brand ? '' : `/* المرحلة 5: لا تذييل على الصفحة الأولى */
+@page :first { @bottom-right { content: none; } @bottom-left { content: none; } }`}
 ${meta.brand ? `/* الغلاف صفحة كاملة بلا هامش ولا ترويسة (الطباعة ومولّد الخادم)، والمحتوى يبدأ الصفحة الثانية */
 @page :first { margin: 0; @top-right { content: none; } @top-left { content: none; } @bottom-right { content: none; } @bottom-left { content: none; } }
 @media print { html:not(.pdf) .mast.co { height: 296.5mm; overflow: hidden; display: flex; flex-direction: column; padding: 18mm 18mm 16mm; break-after: page; margin: 0; }
@@ -193,112 +218,133 @@ html.print { background: ${C.paper}; } html.print .toolbar { display: none !impo
 html.embed { background: transparent; } html.embed .toolbar { display: none !important; }
 html.embed .sheet { margin: 0 auto; box-shadow: 0 0 0 1px ${C.line}; }
 @media screen and (max-width: 700px) { html.embed .sheet > *:not(.mast) { padding-inline: 6mm; } html.embed .mast { padding: 8mm 6mm; } html.embed .mast .meta { grid-template-columns: repeat(2, 1fr); } }
-p, li { orphans: 3; widows: 3; }
-h2, h3 { break-after: avoid; }
+p, li { orphans: 3; widows: 3; text-wrap: pretty; }
+h2, h3, h4 { break-after: avoid; break-inside: avoid; }
+figure, .callout, .kpis, .bar, .tbl thead { break-inside: avoid; }
+.tbl thead { display: table-header-group; }
 h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: none; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; }
 @media screen { .toolbar { display: flex; } }
-.toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${C.gold}; background: transparent; color: ${C.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; letter-spacing: 0; }
+.toolbar button { font: 400 ${TS.small}pt "Noto Kufi Arabic", sans-serif; border: 1px solid ${C.gold}; background: transparent; color: ${C.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; letter-spacing: 0; }
 .toolbar button.pri { background: ${C.goldLight}; color: ${C.graphite}; }
 .mast { position: relative; background: ${C.mist} ${LATTICE}; background-color: ${C.mist}; color: ${C.graphite}; border-bottom: 1px solid ${C.gold}; padding: 12mm 18mm 10mm; }
 .mast .top { display: flex; justify-content: space-between; align-items: flex-start; direction: ltr; }
 .mast .logo svg { height: 46px; width: auto; display: block; }
-.mast .ref { text-align: right; font: 300 7.5pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.muted}; line-height: 2; }
+.mast .ref { text-align: right; font: 300 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.muted}; line-height: 2; }
 .mast .ref b { display: block; font-weight: 400; letter-spacing: .12em; color: ${C.graphite}; }
 .mast .eyebrow { margin-top: 10mm; }
-.mast h1 { font-weight: 500; color: ${C.graphite}; font-size: 26pt; line-height: 1.25; margin: 2mm 0 1mm; letter-spacing: 0; }
-.mast .sub { color: ${C.slate}; font-size: 11pt; margin: 0; }
+.mast h1 { font-weight: 500; color: ${C.graphite}; font-size: ${TS.display}pt; line-height: 1.25; margin: 2mm 0 1mm; letter-spacing: 0; }
+.mast .sub { color: ${C.slate}; font-size: ${TS.h3}pt; margin: 0; }
 .mast .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 8mm; border-top: 1px solid ${C.line}; }
 .mast .meta div { padding: 3mm 0 0; border-inline-start: 1px solid ${C.line}; padding-inline-start: 4mm; }
 .mast .meta div:first-child { border-inline-start: 0; padding-inline-start: 0; }
-.mast .meta span { display: block; font-size: 7.5pt; color: ${C.muted}; }
-.mast .meta b { font-weight: 400; font-size: 9.5pt; color: ${C.graphite}; }
-.thesis { display: flex; align-items: center; gap: 3mm; margin: 7mm 0 0; color: ${C.goldText}; font-size: 9pt; }
+.mast .meta span { display: block; font-size: ${TS.footer}pt; color: ${C.muted}; }
+.mast .meta b { font-weight: 400; font-size: ${TS.small}pt; color: ${C.graphite}; }
+.thesis { display: flex; align-items: center; gap: 3mm; margin: 7mm 0 0; color: ${C.goldText}; font-size: ${TS.small}pt; }
 .thesis::before, .thesis::after { content: ''; flex: 1; height: 1px; background: ${C.gold}; opacity: .45; }
-.eyebrow { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.goldText}; }
+.eyebrow { display: block; font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .12em; text-transform: uppercase; color: ${C.goldText}; opacity: .7; }
 .sec { margin-top: 9mm; break-inside: auto; }
 .sec.keep { break-inside: avoid; }
 .tbl tr { break-inside: avoid; }
-.sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; }
+.sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; break-inside: avoid; }
+.sec > header + * { break-before: avoid; }
 .sec h2 { font-weight: ${T.chapterWeight}; font-size: ${T.chapter}pt; margin: 1mm 0 0; }
-.sec .note { margin: 1mm 0 0; color: ${C.muted}; font-size: 8.5pt; }
+.sec .note { margin: 1mm 0 0; color: ${C.muted}; font-size: ${TS.caption}pt; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(30mm, 1fr)); border-top: 1px solid ${C.gold}; border-bottom: 1px solid ${C.line}; }
 .kpi { padding: 4mm 4mm 4mm 0; border-inline-start: 1px solid ${C.line}; padding-inline-start: 4mm; break-inside: avoid; }
 .kpi:first-child { border-inline-start: 0; padding-inline-start: 0; }
-.kpi b { display: block; font: 400 22pt/1.1 "Noto Sans", sans-serif; color: ${C.graphite}; }
+.kpi b { display: block; font: 400 ${TS.chapter}pt/1.1 "Noto Sans", sans-serif; color: ${C.graphite}; }
 .kpi span { display: block; font-size: ${T.label}pt; font-weight: ${T.labelWeight}; color: ${C.slate}; }
-.kpi small { color: ${C.muted}; font-size: 7.5pt; }
+.kpi small { color: ${C.muted}; font-size: ${TS.footer}pt; }
 .chain { display: flex; align-items: flex-start; margin: 2mm 0; break-inside: avoid; }
 .chain .node { text-align: center; width: 24mm; flex: none; display: grid; justify-items: center; gap: 1mm; }
-.chain .n { font: 400 15pt/1 "Noto Sans", sans-serif; min-height: 15pt; }
-.chain .l { font-size: 8.5pt; } .chain .e { font: 400 7.5pt "Noto Sans", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: ${C.muted}; }
+.chain .n { font: 400 ${TS.h3}pt/1 "Noto Sans", sans-serif; min-height: 15pt; }
+.chain .l { font-size: ${TS.caption}pt; } .chain .e { font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: ${C.muted}; }
 .chain .node:not(.on) .n, .chain .node:not(.on) .l { color: ${C.muted}; }
 .chain .link { flex: 1; height: 1px; background: ${C.gold}; opacity: .45; margin-top: calc(15pt + 1mm + 6px); }
 .bars { display: grid; gap: 2.4mm; }
 .bar { display: grid; grid-template-columns: 42mm 1fr 12mm; align-items: center; gap: 3mm; break-inside: avoid; }
-.bar .bl { font-size: 9pt; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .bl { font-size: ${TS.small}pt; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar .bt { position: relative; height: 1px; background: ${C.line}; display: flex; align-items: center; }
 .bar .bt i { display: block; height: 2px; background: ${C.graphite}; }
 .bar .bt .dm { margin-inline-start: -4px; }
-.bar b { font: 400 10pt "Noto Sans", sans-serif; text-align: left; }
+.bar b { font: 400 ${TS.body}pt "Noto Sans", sans-serif; text-align: left; }
 .tbl { width: 100%; border-collapse: collapse; font-size: ${T.table}pt; }
 .tbl thead { display: table-header-group; }
-.tbl th { text-align: right; font-weight: 400; font-size: 8.5pt; color: ${C.muted}; padding: 2mm 1.5mm; border-bottom: 1px solid ${C.graphite}; white-space: nowrap; }
+.tbl th { text-align: right; font-weight: 400; font-size: ${TS.caption}pt; color: ${C.muted}; padding: 2mm 1.5mm; border-bottom: 1px solid ${C.graphite}; white-space: nowrap; }
 .tbl td { padding: 2.2mm 1.5mm; border-bottom: 1px solid ${C.line}; vertical-align: top; }
 .tbl tr { break-inside: avoid; }
 .tbl td.c { text-align: center; padding: 6mm; }
+.tbl td.w1 { white-space: nowrap; }
+.tbl td.num { white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 22mm; }
 .tbl td:has(.pg) { white-space: nowrap; }
 .pg { display: inline-block; width: 16mm; height: 2px; background: ${C.line}; vertical-align: middle; margin-inline-end: 2mm; }
 .pg i { display: block; height: 100%; background: ${C.gold}; }
-.pgn { font: 400 8.5pt "Noto Sans", sans-serif; }
+.pgn { font: 400 ${TS.caption}pt "Noto Sans", sans-serif; }
 .callout { border-right: 0.6mm solid ${C.gold}; background: ${C.mist}; padding: 4mm 5mm; border-radius: 2px; }
-.callout b { display: block; font-weight: 400; font-size: 15pt; color: ${C.graphite}; margin-bottom: 1.5mm; }
-.callout p { margin: 0; font-size: 9.5pt; line-height: 1.9; color: ${C.slate}; }
+.callout b { display: block; font-weight: 400; font-size: ${TS.h3}pt; color: ${C.graphite}; margin-bottom: 1.5mm; }
+.callout p { margin: 0; font-size: ${TS.body}pt; line-height: 1.9; color: ${C.slate}; }
 .points { list-style: none; margin: 0; padding: 0; display: grid; gap: 2.2mm; }
-.points li { position: relative; padding-right: 5mm; font-size: 9.5pt; line-height: 1.8; color: ${C.slate}; }
+.points li { position: relative; padding-right: 5mm; text-align: justify; text-justify: inter-word; box-sizing: border-box; width: 100%; font-size: ${TS.body}pt; line-height: 1.8; color: ${C.slate}; }
 .points li::before { content: ''; position: absolute; right: 0; top: 2.2mm; width: 1.8mm; height: 1.8mm; background: ${C.gold}; transform: rotate(45deg); }
-.tag { display: inline-block; border: 1px solid ${C.line}; padding: 0 2mm; border-radius: 2px; font-size: 7.5pt; color: ${C.slate}; white-space: nowrap; }
+.tag { display: inline-block; border: 1px solid ${C.line}; padding: 0 2mm; border-radius: 2px; font-size: ${TS.footer}pt; color: ${C.slate}; white-space: nowrap; }
 .tag.gold { border-color: ${C.gold}; color: ${C.gold}; }
-.mono { font-family: "Noto Sans", monospace; font-size: 8pt; letter-spacing: .05em; }
+.mono { font-family: "Noto Sans", monospace; font-size: ${TS.caption}pt; letter-spacing: .05em; }
 .muted { color: ${C.muted}; }
 .close { break-before: avoid; display: flex; align-items: center; justify-content: space-between; gap: 8mm; margin-top: 12mm; padding-top: 6mm; border-top: 1px solid ${C.gold}; break-inside: avoid; }
-.close p { margin: 0; font-size: 8.5pt; color: ${C.slate}; max-width: 120mm; }
-.close .sig { font-size: 9pt; } .close .sig b { font-weight: 400; display: block; }
-.rights { margin-top: 8mm; font-size: 7.5pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; }
+.close p { margin: 0; font-size: ${TS.caption}pt; color: ${C.slate}; max-width: 120mm; }
+.close .sig { font-size: ${TS.small}pt; } .close .sig b { font-weight: 400; display: block; }
+.rights { margin-top: 8mm; font-size: ${TS.footer}pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; word-break: keep-all; overflow-wrap: normal; }
+.rights .rt-meta { display: block; white-space: nowrap; margin-top: 1mm; font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .rights b { font-weight: 400; color: ${C.slate}; }
+/* إشعار الحقوق لا ينفصل عن الخاتمة والختم (لا صفحة أخيرة يتيمة بسطرين)، وفي الملف خاتمة أقصر وختم أصغر يتسعان معه */
+.close + .rights { break-before: avoid; }
+html.pdf .close { margin-top: 6mm; padding-top: 4mm; }
+html.pdf .close .seal { width: 26mm !important; height: 26mm !important; }
+html.pdf .rights { margin-top: 4mm; }
 .dm { display: inline-block; vertical-align: middle; }
-.mast .stamp { display: inline-block; border: 1px solid ${C.gold}; color: ${C.goldText}; padding: .5mm 3mm; border-radius: 2px; font-size: 9pt; font-weight: 500; letter-spacing: 0; background: ${C.paper}; line-height: 1.6; }
+.mast .stamp { display: inline-block; border: 1px solid ${C.gold}; color: ${C.goldText}; padding: .5mm 3mm; border-radius: 2px; font-size: ${TS.small}pt; font-weight: 500; letter-spacing: 0; background: ${C.paper}; line-height: 1.6; }
 .mast > .stamp { position: absolute; top: 6mm; inset-inline-end: 18mm; }
 .mast .ctlrow { display: flex; align-items: center; justify-content: space-between; gap: 4mm; margin-top: 3mm; flex-wrap: wrap; }
-.mast .ctl { font: 400 7.5pt "Noto Sans", sans-serif; letter-spacing: .14em; color: ${C.muted}; direction: ltr; unicode-bidi: isolate; }
-.mast.co .top { direction: rtl; align-items: center; }
-.mast.co .org { padding: 3mm; margin: -3mm; }
-.mast.co .org.plate { background: ${C.paper}; background-color: ${C.paper}; margin: 0; border-radius: 1mm; }
-.mast.co .org img { max-height: 18mm; min-width: 30mm; max-width: 70mm; display: block; object-fit: contain; }
-.mast.co .prog { display: flex; align-items: center; gap: 2.5mm; margin-top: 6mm; direction: rtl; font-size: 9pt; font-weight: 400; color: ${C.slate}; }
+.mast .ctl { font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .14em; color: ${C.muted}; direction: ltr; unicode-bidi: isolate; }
+.mast .ctl-dt { font-size: ${TS.footer}pt; color: ${C.muted}; margin-inline-end: auto; }
+.mast .ctl-dt::before { content: '·'; margin-inline-end: 2mm; }
+.mast .vm.cover { margin-top: 4mm; border-top: 0; padding-top: 0; }
+.mast .vm.cover .qr { width: 18mm; height: 18mm; }
+.mast.co .top { direction: rtl; align-items: center; justify-content: flex-start; }
+.mast.co .org { display: flex; align-items: center; }
+.mast.co .org.plate { background: ${C.paper}; background-color: ${C.paper}; margin: 0; padding: 4mm 5mm; border: 0.25mm solid ${C.line}; border-radius: 0; box-shadow: none; }
+.mast.co .org.plate.light { background: ${C.graphite}; background-color: ${C.graphite}; }
+.mast.co .org img { display: block; width: auto; object-fit: contain; }
+.mast.co .org.w img { height: 14mm; max-width: 64mm; }
+.mast.co .org.s img { height: 20mm; max-width: 60mm; }
+.mast.co .org.t img { height: 24mm; max-width: 20mm; }
+.mast.co .dv { display: block; width: 0.3mm; align-self: stretch; margin: 0 6mm; background: ${C.gold}; }
+.mast.co .org.w + .dv { align-self: center; height: 14mm; } .mast.co .org.s + .dv { align-self: center; height: 20mm; } .mast.co .org.t + .dv { align-self: center; height: 24mm; }
+.mast.co .prog { display: flex; align-items: center; gap: 2.5mm; margin-top: 6mm; direction: rtl; font-size: ${TS.small}pt; font-weight: 400; color: ${C.slate}; }
 .mast.co .prog img { max-height: 9mm; max-width: 40mm; object-fit: contain; display: block; }
 .mast.co .meta { grid-template-columns: repeat(var(--n, 3), 1fr); row-gap: 4mm; }
 .mast.co .meta div:first-child { border-inline-start: 0; padding-inline-start: 0; }
-.mast.co .org .nm { font-weight: 400; font-size: 17pt; line-height: 1.3; color: ${C.graphite}; display: block; }
-.mast.co .org .nm small { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.muted}; text-transform: uppercase; }
-.mast.co .by { display: flex; align-items: center; gap: 2mm; direction: rtl; font-size: 7.5pt; color: ${C.muted}; }
-.mast.co .by svg { height: 6mm; width: auto; display: block; }
+.mast.co .org .nm { font-weight: 500; font-size: ${TS.h3}pt; line-height: 1.4; color: ${C.graphite}; display: block; }
+.mast.co .by { display: flex; flex-direction: column; align-items: flex-start; gap: 1mm; direction: rtl; color: ${C.muted}; }
+.mast.co .by span { font-size: ${TS.footer}pt; line-height: 1; }
+.mast.co .by svg { height: 9mm; width: auto; display: block; }
 .mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.6mm; }
 .mast .accent.guard { box-shadow: 0 .3mm 0 ${C.graphite}; }
 .mast.co { padding: 14mm 18mm 12mm; }
 .mast.co .eyebrow { margin-top: 14mm; }
-.mast.co h1 { font-size: 30pt; font-weight: 500; line-height: 1.25; margin: 3mm 0 0; text-wrap: balance; max-width: 150mm; }
+.mast.co h1 { font-size: ${TS.display}pt; font-weight: 500; line-height: 1.25; margin: 3mm 0 0; text-wrap: balance; max-width: 150mm; }
 .mast.co .rule { display: block; width: 16mm; height: .6mm; background: ${C.gold}; margin: 4mm 0 3mm; }
-.mast.co .sub { font-size: 11.5pt; color: ${C.slate}; }
+.mast.co .sub { font-size: ${TS.h3}pt; color: ${C.slate}; }
 .mast.co .meta { margin-top: 12mm; }
-.mast.co .meta b { font-size: 10.5pt; font-weight: 500; }
+.mast.co .meta b { font-size: ${TS.body}pt; font-weight: 500; }
 .mast.co { border-bottom: 0; }
 .close .thesis { margin: 0 0 3mm; flex-basis: 100%; }
 .close { flex-wrap: wrap; }
-.close .mi-mark svg { height: 14px; width: auto; display: block; opacity: .7; }
-/* ملف PDF: الغلاف صفحة كاملة وحده (حتى هامش التذييل: PAGE.h - PAGE.bottom في pdf.js، من PAGE_MM)، والعنوان في ثلثه الأوسط،
+.close .mi-mark svg { height: 9mm; width: auto; display: block; }
+/* ملف PDF: الغلاف صفحة كاملة وحده (إلى حافة الورقة بلا تذييل، المرحلة 5: FIRST_H = PAGE.h في pdf.js)، والعنوان في ثلثه الأوسط،
    وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
-html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h) - mmPx(PAGE_MM.bottom)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
+html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; break-after: page; }
 html.pdf .mast.co .eyebrow { margin-top: auto; }
 html.pdf .mast.co .meta { margin-top: auto; }
 html.pdf .mast.co .accent { bottom: 0; }
@@ -307,29 +353,30 @@ html.pdf .mast.co .accent { bottom: 0; }
 <article class="sheet">
   <header class="mast${meta.brand ? ' co' : ''}">
     ${meta.stamp && !(meta.brand && meta.control) ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}
-    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel, meta.control) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
+    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel, meta.control, meta.refLabel) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
     ${accent ? `<i class="accent${accent.guard ? ' guard' : ''}" style="background:${accent.color}"></i>` : ''}
     <span class="eyebrow">${esc(meta.eyebrow || 'Milestone Impact · Report')}</span>
     <h1>${esc(meta.title)}</h1>${meta.brand ? '<i class="rule" aria-hidden="true"></i>' : ''}
     ${meta.subtitle ? `<p class="sub">${esc(meta.subtitle)}</p>` : ''}
     ${rows.length ? `<div class="meta"${meta.brand ? ` style="--n:${rows.length}"` : ''}>${rows.map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
-    ${meta.brand && meta.control ? `<div class="ctlrow"><bdi class="ctl" dir="ltr"${meta.controlLabel ? ` role="note" aria-label="${esc(meta.controlLabel)}"` : ''}>${esc(meta.control)}</bdi>${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}</div>` : ''}
+    ${meta.brand && meta.control ? `<div class="ctlrow"><bdi class="ctl" dir="ltr"${meta.controlLabel ? ` role="note" aria-label="${esc(meta.controlLabel)}"` : ''}>${esc(meta.control)}</bdi>${meta.controlDate ? `<span class="ctl-dt">${esc(meta.controlDate)}</span>` : ''}${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}</div>` : ''}
+    ${meta.brand && meta.coverMark ? meta.coverMark : ''}
   </header>
   ${body}
   <div class="close">
     <p class="thesis">من النية… إلى الأثر</p>
-    <p>${esc(meta.closing || 'أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.')}</p>
+    <p>${esc(meta.closing || 'أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.').replace(/[A-Z0-9]{4}(?:-[A-Z0-9]{4})+/g, (f) => `<bdi dir="ltr" style="white-space:nowrap;unicode-bidi:isolate">${f}</bdi>`)}</p>
     ${isLiveDoc(meta) ? `<span class="mi-mark" aria-hidden="true">${LOGO}</span>` : SEAL()}
   </div>
   <footer class="rights">
     <b>جميع الحقوق محفوظة <bdi dir="ltr">© ${year} Milestone Impact</bdi>.</b>
     ${esc(meta.rights || REPORT_RIGHTS_AR).replace('Milestone Impact', '<bdi dir="ltr">Milestone Impact</bdi>')} ${esc(conf.replace(/\.$/, ''))}.
-    <span class="mono"><bdi dir="ltr">${esc(id)}</bdi> · ${esc(today())}</span>
+    <span class="rt-meta"><bdi dir="ltr">${esc(id)}</bdi> · <bdi>${esc(today())}</bdi></span>
   </footer>
 </article>
 ${isLiveDoc(meta) && !opts.pdf ? `<div class="wm" aria-hidden="true"><span>${esc(WATERMARK.text)}</span></div>` : ''}
 ${opts.pdf ? runningHead(meta) : ''}
-</body></html>`;
+</body></html>`);
 }
 
 // ترويسة صفحات ملف PDF بعد الغلاف (pdf.js يرسمها مرة ويكررها): شعار الجهة أو اسمها ولونها في جهة، واسم الباب الحالي في الأخرى
@@ -339,11 +386,13 @@ function runningHead(meta) {
   const b = meta.brand;
   const logo = b && safeLogo(b.logo);
   const color = (b && brandColor(b.color)) || C.gold;
-  const org = b ? (logo ? `<img src="${esc(logo)}" alt="">` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
+  // الشعار الفاتح على رقعة جرافيتية كما في الغلاف، فلا يضيع على أبيض الترويسة
+  const light = logo && (logoInfo(logo)?.light ?? logoIsLight(logo));
+  const org = b ? (logo ? `<span class="ph-logo${light ? ' light' : ''}"><img src="${esc(logo)}" alt=""></span>` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
   return `<div id="pdf-head" style="position:absolute;top:0;left:0;width:794px;height:${mmPx(PAGE_MM.top)}px;background:#fff;direction:rtl;display:flex;align-items:center;gap:10px;padding:14px ${mmPx(PAGE_MM.side)}px 0;font:400 ${TYPE_SCALE.footer}pt 'Noto Kufi Arabic',sans-serif;color:${C.muted}">
-<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:22px">${org}</span>` : ''}</span>${b ? '' : `<span style="display:flex;align-items:center;direction:ltr" class="ph-mi">${LOGO}</span>`}
+<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:6mm">${org}</span>` : ''}</span><span style="display:flex;align-items:center;direction:ltr;margin-right:auto" class="ph-mi">${LOGO}</span>
 <i style="position:absolute;bottom:12px;left:${mmPx(PAGE_MM.side)}px;right:${mmPx(PAGE_MM.side)}px;height:1px;background:${color};opacity:.7"></i>
-</div><style>#pdf-head img{max-height:22px;max-width:150px;object-fit:contain;display:block}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:17px;width:auto;display:block}</style>`;
+</div><style>#pdf-head .ph-org img{height:6mm;max-width:40mm;object-fit:contain;display:block}#pdf-head .ph-logo{display:flex;align-items:center}#pdf-head .ph-logo.light{background:${C.graphite};padding:1mm 1.5mm}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:4mm;width:auto;display:block}</style>`;
 }
 
 // يفتح الوثيقة في نافذة مستقلة بشريط «طباعة أو حفظ PDF». يعيد false إن حُجبت النافذة.
@@ -355,8 +404,16 @@ export const openDocument = (meta, body) => writeDocument(window.open('', '_blan
 // opts.pdf: مصدر تذكرة لهذه الوثيقة وحدها بدل مصدر التطبيق
 export function writeDocument(win, meta, body, opts = {}) {
   if (!win) return false;
+  // الشعار يُقاس من الصورة نفسها مرة ثم تُكتب الوثيقة بفئته ولوحته (ينتظر أول مرة فقط)
+  const first = documentHtml(meta, body);
+  if (logosPending(first)) primeLogos(first).then(() => fill(win, meta, body, opts, documentHtml(meta, body)));
+  else fill(win, meta, body, opts, first);
+  return true;
+}
+
+function fill(win, meta, body, opts, html) {
   win.document.open();
-  win.document.write(documentHtml(meta, body));
+  win.document.write(html);
   win.document.close();
   win.document.querySelector('[data-act="print"]')?.addEventListener('click', () => win.print());
   // «تحميل PDF»: من الخادم حين تتاح تذكرة، وإلا يُبنى في نافذة المنصة (pdf.js downloadBest)، ويُحفظ من النافذة نفسها، والزر يعرض تقدمه
@@ -378,5 +435,4 @@ export function writeDocument(win, meta, body, opts = {}) {
     }
   });
   win.document.querySelector('[data-act="close"]')?.addEventListener('click', () => win.close());
-  return true;
 }

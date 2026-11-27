@@ -2567,6 +2567,7 @@ create table if not exists public.admin_users (
   totp_enabled boolean default false,
   is_owner boolean default false not null,
   passkey_only boolean default false not null,
+  totp_last_step bigint,
   constraint admin_users_pkey PRIMARY KEY (id),
   constraint admin_users_email_key UNIQUE (email)
 );
@@ -4096,6 +4097,8 @@ CREATE INDEX IF NOT EXISTS planner_projects_updated_idx ON public.planner_projec
 CREATE INDEX IF NOT EXISTS planner_resources_updated_idx ON public.planner_resources USING btree (owner, updated DESC);
 
 CREATE INDEX IF NOT EXISTS planner_shares_with_idx ON public.planner_project_shares USING btree (shared_with);
+
+CREATE INDEX IF NOT EXISTS totp_attempts_email_created_idx ON public.totp_attempts USING btree (email, created_at);
 
 CREATE INDEX IF NOT EXISTS user_passkeys_reg_idx ON public.user_passkeys USING btree (registration_id);
 
@@ -5792,6 +5795,26 @@ begin
           jsonb_build_object('kept_id', m.kept_id, 'merge_id', p_merge, 'skipped', skipped, 'skipped_rows', skips));
   return jsonb_build_object('skipped', skipped, 'skipped_rows', skips);
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.admin_login_attempt(p_email text, p_ip text, p_max_ip integer, p_max_all integer, p_window_s integer)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare n_all integer; n_ip integer; aid uuid;
+begin
+  if p_email is null or p_email = '' then return null; end if;
+  perform pg_advisory_xact_lock(hashtextextended('admin.login:' || p_email, 0));
+  select count(*), count(*) filter (where a.ip = p_ip) into n_all, n_ip
+  from public.totp_attempts a
+  where a.email = p_email and a.success = false and a.created_at >= now() - make_interval(secs => p_window_s);
+  if n_all >= p_max_all or n_ip >= p_max_ip or (nullif(p_ip, '') is null and n_all >= p_max_ip) then return null; end if;
+  insert into public.totp_attempts (email, success, ip) values (p_email, false, nullif(p_ip, '')) returning id into aid;
+  return aid;
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.admin_owner_guard()

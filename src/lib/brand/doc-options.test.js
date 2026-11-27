@@ -119,6 +119,12 @@ describe('عقد الخادم: الصلاحيات والرد المحجوب وا
     expect(withheld).not.toMatch(/initiative|org|program|form|approved_at|ref/);
     expect(DOC_VERIFY_AR.withheld).toBe('هذه البصمة مسجلة لوثيقة معتمدة لدى Milestone Impact، ومحتواها محجوب بقرار صاحبها، فلا يمكن هنا مطابقة ما بين يديك');
     expect(DOC_VERIFY_AR.withheld).not.toMatch(/صحيحة|أصلية/);
+    expect(DOC_VERIFY_AR.registered).not.toMatch(/صحيحة|أصلية|تطابق النسخة المحفوظة/);
+    expect(DOC_VERIFY_AR.registered).toMatch(/بعنوانها وجهتها وتاريخ اعتمادها/);
+    expect(DOC_QR_AR.owner_off).not.toMatch(/صحيحة|أصلية/);
+    // كل ما يُطبع أو يُعرض من العبارتين لا يدعي أصالة ولا مطابقة محتوى
+    for (const v of [...Object.values(DOC_VERIFY_AR), ...Object.values(DOC_QR_AR)].filter((x) => typeof x === 'string')) expect(v).not.toMatch(/أصال|أصلي|صحيح|النسخة المحفوظة/);
+    expect(read('leaders-app/src/screens/Verify.jsx')).toMatch(/DOC_VERIFY_AR\.registered/);
     expect(withheld).not.toMatch(/authentic/);
     // الظاهر كذلك: registered لا authentic، فالخادم لا يطابق المحتوى
     const visible = v.slice(v.indexOf('const s = row.snapshot'));

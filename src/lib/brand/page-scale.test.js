@@ -18,8 +18,8 @@ describe('ثابت الصفحة المشترك', () => {
   });
   it('قاعدة @page في الوثيقة تطابق PAGE_MM', () => {
     expect(pageRule(html)).toMatch(new RegExp(`margin: ${PAGE_MM.top}mm ${PAGE_MM.side}mm ${PAGE_MM.bottom}mm;`));
-    // الغلاف في ملف PDF يملأ ما فوق هامش التذييل
-    expect(html).toContain(`html.pdf .mast.co { min-height: ${PAGE.h - PAGE.bottom}px;`);
+    // الغلاف في ملف PDF يملأ الورقة كلها
+    expect(html).toContain(`html.pdf .mast.co { min-height: ${PAGE.h}px;`); // المرحلة 5: الغلاف بلا تذييل إلى حافة الورقة
   });
 });
 
@@ -66,7 +66,9 @@ describe('اسم الباب لكل صفحة في ملف المتصفح (chapterA
     expect(chapterAt(heads, 0, 50)).toBe('');
     expect(chapterAt(heads, 50, 1000)).toBe('أ');
     expect(chapterAt(heads, 1000, 1400)).toBe('أ');
-    expect(chapterAt(heads, 1400, 2400)).toBe('ب');
+    expect(chapterAt(heads, 1450, 2400)).toBe('ب');
+    // تتمة الباب أ في أعلى الصفحة، والباب ب يبدأ في أسفلها: الترويسة للباب أ
+    expect(chapterAt(heads, 1300, 2300)).toBe('أ');
     expect(chapterAt(heads, 2400, 3000)).toBe('ج');
   });
 });

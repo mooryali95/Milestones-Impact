@@ -91,7 +91,7 @@ describe('الوثيقة المؤسسية', () => {
     expect(r.blocked).toBeUndefined();
     const html = documentHtml(r.meta, r.body);
     expect(html).toContain('class="mast co"');
-    expect(html).toContain('<img src="data:image/svg+xml;base64,');
+    expect(html).toContain('<img data-org-logo src="data:image/svg+xml;base64,');
     expect(html).toContain('بإعداد');
     expect(html).toContain('style="background:#1F6F5C"');
     const heads = [...r.body.matchAll(/<span class="n">(\d+)<\/span>/g)].map((m) => +m[1]);
@@ -102,9 +102,9 @@ describe('الوثيقة المؤسسية', () => {
     expect(r.body).not.toContain('FINGERPRINT');
     const d = completeDoc(); const f = institutionalReport({ ...d, issued: freezeIssued(d) });
     expect(f.body).toContain(`FINGERPRINT <b>${f.fingerprint}</b>`);
-    // حالة العمل (المرحلة 29): كل باب بعد الأول يبدأ صفحته؛ الميثاق والبطاقة: الاعتماد وحده يبدأ صفحته
+    // ضبط الفراغات (2026-11-27): في كل الأشكال الاعتماد وحده يبدأ صفحته، وأبواب حالة العمل تنساب بحاجز واسع
     const forced = (r.body.match(/class="in-sec np"/g) || []).length;
-    expect(forced).toBe(r.form.key === 'case' ? (r.body.match(/class="in-sec[ "]/g) || []).length - 1 : 1);
+    expect(forced).toBe(1);
     expect(r.body).toContain('.in-open + * { break-before: avoid; }');
     expect(r.body).toContain('من 4 يناير 2026');
     expect(text(r.body)).not.toContain('لم يُملأ');
@@ -172,7 +172,7 @@ describe('الغلاف الفاخر في النسخة المؤسسية (المر
   it('صف رسمي واحد بلا الحالة والتاريخ والإصدار، وشريط ضبط لاتيني، والختم العربي بجانبه في الحالتين', () => {
     const { meta } = institutionalReport(completeDoc());
     expect(meta.rows.map(([l]) => l).every((l) => ['الجهة', 'الراعي', 'قائد المبادرة'].includes(l))).toBe(true);
-    expect(meta.control).toMatch(/^[A-Z0-9-]+ · V\d+ · \d{4}-\d{2}-\d{2} · (DRAFT|APPROVED)$/);
+    expect(meta.control).toMatch(/^[A-Z0-9-]+ · V\d+ · (DRAFT|APPROVED)$/); // المرحلة 5: لا تاريخ ISO في الشريط
     expect(meta.stamp).toBeTruthy();
     expect(meta.controlLabel).toMatch(/^رمز الوثيقة /);
     const html = documentHtml(meta, '');

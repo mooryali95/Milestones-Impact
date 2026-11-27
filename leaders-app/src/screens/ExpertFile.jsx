@@ -204,7 +204,7 @@ async function openInitiative(pid) {
   if (!r.success) { win?.close(); window.alert(r.message); return; }
   const { openCapstoneDoc } = await import('./Capstone.jsx');
   // الخبير مراجع: ملحق المراجع بخيار صريح (المرحلة 21)، والخادم لا يضع الحقل إلا بعد فحص النطاق
-  await openCapstoneDoc(r.doc, win, { keepReadiness: true, kind: 'reader', annex: true });
+  await openCapstoneDoc(r.doc, win, { keepReadiness: true, kind: 'reader', annex: true, pdf: r.pdf });
 }
 
 // تذكير المرشد (مشرف الرحلة) لمن يرشده (P4، 2026-11-16): ما سيصله الآن بنص المحرك الموحد، ومن ذكّره ومتى،

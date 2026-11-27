@@ -1,5 +1,6 @@
 // أمن الوثيقة وتحميل الأدمن للوثيقة النهائية (المرحلة 21): علامة RAW، والشعار الخارجي وتعقيم SVG، وربط تذكرة PDF ببصمة
 // الوثيقة، ومعامل الخيارات الموحد { annex, decision, appendix, qr } ونسختا التحميل
+import { DOC_TEXT } from '../../supabase/functions/leaders-api/labels.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -176,15 +177,18 @@ describe('معامل الخيارات الموحد ونسختا تحميل ال�
     const off = finalDocument(d, { ...EXPORT_PRESETS.send, qr: false }).body;
     expect(on).toContain('/v/doc/');
     expect(off).not.toContain('/v/doc/');
-    expect(off).toContain('FINGERPRINT');
+    expect(off).toContain(DOC_TEXT.send.fingerprint);
+    expect(off).not.toContain('FINGERPRINT');
   });
-  it('غير المعتمدة تُنزَّل بختم «مسودة للمراجعة»، مؤسسية كانت أو ملف عمل', () => {
+  // إصلاح 2026-11-27: نسخة الإرسال غير المعتمدة بختم واحد رصين DOC_SEND_STAMP_AR، والكاملة بختم «مسودة للمراجعة»
+  it('غير المعتمدة تُنزَّل بختم ظاهر، مؤسسية كانت أو ملف عمل', () => {
     const d = doc({ approved: false });
-    expect(finalDocument(d).meta.stamp).toMatch(/مسودة للمراجعة/);
+    expect(finalDocument(d).meta.stamp).toMatch(/غير معتمدة/);
+    expect(finalDocument(d, EXPORT_PRESETS.full).meta.stamp).toMatch(/مسودة للمراجعة/);
     const blocked = { ...d, sections: d.sections.map((s) => ({ ...s, fields: (s.fields || []).map((f) => ({ ...f, value: null })) })) };
     const w = finalDocument(blocked, EXPORT_PRESETS.send);
     expect(w.kind).toBe('working');
-    expect(w.meta.stamp).toMatch(/مسودة للمراجعة/);
+    expect(w.meta.stamp).toMatch(/غير معتمدة/);
     expect(w.body).not.toContain('id="ch-gaps"');
   });
   it('سطر الوصف يطابق الخيارات', () => {

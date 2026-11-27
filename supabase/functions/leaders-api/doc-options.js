@@ -53,3 +53,14 @@ export function withAdminQr(options, choice, { by, at = new Date().toISOString()
   const r = String(reason ?? '').trim().slice(0, REASON_MAX);
   return { ...rest, admin: { qr: choice === 'show', by: by || null, at, reason: r || null } };
 }
+
+/**
+ * سبب غياب رمز التحقق عن وثيقة تُصدَّر (إصلاح 2026-11-27): 'draft' غير معتمدة، 'unissued' معتمدة بلا بصمة مجمّدة،
+ * 'withheld' محجوب بالقرار الفعلي، وnull حين يُطبع. منطق خالص يقرؤه الخادم (qrStateFor) واللوح من المصدر نفسه
+ */
+export function qrExportReason({ approved = false, issued = false, qr = true } = {}) {
+  if (!approved) return 'draft';
+  if (!issued) return 'unissued';
+  if (qr === false) return 'withheld';
+  return null;
+}

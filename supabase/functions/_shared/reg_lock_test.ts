@@ -9,3 +9,6 @@ Deno.test("reg-lock: التقديم الأول بوقت الخادم، وطلب 
   assertEquals(lockFields({ submitted: false }, { submitted: true, submittedAt: "x" }, NOW), { submitted: true, submittedAt: NOW });
   assertEquals(lockFields({ submitted: true, reopenRequested: false }, { reopenRequested: true }, NOW), { reopenRequested: true });
 });
+Deno.test("reg-lock: محتوى الخطة المقدمة لا يُكتب", () => {
+  assertEquals(lockFields({ submitted: true }, { dates: { a: "x" }, confirmed: { a: true } }, NOW), {});
+});

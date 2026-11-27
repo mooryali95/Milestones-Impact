@@ -46,7 +46,18 @@ function setup(over: { tables?: Record<string, Row[]>; fails?: boolean; fail?: R
     genOptions: async (o) => ({ challenge: 'chal-1', ...o }),
     verifyAuth: async () => ({ verified: over.verified ?? true, authenticationInfo: { newCounter: 5 } }),
     matchTotp: async (_s, code) => (code === '123456' ? (over.step === undefined ? 1000n : over.step) : null),
-    tooManyFails: async () => !!over.fails,
+    reserveAttempt: async (_sb, email, ip) => {
+      if (over.fails) return { ok: false as const };
+      const row: Row = { email, ip, success: false };
+      tables.totp_attempts.push(row);
+      return { ok: true as const, done: async (ok: boolean) => { if (ok) row.success = true; } };
+    },
+    claimTotpStep: async (_sb, id, step) => {
+      const u = tables.admin_users.find((r) => r.id === id);
+      if (!u || (u.totp_last_step != null && BigInt(u.totp_last_step) >= step)) return false;
+      u.totp_last_step = step;
+      return true;
+    },
     saveChallenge: async (_sb, challenge, purpose, subject) => { tables.webauthn_challenges.push({ challenge, purpose, subject }); },
     takeChallenge: async (_sb, challenge, purpose) => tables.webauthn_challenges.find((c) => c.challenge === challenge && c.purpose === purpose) ?? null,
     challengeFlood: async () => false,

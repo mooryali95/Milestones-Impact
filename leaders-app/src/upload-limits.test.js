@@ -9,7 +9,10 @@ const read = (f) => readFileSync(join(process.cwd(), f), 'utf8');
 
 describe('حد روابط الرفع اليومي', () => {
   it('يرفض عند بلوغ عدد الروابط الصادرة في 24 ساعة', () => {
-    expect(uploadRefusal({ issued: UPLOAD_LIMITS.perDay - 1, files: [], now: NOW })).toBe(null);
+    const used = Array.from({ length: UPLOAD_LIMITS.perDay - 1 }, () => ({ created_at: ago(1), metadata: { size: 1024 } }));
+    expect(uploadRefusal({ issued: UPLOAD_LIMITS.perDay - 1, files: used, now: NOW })).toBe(null);
+    // روابط صادرة بلا رفع تُحسب بسقف الملف: طلب الروابط قبل الرفع لا يعبر حد الحجم
+    expect(uploadRefusal({ issued: UPLOAD_LIMITS.perDay - 1, files: [], now: NOW })).toBe('bytes');
     expect(uploadRefusal({ issued: UPLOAD_LIMITS.perDay, files: [], now: NOW })).toBe('count');
   });
   it('يجمع حجم ما رُفع في آخر 24 ساعة وحده', () => {

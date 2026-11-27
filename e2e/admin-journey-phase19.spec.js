@@ -68,8 +68,8 @@ const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `$
 test('1280: سطر الحالة في الترويسة، والشريط بحافة وزر، والبلاطة تفتح تفاصيلها ملاصقة وEsc يعيد التركيز', async ({ page }) => {
   await setup(page, 1280);
   await tab(page, 'الرحلة والمتطلبات');
-  const head = page.locator('.screen-head', { hasText: 'الرحلة والمتطلبات' });
-  await expect(head.getByRole('heading', { level: 2, name: 'الرحلة والمتطلبات' })).toBeVisible();
+  const head = page.locator('.screen-head');
+  await expect(page.getByRole('heading', { level: 1, name: 'الرحلة والمتطلبات' })).toBeVisible();
   const line = head.locator('.j-status-line');
   await expect(line.locator('[data-status="no_version"]')).toHaveText('بلا نسخة');
   // الدفعة على البرنامج غير مثبتة على نسخة: يصلها التعديل فورًا، فلا تُقال «لا تمس الدفعة الجارية» ويظهر تنبيهها

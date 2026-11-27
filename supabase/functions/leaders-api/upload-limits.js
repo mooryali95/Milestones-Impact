@@ -6,6 +6,8 @@
 export const UPLOAD_LIMITS = Object.freeze({
   perDay: 30,
   bytesPerDay: 150 * 1024 * 1024,
+  // سقف الملف الواحد في المخزن (file_size_limit في 20261130050000): الرابط الصادر غير المستعمل يُحسب بهذا الحجم
+  fileMax: 10 * 1024 * 1024,
   // الملف الذي لا يشير إليه cv_path ولا evidence_path بعد هذه المدة يتيم: الرفع والربط في الواجهة متتاليان
   orphanHours: 48,
   // سقف ما يُحذف في التشغيلة الواحدة، فلا تطول المهمة الأسبوعية
@@ -20,12 +22,14 @@ export const UPLOAD_PURPOSES = Object.freeze(['cv', 'evidence']);
 export function uploadRefusal({ issued, files, now = Date.now() }) {
   if ((issued || 0) >= UPLOAD_LIMITS.perDay) return 'count';
   const since = now - 864e5;
-  let bytes = 0;
+  let bytes = 0, recent = 0;
   for (const f of files || []) {
     const t = Date.parse(String(f?.created_at || ''));
-    if (Number.isFinite(t) && t >= since) bytes += Number(f?.metadata?.size) || 0;
+    if (Number.isFinite(t) && t >= since) { bytes += Number(f?.metadata?.size) || 0; recent++; }
   }
-  return bytes >= UPLOAD_LIMITS.bytesPerDay ? 'bytes' : null;
+  // الروابط الصادرة التي لم يُرفع إليها بعد تُحسب بالسقف، ومعها الرابط المطلوب، فلا يُتجاوز الحجم بطلب الروابط قبل الرفع
+  const pending = Math.max(0, (issued || 0) - recent);
+  return bytes + (pending + 1) * UPLOAD_LIMITS.fileMax > UPLOAD_LIMITS.bytesPerDay ? 'bytes' : null;
 }
 
 /** مسارات الملفات اليتيمة: تحت <مشارك>/cv أو <مشارك>/evidence، أقدم من orphanHours، ولا يشير إليها صف.
