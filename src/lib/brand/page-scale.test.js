@@ -66,7 +66,9 @@ describe('اسم الباب لكل صفحة في ملف المتصفح (chapterA
     expect(chapterAt(heads, 0, 50)).toBe('');
     expect(chapterAt(heads, 50, 1000)).toBe('أ');
     expect(chapterAt(heads, 1000, 1400)).toBe('أ');
-    expect(chapterAt(heads, 1400, 2400)).toBe('ب');
+    expect(chapterAt(heads, 1450, 2400)).toBe('ب');
+    // تتمة الباب أ في أعلى الصفحة، والباب ب يبدأ في أسفلها: الترويسة للباب أ
+    expect(chapterAt(heads, 1300, 2300)).toBe('أ');
     expect(chapterAt(heads, 2400, 3000)).toBe('ج');
   });
 });

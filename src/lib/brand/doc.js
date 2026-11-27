@@ -58,7 +58,8 @@ export const SEAL = (label = 'MILESTONE IMPACT') => `<svg class="seal" width="12
 
 // ── مكونات المحتوى ──
 // القسم القصير لا ينقسم بين صفحتين فلا يبقى عنوانه وحيدًا أسفل الصفحة؛ والجدول الطويل (أكثر من 15 صفًا) ينقسم بصفوفه
-const short = (body) => (body.match(/<tr/g) || []).length <= 16;
+// والنص الطويل (نحو نصف صفحة فأكثر) لا يُعلَّم قصيرًا، فلا يمحو break-inside: avoid كل مواضع الكسر في مساحة كبيرة
+const short = (body) => (body.match(/<tr/g) || []).length <= 16 && String(body).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').length < 1400;
 export const section = (en, ar, body, note) => `<section class="sec${short(body) ? ' keep' : ''}">
   <header><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p class="note">${esc(note)}</p>` : ''}</header>
   ${body}
@@ -100,6 +101,7 @@ const cssStr = (v) => String(v ?? '').replace(/[\\"\n\r<>]/g, ' ');
 export const brandColor = (c) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : null);
 // الشعار مضمّن (data:) أو من أصل المنصة نفسها وحده (المرحلة 21): رابط https خارجي يُرفض، فلا يجلب قارئ الوثيقة أو مولّد PDF
 // شيئًا من خارجها ولا يُتتبع من يفتحها. بلا شعار صالح يُكتب اسم الجهة نصًا
+export const LOGO_MM = Object.freeze({ max: 26, w: 85, box: 24, by: 8, pad: 3 });
 export const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|\/(?!\/))/i.test(String(u || '')) ? u : null);
 // ── التباين: لون الجهة أو الدفعة يقود العناصر البنيوية (أرقام الأبواب وخطوطها) بعد فحص آلي، وإلا لون الهوية ──
 // WCAG 2.x: النسبة بين الإضاءتين النسبيتين. الأرقام الكبيرة والخطوط نص كبير أو عناصر غير نصية، فالحد 3:1 على الأبيض
@@ -118,15 +120,20 @@ export function structuralAccent(...candidates) {
 }
 
 // ── قواعد التشارك (قرار المالك 2026-11-25): الجهة في الصدارة، والبرنامج (هوية الدفعة) سطر توقيع صغير، وMilestone علامة خافتة.
-// شعار الجهة: ارتفاع أقصى 18 مم وعرض أقصى 70 مم ومساحة أمان 3 مم حوله. شعار الدفعة: ارتفاع أقصى 9 مم. علامة Milestone: 6 مم
-function coBrand(b, id, kindLabel, ctl) {
+// شعار الجهة (إصلاح 2026-11-27، بطلب المالك): بلا لوحة بيضاء، في شريط علوي مسطح بلون الغلاف بلا نقش تحته، والصورة النقطية
+// تُدمج بـ multiply فيذوب بياضها في لون الغلاف (SVG والشفاف بلا دمج). ارتفاع أقصى LOGO_MM.max مم وعرض أقصى LOGO_MM.w مم.
+// شعار الدفعة: ارتفاع أقصى 9 مم. علامة Milestone: LOGO_MM.by مم. safeLogo كما هو
+function coBrand(b, id, kindLabel, ctl, refLabel) {
   const logo = safeLogo(b.logo);
   const org = logo ? `<img src="${esc(logo)}" alt="${esc(b.name || '')}">`
     : `<span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span>`;
   const plogo = safeLogo(b.programLogo);
   const program = b.program || plogo ? `<div class="prog">${plogo ? `<img src="${esc(plogo)}" alt="${esc(b.program || '')}">` : ''}${b.program ? `<span>${esc(b.program)}</span>` : ''}</div>` : '';
-  const ref = ctl ? '' : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
-  return `<div class="top"><div class="org${logo ? ' plate' : ''}">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>${program}${ref}`;
+  const ref = ctl ? '' : refLabel
+    ? `<div class="ref ar" style="margin-top:4mm;text-align:start;letter-spacing:0;text-transform:none;font-family:'Noto Kufi Arabic',sans-serif">${esc(refLabel)}<b><bdi dir="ltr">${esc(id)}</bdi></b>${esc(kindLabel || '')}</div>`
+    : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
+  const blend = logo && !/^data:image\/svg|\.svg(\?|$)/i.test(logo) ? ' blend' : '';
+  return `<div class="top"><div class="org${logo ? ` logo-zone${blend}` : ''}">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>${program}${ref}`;
 }
 
 // ── المرحلة 25: خط لون الجهة أسفل الغلاف (1.6 مم موحدًا). يمر بـ structuralAccent، وإن لم يجتزه يُرسم بلون الجهة الخام
@@ -194,7 +201,9 @@ html.embed { background: transparent; } html.embed .toolbar { display: none !imp
 html.embed .sheet { margin: 0 auto; box-shadow: 0 0 0 1px ${C.line}; }
 @media screen and (max-width: 700px) { html.embed .sheet > *:not(.mast) { padding-inline: 6mm; } html.embed .mast { padding: 8mm 6mm; } html.embed .mast .meta { grid-template-columns: repeat(2, 1fr); } }
 p, li { orphans: 3; widows: 3; }
-h2, h3 { break-after: avoid; }
+h2, h3, h4 { break-after: avoid; break-inside: avoid; }
+figure, .callout, .kpis, .bar, .tbl thead { break-inside: avoid; }
+.tbl thead { display: table-header-group; }
 h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: none; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; }
 @media screen { .toolbar { display: flex; } }
@@ -219,7 +228,8 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .sec { margin-top: 9mm; break-inside: auto; }
 .sec.keep { break-inside: avoid; }
 .tbl tr { break-inside: avoid; }
-.sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; }
+.sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; break-inside: avoid; }
+.sec > header + * { break-before: avoid; }
 .sec h2 { font-weight: ${T.chapterWeight}; font-size: ${T.chapter}pt; margin: 1mm 0 0; }
 .sec .note { margin: 1mm 0 0; color: ${C.muted}; font-size: 8.5pt; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(30mm, 1fr)); border-top: 1px solid ${C.gold}; border-bottom: 1px solid ${C.line}; }
@@ -265,16 +275,27 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .close p { margin: 0; font-size: 8.5pt; color: ${C.slate}; max-width: 120mm; }
 .close .sig { font-size: 9pt; } .close .sig b { font-weight: 400; display: block; }
 .rights { margin-top: 8mm; font-size: 7.5pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; }
+.rights .ref-line { white-space: nowrap; display: inline-block; letter-spacing: 0; }
+.rights .dt { unicode-bidi: isolate; letter-spacing: 0; }
 .rights b { font-weight: 400; color: ${C.slate}; }
 .dm { display: inline-block; vertical-align: middle; }
 .mast .stamp { display: inline-block; border: 1px solid ${C.gold}; color: ${C.goldText}; padding: .5mm 3mm; border-radius: 2px; font-size: 9pt; font-weight: 500; letter-spacing: 0; background: ${C.paper}; line-height: 1.6; }
 .mast > .stamp { position: absolute; top: 6mm; inset-inline-end: 18mm; }
 .mast .ctlrow { display: flex; align-items: center; justify-content: space-between; gap: 4mm; margin-top: 3mm; flex-wrap: wrap; }
 .mast .ctl { font: 400 7.5pt "Noto Sans", sans-serif; letter-spacing: .14em; color: ${C.muted}; direction: ltr; unicode-bidi: isolate; }
+.mast .ctl-dt { font-size: 7.5pt; color: ${C.muted}; margin-inline-end: auto; }
+.mast .ctl-dt::before { content: '·'; margin-inline-end: 2mm; }
+.mast .vm.cover { margin-top: 4mm; border-top: 0; padding-top: 0; }
+.mast .vm.cover .qr { width: 18mm; height: 18mm; }
 .mast.co .top { direction: rtl; align-items: center; }
-.mast.co .org { padding: 3mm; margin: -3mm; }
-.mast.co .org.plate { background: ${C.paper}; background-color: ${C.paper}; margin: 0; border-radius: 1mm; }
-.mast.co .org img { max-height: 18mm; min-width: 30mm; max-width: 70mm; display: block; object-fit: contain; }
+.mast.co { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.mast.co .top { background: ${C.mist}; margin: -14mm -18mm 0; padding: 14mm 18mm ${LOGO_MM.pad}mm; }
+.mast.co .org { padding: ${LOGO_MM.pad}mm; margin: -${LOGO_MM.pad}mm; }
+.mast.co .org.logo-zone { background: transparent; isolation: isolate; }
+.mast.co .org img { height: ${LOGO_MM.box}mm; max-height: ${LOGO_MM.max}mm; max-width: ${LOGO_MM.w}mm; width: auto; display: block; object-fit: contain; object-position: right center; }
+.mast.co .org.blend img { mix-blend-mode: multiply; }
+/* الدمج يحتاج خلفية الشريط تحته: لا مجموعة معزولة حول الشعار، وإلا بقيت لوحته البيضاء مربعًا ظاهرًا */
+.mast.co .org.logo-zone.blend { isolation: auto; }
 .mast.co .prog { display: flex; align-items: center; gap: 2.5mm; margin-top: 6mm; direction: rtl; font-size: 9pt; font-weight: 400; color: ${C.slate}; }
 .mast.co .prog img { max-height: 9mm; max-width: 40mm; object-fit: contain; display: block; }
 .mast.co .meta { grid-template-columns: repeat(var(--n, 3), 1fr); row-gap: 4mm; }
@@ -282,7 +303,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .mast.co .org .nm { font-weight: 400; font-size: 17pt; line-height: 1.3; color: ${C.graphite}; display: block; }
 .mast.co .org .nm small { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.muted}; text-transform: uppercase; }
 .mast.co .by { display: flex; align-items: center; gap: 2mm; direction: rtl; font-size: 7.5pt; color: ${C.muted}; }
-.mast.co .by svg { height: 6mm; width: auto; display: block; }
+.mast.co .by svg { height: ${LOGO_MM.by}mm; width: auto; display: block; }
 .mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.6mm; }
 .mast .accent.guard { box-shadow: 0 .3mm 0 ${C.graphite}; }
 .mast.co { padding: 14mm 18mm 12mm; }
@@ -299,6 +320,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 /* ملف PDF: الغلاف صفحة كاملة وحده (حتى هامش التذييل: PAGE.h - PAGE.bottom في pdf.js، من PAGE_MM)، والعنوان في ثلثه الأوسط،
    وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
 html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h) - mmPx(PAGE_MM.bottom)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
+html.pdf .mast.co .top { margin: -16mm -18mm 0; padding-top: 16mm; }
 html.pdf .mast.co .eyebrow { margin-top: auto; }
 html.pdf .mast.co .meta { margin-top: auto; }
 html.pdf .mast.co .accent { bottom: 0; }
@@ -307,13 +329,14 @@ html.pdf .mast.co .accent { bottom: 0; }
 <article class="sheet">
   <header class="mast${meta.brand ? ' co' : ''}">
     ${meta.stamp && !(meta.brand && meta.control) ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}
-    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel, meta.control) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
+    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel, meta.control, meta.refLabel) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
     ${accent ? `<i class="accent${accent.guard ? ' guard' : ''}" style="background:${accent.color}"></i>` : ''}
     <span class="eyebrow">${esc(meta.eyebrow || 'Milestone Impact · Report')}</span>
     <h1>${esc(meta.title)}</h1>${meta.brand ? '<i class="rule" aria-hidden="true"></i>' : ''}
     ${meta.subtitle ? `<p class="sub">${esc(meta.subtitle)}</p>` : ''}
     ${rows.length ? `<div class="meta"${meta.brand ? ` style="--n:${rows.length}"` : ''}>${rows.map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
-    ${meta.brand && meta.control ? `<div class="ctlrow"><bdi class="ctl" dir="ltr"${meta.controlLabel ? ` role="note" aria-label="${esc(meta.controlLabel)}"` : ''}>${esc(meta.control)}</bdi>${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}</div>` : ''}
+    ${meta.brand && meta.control ? `<div class="ctlrow"><bdi class="ctl" dir="ltr"${meta.controlLabel ? ` role="note" aria-label="${esc(meta.controlLabel)}"` : ''}>${esc(meta.control)}</bdi>${meta.controlDate ? `<span class="ctl-dt">${esc(meta.controlDate)}</span>` : ''}${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}</div>` : ''}
+    ${meta.brand && meta.coverMark ? meta.coverMark : ''}
   </header>
   ${body}
   <div class="close">
@@ -324,7 +347,7 @@ html.pdf .mast.co .accent { bottom: 0; }
   <footer class="rights">
     <b>جميع الحقوق محفوظة <bdi dir="ltr">© ${year} Milestone Impact</bdi>.</b>
     ${esc(meta.rights || REPORT_RIGHTS_AR).replace('Milestone Impact', '<bdi dir="ltr">Milestone Impact</bdi>')} ${esc(conf.replace(/\.$/, ''))}.
-    <span class="mono"><bdi dir="ltr">${esc(id)}</bdi> · ${esc(today())}</span>
+    <span class="ref-line"><bdi class="mono" dir="ltr">${esc(id)}</bdi> · <bdi class="dt">${esc(today())}</bdi></span>
   </footer>
 </article>
 ${isLiveDoc(meta) && !opts.pdf ? `<div class="wm" aria-hidden="true"><span>${esc(WATERMARK.text)}</span></div>` : ''}

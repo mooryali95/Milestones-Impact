@@ -23,7 +23,7 @@ import { APPROVAL_SLA_AR, DOC_VERIFY_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { docFingerprint, freezeIssued, issuedFingerprint, rejectionStats, verifyKey } from './doc-quality.js';
 import { docFormFor } from './doc-form.js';
-import { adminChoice, docOptionsView, effectiveQr, withAdminQr, withOwnerQr } from './doc-options.js';
+import { adminChoice, docOptionsView, effectiveQr, qrExportReason, withAdminQr, withOwnerQr } from './doc-options.js';
 import { missingColumn } from './missing-column.ts';
 import { cohortIdentity } from './cohort-identity.js';
 import { pdfTicket } from './pdf-ticket.ts';
@@ -267,7 +267,7 @@ async function decisionsFor(participantId: string, approvedAt: string | null) {
       db.from('capstone_updates').select('id').eq('participant_id', participantId),
     ]);
     const ids = [participantId, (card as any)?.id, ...((ups || []) as any[]).map((u) => u.id)].filter(Boolean).map(String);
-    const { data: ev } = await db.from('audit_log').select('action, created_at, after').in('entity_id', ids).in('action', GATE_ACTIONS).order('created_at').limit(200);
+    const { data: ev } = await db.from('audit_log').select('action, created_at, after, entity_id').in('entity_id', ids).in('action', GATE_ACTIONS).order('created_at').limit(200);
     return gateDecisions((ev || []) as any[], { approved_at: approvedAt });
   } catch (e) {
     console.error('capstone decisions:', e);
@@ -356,7 +356,8 @@ export const qrStateFor = (row: any) => {
   const o = row?.doc_options || {};
   const eff = effectiveQr(o);
   const issued = row?.status === 'approved' && !!issuedFingerprint(row?.snapshot);
-  return { qr: eff.qr, source: eff.source, forced: eff.forced, owner: typeof o?.owner?.qr === 'boolean' ? o.owner.qr : null, available: issued };
+  return { qr: eff.qr, source: eff.source, forced: eff.forced, owner: typeof o?.owner?.qr === 'boolean' ? o.owner.qr : null, available: issued,
+    reason: qrExportReason({ approved: row?.status === 'approved', issued, qr: eff.qr }) };
 };
 
 // capstone.options: صاحب الوثيقة وحده (p جلسته هو)، ويكتب owner.qr وحده

@@ -255,3 +255,45 @@ export function launchPlan(doc) {
   if (!windows.some((w) => w.items.length) && !measure.length && !watch.length) return { windows, measure, watch, operator, missing, empty: true };
   return { windows, measure, watch, operator, missing, empty: false };
 }
+
+// ── الملخص التنفيذي (إصلاح الوثيقة 2026-11-27): مصدر واحد لما يقرؤه صاحب القرار في صفحته ──
+// يقطع النص عند آخر نهاية جملة ضمن الحد، وإلا عند حد كلمة، فلا تنكسر كلمة ولا رقم ولا قوس. منطق خالص
+export function firstSentences(t, max = 240) {
+  const s = String(t ?? '').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const end = Math.max(...['.', '؟', '!', '؛'].map((c) => cut.lastIndexOf(c)));
+  if (end >= max * 0.4) return cut.slice(0, end + 1).trim();
+  const sp = cut.lastIndexOf(' ');
+  return `${(sp > 0 ? cut.slice(0, sp) : cut).replace(/[،,؛(«\s]+$/, '')}…`;
+}
+
+/**
+ * بيانات الملخص التنفيذي من الوثيقة المحمّلة وحدها: الخلاصة (المحفوظة، وإلا من البطاقة)، والمشكلة بجملة،
+ * والمنافع، والتكلفة (شاملة الاحتياطي، وإلا الإجمالي، وإلا الموازنة المتاحة)، والمدة، والراعي، والمنفذ، والخطوة الأولى.
+ * essentials: عدد الأساسيات الموجودة من (المشكلة، المنافع، التكلفة، المدة)
+ */
+export function execSummary(doc) {
+  const m = doc?.meta || {};
+  const c = (f) => text(doc, 'initiative-charter', f);
+  const card = { title: c('title') || m.initiative, host: c('host'), problem: c('problem'), beneficiaries: c('beneficiaries'), objective: c('objective'), first_step: c('first_step') };
+  const summary = String(doc?.summary || '').trim() || summaryFromCard(card) || null;
+  const cost = doc?.cost || {};
+  const costOf = cost.withContingency > 0 ? { value: cost.withContingency, kind: 'withContingency' }
+    : cost.total > 0 ? { value: cost.total, kind: 'total' }
+    : cost.envelope > 0 ? { value: cost.envelope, kind: 'envelope' } : null;
+  const benefits = benefitsOf(doc, 3).filter((b) => b.title);
+  const out = {
+    summary,
+    problem: card.problem ? firstSentences(card.problem) : null,
+    benefits,
+    cost: costOf ? { ...costOf, contingency: cost.contingency || null, funding: text(doc, 'cost-plan', 'funding') } : null,
+    start: m.start || c('start') || null,
+    end: m.end || c('end') || null,
+    sponsor: m.sponsor || null,
+    operator: c('operator'),
+    firstStep: card.first_step ? firstSentences(card.first_step, 160).replace(/[.،\s]+$/, '') : null,
+  };
+  out.essentials = [out.problem, benefits.length, out.cost, out.start || out.end].filter(Boolean).length;
+  return out;
+}

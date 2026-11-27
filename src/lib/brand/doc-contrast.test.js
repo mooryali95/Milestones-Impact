@@ -85,11 +85,13 @@ describe('الغلاف الفاخر (المرحلة 25)', () => {
     expect(mast).toMatch(/class="ctlrow">.*<span class="stamp">مسودة للمراجعة<\/span>/);
     expect(cr(C.goldText, C.paper)).toBeGreaterThanOrEqual(4.5);
   });
-  it('لوحة بيضاء تحمي الشعار بحدود 18 مم ارتفاعًا و30 مم عرضًا أدنى', () => {
-    expect(mast).toContain('class="org plate"');
-    expect(get('.mast.co .org.plate')).toContain(`background-color: ${C.paper}`);
-    expect(get('.mast.co .org img')).toMatch(/max-height: 18mm/);
-    expect(get('.mast.co .org img')).toMatch(/min-width: 30mm/);
+  // إصلاح 2026-11-27 (بطلب المالك): لا لوحة بيضاء؛ شريط علوي مسطح بلون الغلاف بلا نقش، والشعار أكبر بلا تكبير قسري
+  it('الشعار بلا لوحة بيضاء، بحد 26 مم ارتفاعًا و85 مم عرضًا، وبلا حد أدنى يكبّر الصغير', () => {
+    expect(mast).toContain('class="org logo-zone');
+    expect(mast).not.toContain('plate');
+    expect(get('.mast.co .org.logo-zone')).not.toContain(C.paper);
+    expect(get('.mast.co .org img')).toMatch(/max-height: 26mm/);
+    expect(get('.mast.co .org img')).not.toMatch(/min-width|min-height/);
   });
   it('خط الجهة 1.6 مم عبر structuralAccent، وحد جرافيتي حين يقل التباين عن 1.5:1', () => {
     expect(get('.mast .accent')).toMatch(/height: 1\.6mm/);

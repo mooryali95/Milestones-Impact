@@ -13,7 +13,7 @@ import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, LIVE_RI
 // تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
-import { BUDGET_PLAIN_AR, BUDGET_TOTAL_AR, DOC_DOORS_AR, budgetTotalPctAr, decisionDeadlineAr, decisionSentenceAr, DOC_DECISION_AR, fromToAr, CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { BUDGET_PLAIN_AR, BUDGET_TOTAL_AR, DOC_DOORS_AR, budgetTotalPctAr, decisionDeadlineAr, decisionSentenceAr, DOC_DECISION_AR, fromToAr, CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, DOC_QR_EXPORT_AR, DOC_SEND_STAMP_AR, DOC_TEXT, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
 import { FORMS } from '../../../supabase/functions/leaders-api/document-forms.js';
 import { termsAt, trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
@@ -47,6 +47,12 @@ body { font-weight: 400; }
 .in-open p.ask { font-size: 11pt; color: #0B272F; padding-inline-start: 3mm; border-inline-start: 2pt solid var(--acc); }
 /* المرحلة 29: حالة العمل كل باب في صفحة؛ الميثاق انسياب متصل، وحاجز 60 مم غير مرئي قبل الفاتحة يمنع بدء باب في أسفل صفحة */
 .in-keep { display: block; height: 60mm; margin-bottom: -60mm; break-inside: avoid; visibility: hidden; }
+.num { white-space: nowrap; unicode-bidi: isolate; }
+.in-contents-list { list-style: none; margin: 4mm 0 0; padding: 0; }
+.in-contents-list li { display: flex; align-items: baseline; gap: 3mm; padding: 2.6mm 0; border-bottom: 1px solid #DCE2E1; font-size: 11pt; color: #0B272F; break-inside: avoid; }
+.in-contents-list a { color: inherit; text-decoration: none; display: flex; gap: 4mm; flex: 1; }
+.in-contents-list .n { font: 400 10pt "Noto Sans", sans-serif; color: var(--acc-text); min-width: 8mm; }
+.in-contents-list .cp-pgno { font: 400 10pt "Noto Sans", sans-serif; color: #5F7176; }
 .in-toc { margin-top: 6mm; padding-top: 2.5mm; border-top: 1px solid #DCE2E1; break-inside: avoid; }
 .in-toc span { font-size: 8pt; font-weight: 600; color: #8A6424; margin-inline-end: 2mm; }
 .in-toc ol { display: inline; list-style: none; margin: 0; padding: 0; }
@@ -119,6 +125,13 @@ body { font-weight: 400; }
 .in-verify p { margin: 0; font-size: 9.5pt; line-height: 1.7; color: #2C4148; }
 .in-verify a { color: #0B272F; font: 400 8.5pt "Noto Sans", sans-serif; direction: ltr; unicode-bidi: isolate; word-break: break-all; }
 .in-verify .ring { width: 18mm; height: 18mm; margin-inline-start: auto; flex: none; }
+.in-contents + .in-sec { break-before: page; }
+.in-approve-h { margin: 0 0 5mm; font-size: 11pt; font-weight: 500; color: #0B272F; }
+.in-approve.send { padding-top: 5mm; }
+.in-sign > div.blank { padding-top: 0; border-bottom: 0; padding-bottom: 0; }
+.in-sign .blank ul { list-style: none; margin: 3mm 0 0; padding: 0; display: grid; gap: 5mm; }
+.in-sign .blank li { font-size: 8.5pt; color: #5F7176; padding-top: 6mm; border-bottom: 1px solid #0B272F; padding-bottom: 1mm; }
+.in-benefits { width: 100%; }
 .in-chart text { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; }
 </style>`;
 
@@ -150,17 +163,24 @@ export const LEAN_STYLE = `<style>
 
 export { fingerprint };
 
+// الأرقام في خلايا الجداول لا تنكسر بين سطرين («480,000» لا «480,00 / 0»): كل رقم في نص خلية يُلف بـ bdi.num
+export const nowrapNumbers = (html) => String(html).replace(/(<td\b[^>]*>)([\s\S]*?)(<\/td>)/g, (_, a, inner, z) => a + inner.replace(/(^|>)([^<]+)/g, (__, g, t) => g + t.replace(/(?<![#\w&])(?:\d[\d,٬.]*\d%?|\d%?)(?![\w;])/g, (n) => `<bdi class="num">${n}</bdi>`)) + z);
+
 const sec = (doc, k) => (doc.sections || []).find((s) => s.key === k) || null;
 const fld = (doc, k, f) => (sec(doc, k)?.fields || []).find((x) => x.key === f) || null;
 const val = (doc, k, f) => fld(doc, k, f)?.value ?? null;
 const has = (v) => (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== '');
 
 // حقل صالح بعنوانه، أو لا شيء
+// نسخة الإرسال: رؤوس الأعمدة بصيغة اسمية (لا قوس شارح ولا جملة تعليمات)، يضبطها institutionalReport لمدة البناء
+let SEND_HEADS = false;
+export const sendHead = (h) => { const t = String(h ?? '').trim(); return DOC_TEXT.send.headers[t] || t.replace(/\s*\([^)]*\)\s*$/, '').trim() || t; };
 function field(doc, k, f, label) {
   const x = fld(doc, k, f);
   if (!x || !has(x.value)) return '';
   const title = esc(label || x.label);
-  if (x.type === 'table') return `<div class="cp-f"><b>${title}</b>${tableOf(x.labels || x.columns, x.value)}</div>`;
+  const heads = x.labels || x.columns;
+  if (x.type === 'table') return `<div class="cp-f"><b>${title}</b>${tableOf(SEND_HEADS && Array.isArray(heads) ? heads.map(sendHead) : heads, x.value)}</div>`;
   if (x.type === 'select') return `<div class="cp-f"><b>${title}</b><span class="tag gold">${esc(x.value)}</span></div>`;
   return `<div class="cp-f"><b>${title}</b>${paras(x.value)}</div>`;
 }
@@ -194,7 +214,17 @@ export function assumptionsOf(doc) {
   return f.value.filter((row) => Array.isArray(row) && cell(row, t) === DOC_DOORS_AR.assumptionType)
     .map((row) => ({ title: cell(row, d), owner: cell(row, o), response: cell(row, r) })).filter((x) => x.title);
 }
-const assumptionCards = (list) => (list.length ? `<div class="cp-f"><b>${esc(DOC_DOORS_AR.assumptions)}</b><p class="cp-p">${esc(DOC_DOORS_AR.assumptionsNote)}</p><div class="in-cards">${list.map((x) => `<div class="in-card"><b>${esc(x.title)}</b>${x.response ? `<p>${esc(x.response)}</p>` : ''}${x.owner ? `<small>${esc(DOC_DOORS_AR.owner)}: ${esc(x.owner)}</small>` : ''}</div>`).join('')}</div></div>` : '');
+const assumptionCards = (list, send = false) => (list.length ? `<div class="cp-f"><b>${esc(DOC_DOORS_AR.assumptions)}</b>${send ? '' : `<p class="cp-p">${esc(DOC_DOORS_AR.assumptionsNote)}</p>`}<div class="in-cards">${list.map((x) => `<div class="in-card"><b>${esc(x.title)}</b>${x.response ? `<p>${esc(x.response)}</p>` : ''}${x.owner ? `<small>${esc(DOC_DOORS_AR.owner)}: ${esc(x.owner)}</small>` : ''}</div>`).join('')}</div></div>` : '');
+
+// ── القيود: في نسخة الإرسال لا يتكرر وسم الحقل في أول قيمته («القيد: ...»)، ويُفصل «الافتراض الأكبر» حقلًا مستقلًا ──
+export function constraintsOf(v, send = false) {
+  if (!send || !has(v)) return [['القيود', v]];
+  const t = String(v).trim().replace(/^\s*القيود?\s*[:：]\s*/, '');
+  const k = DOC_TEXT.send.keyAssumption;
+  const at = t.search(new RegExp(`${k}\\s*[:：]`));
+  if (at < 0) return [['القيود', t]];
+  return [['القيود', t.slice(0, at).trim()], [k, t.slice(at).replace(new RegExp(`^${k}\\s*[:：]\\s*`), '').trim()]];
+}
 
 // ── كلفة عدم القرار: من بديل «عدم التدخل» أو «الوضع الحالي» في جدول البدائل إن كتبه القائد، وإلا لا خانة ──
 export const STATUS_QUO = /^\s*(عدم التدخل|عدم القرار|الوضع الحالي|بلا تدخل|لا شيء|الإبقاء)/;
@@ -227,18 +257,21 @@ export function benefitsChart(doc) {
   const rows = benefitsOf(doc, 6).map((b) => ({ ...b, a: parseNumber(b.baseline), z: parseNumber(b.target) }))
     .filter((b) => Number.isFinite(b.a) && Number.isFinite(b.z) && (b.a || b.z));
   if (rows.length < 1) return '';
-  const W = 1000, rowH = 58, label = 330, H = rows.length * rowH + 12;
+  // الرسم بعرض النص كاملًا وباتجاه ثابت (ltr) فلا يقلب اتجاه الصفحة مراسيه: اسم المنفعة في عمود يمين الزوج، والأعمدة تمتد
+  // من حده يسارًا، والقيمة خارج طرف العمود في عمود خاص بها (عزل اتجاه)، فلا يغطي نص عمودًا ولا يقع اسم خارج الرسم
+  const W = 1000, rowH = 62, label = 340, gap = 16, vw = 130, H = rows.length * rowH + 8;
+  const right = W - label - gap, span = right - vw;
   let g = '';
   rows.forEach((b, i) => {
-    const y = 10 + i * rowH, max = Math.max(Math.abs(b.a), Math.abs(b.z)) || 1, span = W - label - 120;
-    const wa = (Math.abs(b.a) / max) * span, wz = (Math.abs(b.z) / max) * span;
-    const t = b.title.length > 34 ? `${b.title.slice(0, 33)}…` : b.title;
-    g += `<text x="${W}" y="${y + 24}" text-anchor="end" font-size="20" fill="#0B272F">${esc(t)}</text>
-<rect x="${W - label - wa}" y="${y + 4}" width="${wa.toFixed(1)}" height="16" fill="#DCE2E1"/><text x="${W - label - wa - 8}" y="${y + 18}" text-anchor="end" font-size="16" fill="#5F7176">${esc(b.baseline)}</text>
-<rect x="${W - label - wz}" y="${y + 26}" width="${wz.toFixed(1)}" height="16" fill="var(--acc)"/><text x="${W - label - wz - 8}" y="${y + 40}" text-anchor="end" font-size="16" fill="#0B272F">${esc(b.target)}</text>`;
+    const y = 6 + i * rowH, max = Math.max(Math.abs(b.a), Math.abs(b.z)) || 1;
+    const wa = Math.max(2, (Math.abs(b.a) / max) * span), wz = Math.max(2, (Math.abs(b.z) / max) * span);
+    const t = b.title.length > 30 ? `${b.title.slice(0, 29)}…` : b.title;
+    g += `<g class="bn-row" data-row="${i}"><text class="bn-name" x="${W}" y="${y + 29}" text-anchor="end" font-size="20" fill="#0B272F">${esc(t)}</text>
+<rect class="bn-bar" x="${(right - wa).toFixed(1)}" y="${y + 6}" width="${wa.toFixed(1)}" height="18" fill="#DCE2E1"/><text class="bn-val" x="${(right - wa - 10).toFixed(1)}" y="${y + 21}" text-anchor="end" direction="ltr" unicode-bidi="isolate" font-size="16" fill="#5F7176">${esc(b.baseline)}</text>
+<rect class="bn-bar" x="${(right - wz).toFixed(1)}" y="${y + 30}" width="${wz.toFixed(1)}" height="18" fill="var(--acc)"/><text class="bn-val" x="${(right - wz - 10).toFixed(1)}" y="${y + 45}" text-anchor="end" direction="ltr" unicode-bidi="isolate" font-size="16" fill="#0B272F">${esc(b.target)}</text></g>`;
   });
-  return `<figure class="cp-fig in-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="المنافع: خط الأساس مقابل المستهدف">${g}</svg>
-<figcaption>المنافع: الرمادي خط الأساس واللون المستهدف، كلٌ بمقياس منفعته</figcaption></figure>`;
+  return `<figure class="cp-fig in-chart in-benefits"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr" style="display:block;width:100%;height:auto;direction:ltr" role="img" aria-label="المنافع: خط الأساس مقابل المستهدف">${g}</svg>
+<div class="mi-legend"><span class="mi-lg"><i style="background:#DCE2E1"></i>${esc(DOC_TEXT.send.legendBase)}</span><span class="mi-lg"><i style="background:var(--acc)"></i>${esc(DOC_TEXT.send.legendTarget)}</span></div></figure>`;
 }
 
 // رمز التحقق ورابطه من مصدرهما الواحد (verify-mark.js، المرحلة 32)
@@ -265,6 +298,12 @@ export function identityOf(m) {
  */
 export function institutionalReport(input, options = {}) {
   const opt = docOptions(options, 'institutional');
+  // نسخة الإرسال (finalDocument): لا تحمل لغة المسودة الداخلية؛ ختمها الوحيد DOC_SEND_STAMP_AR
+  const send = options?.send === true;
+  SEND_HEADS = send;
+  try { return institutionalBody(input, options, opt, send); } finally { SEND_HEADS = false; }
+}
+function institutionalBody(input, options, opt, send) {
   // المعتمدة: محتواها النظيف وبصمتها وشكلها مجمّدة في اللقطة لحظة الاعتماد (capstone.ts approve: snapshot.issued)،
   // فلا يغيّر تعديل لاحق ولا تحسين في قواعد الجودة ولا تغيّر مسار المشارك وثيقةً صدرت. غير المعتمدة تُبنى لحظة العرض
   const frozen = input?.meta?.status === 'approved' && input?.issued?.sections ? input.issued : null;
@@ -371,7 +410,7 @@ export function institutionalReport(input, options = {}) {
       field(doc, 'theory-of-change', 'chain', 'كيف يحدث التغيير'),
       full ? field(doc, 'theory-of-change', 'impact', 'الأثر المنشود') : '',
       full ? field(doc, 'options-analysis', 'criteria', 'معايير المفاضلة') : '',
-      full ? grid([['أضعف حلقة في السلسلة', val(doc, 'theory-of-change', 'weakest')], ['كيف نختبرها مبكرًا', val(doc, 'theory-of-change', 'test')], ['ما خارج سيطرتنا', val(doc, 'theory-of-change', 'external')], ['القيود', val(doc, 'initiative-charter', 'constraints')]]) : '',
+      full ? grid([[send ? DOC_TEXT.send.weakest : 'أضعف حلقة في السلسلة', val(doc, 'theory-of-change', 'weakest')], [send ? DOC_TEXT.send.test : 'كيف نختبرها مبكرًا', val(doc, 'theory-of-change', 'test')], [send ? DOC_TEXT.send.external : 'ما خارج سيطرتنا', val(doc, 'theory-of-change', 'external')], ...constraintsOf(val(doc, 'initiative-charter', 'constraints'), send)]) : '',
     ].join(''), askOf('Why'));
     // فصل نجاح المشروع (النطاق والوقت والتكلفة) عن نجاح المنافع (المرحلة 29): الأول يُحكم عند التسليم، والثاني بعده
     const T = DOC_DOORS_AR;
@@ -379,11 +418,11 @@ export function institutionalReport(input, options = {}) {
     const project = grid([
       [T.scope, nDel ? T.deliverables(nDel) : val(doc, 'initiative-charter', 'in_scope')],
       [T.time, durationHtml],
-      [T.cost, cost ? `${money(cost.withContingency)} (${budgetLabel})` : null],
+      [T.cost, cost ? `${money(cost.withContingency)}${cost.contingency ? ' شاملًا الاحتياطي' : ''}` : null],
     ]);
     add('Value', 'القيمة والقياس', [
-      project ? `<div class="cp-f in-success" data-success="project"><b>${esc(T.project)}</b><p class="cp-p">${esc(T.projectNote)}</p>${project}</div>` : '',
-      benefits.length ? `<div class="cp-f in-success" data-success="benefits"><b>${esc(T.benefits)}</b><p class="cp-p">${esc(T.benefitsNote)}</p>${benefitCards(benefits)}</div>` : '',
+      project ? `<div class="cp-f in-success" data-success="project"><b>${esc(T.project)}</b>${send ? '' : `<p class="cp-p">${esc(T.projectNote)}</p>`}${project}</div>` : '',
+      benefits.length ? `<div class="cp-f in-success" data-success="benefits"><b>${esc(T.benefits)}</b>${send ? '' : `<p class="cp-p">${esc(T.benefitsNote)}</p>`}${benefitCards(benefits)}</div>` : '',
       benefitsChart(doc),
       field(doc, 'evidence-plan', 'success_signal', 'مؤشرات النجاح'),
       full ? field(doc, 'evidence-plan', 'plan', 'خطة القياس') : '',
@@ -423,7 +462,7 @@ export function institutionalReport(input, options = {}) {
       full ? field(doc, 'stakeholder-map', 'coalitions', 'التحالفات وتحريك المعارضين') : '',
       (() => { const r = risksOf(doc, limits.risks); return r.length ? `<div class="cp-f"><b>سجل المخاطر</b>${riskCards(r)}</div>` : ''; })(),
       risks.length && raidF ? heatmap(raidF.columns, risks) : '',
-      assumptionCards(assumptionsOf(doc)),
+      assumptionCards(assumptionsOf(doc), send),
       full ? field(doc, 'governance', 'raci', 'مصفوفة المسؤوليات') : '',
       full ? grid([['التصعيد', val(doc, 'governance', 'escalation')], ['شهية المخاطر', val(doc, 'raid', 'appetite')], ['أصحاب المصلحة الصامتون', val(doc, 'stakeholder-map', 'silent')], ['قرار البوابة', [val(doc, 'stage-gate', 'decision'), val(doc, 'stage-gate', 'justification')].filter(has).join(': ')]]) : '',
     ].join(''), askOf('Governance & risks'));
@@ -446,7 +485,7 @@ export function institutionalReport(input, options = {}) {
   // فيقرأ صاحب القرار المصطلح بالمعنى الذي كُتبت به الوثيقة. بلا مسار معروف: بعمق الاحترافي ──
   if (full) {
     const terms = ['milestone', 'impact', 'leadership'].flatMap((d) => man.card?.handbook.frameworks[d]?.terms || termsAt(d, 'advanced'));
-    add('Glossary', 'مصطلحات الوثيقة', terms.length ? `<table class="cp-gloss"><tbody>${terms.map((t) => `<tr><th>${esc(t.term)}${t.en ? `<br><small>${esc(t.en)}</small>` : ''}</th><td>${esc(t.def)}</td></tr>`).join('')}</tbody></table>` : '',
+    add('Glossary', 'مصطلحات الوثيقة', terms.length ? `<table class="cp-gloss"><tbody>${terms.map((t) => `<tr><th>${esc(t.term)}${t.en && !send ? `<br><small>${esc(t.en)}</small>` : ''}</th><td>${esc(t.def)}</td></tr>`).join('')}</tbody></table>` : '',
       'بالمعنى الذي كُتبت به هذه الوثيقة.');
   }
 
@@ -463,29 +502,41 @@ export function institutionalReport(input, options = {}) {
   const url = mark?.url || null;
   // المعتمدة تطبع البصمة المجمّدة وحدها (مصدر الرمز نفسه)؛ بلا مجمّدة لا بصمة مطبوعة تُكتب باليد فلا تُطابَق
   const shownFp = approved ? mark?.fingerprint || null : fp;
-  add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">${esc(DOC_APPROVED_AR)} · ${esc(fmt(m.approved_at) || '')}</span>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
-    <div class="in-sign">${signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('')}</div>
-    <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span>${shownFp ? `<span>FINGERPRINT <b>${esc(shownFp)}</b></span>` : ''}</p>
-    ${mark ? mark.html : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p>${LIVE_RING()}</div>`}</div>`,
+  // نسخة الإرسال غير المعتمدة: سطر عنوان وخانات توقيع فارغة (الاسم والتوقيع والتاريخ) بدل نصوص حالة العمل
+  const S = DOC_TEXT.send;
+  const blank = (k) => `<div class="blank"><span>${esc(k)}</span><ul>${S.blanks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
+  const signHtml = send && !approved
+    ? [['المستشار', approved || doc.review ? signs[0][1] : null, null], ['الراعي', sp?.status === 'endorsed' || sp?.waived ? signs[1][1] : null, signs[1][2]], [S.authority, null, null]]
+      .map(([k, v, d]) => (v ? `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>` : blank(k))).join('')
+    : signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('');
+  add('Approval', 'الاعتماد', `<div class="in-approve${send && !approved ? ' send' : ''}">${approved ? `<span class="st">${esc(DOC_APPROVED_AR)} · ${esc(fmt(m.approved_at) || '')}</span>` : send ? `<h3 class="in-approve-h">${esc(S.approveTitle)}</h3>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
+    <div class="in-sign">${signHtml}</div>
+    <p class="in-fp"><span>${send ? esc(DOC_TEXT.send.docNo) : 'DOCUMENT'} <b>${send ? `<bdi dir="ltr">${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</bdi>` : esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span>${shownFp ? `<span>${send ? esc(DOC_TEXT.send.fingerprint) : 'FINGERPRINT'} <b>${send ? `<bdi dir="ltr">${esc(shownFp)}</bdi>` : esc(shownFp)}</b></span>` : ''}</p>
+    ${mark ? mark.html : send ? '' : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p>${LIVE_RING()}</div>`}</div>`,
   url ? DOC_VERIFY_AR.lead : null);
 
   // المرحلة 29: كل باب في حالة العمل يبدأ صفحة جديدة؛ الميثاق انسياب متصل بحاجز 60 مم؛ ولكل باب مرساة لفهرس سطر القرار
   const doorId = (en) => `in-${String(en).toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '')}`;
   const doorNo = (en, i) => (en === 'Approval' ? '◆' : String(i + 1).padStart(2, '0'));
-  const opener = ([en, ar, b, note], i) => {
+  const opener = ([en, ar, b, note0], i) => {
+    let note = note0;
     const np = Boolean((i && en === 'Approval') || (full && i > 0));
     const flow = !np && !lean && i > 0;
     const isAsk = full && note && en !== 'Approval' && en !== 'Glossary';
-    return `<section class="in-sec${np ? ' np' : ''}" id="${doorId(en)}">${flow ? '<i class="in-keep" aria-hidden="true"></i>' : ''}<header class="in-open"><span class="n">${doorNo(en, i)}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p${isAsk ? ' class="ask"' : ''}>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
+    // نسخة الإرسال: لا وسم لاتيني فوق العنوان العربي، ولا سؤال توجيهي تحته (أسئلة صاحب القرار للعرض في المنصة)
+    if (send && note && (isAsk || /[؟?]/.test(note))) note = null;
+    return `<section class="in-sec${np ? ' np' : ''}" id="${doorId(en)}">${flow ? '<i class="in-keep" aria-hidden="true"></i>' : ''}<header class="in-open"><span class="n">${doorNo(en, i)}</span><div>${send ? '' : `<span class="eyebrow">${esc(en)}</span>`}<h2>${esc(ar)}</h2>${note ? `<p${isAsk ? ' class="ask"' : ''}>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
   };
   const toc = lean ? '' : `<nav class="in-toc" aria-labelledby="in-toc-h"><span id="in-toc-h">${esc(DOC_DOORS_AR.toc)}</span><ol>${parts.map(([en, ar], i) => `<li><a href="#${doorId(en)}">${doorNo(en, i)} ${esc(ar)}</a><span class="cp-pgno" data-ref="#${doorId(en)}"></span></li>`).join('')}</ol></nav>`;
   const { brand, accent } = identityOf(m);
   const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">${esc(DOC_DECISION_AR.eyebrow)}</span><h2>${esc(DOC_DECISION_AR.title)}</h2><p>${esc(DOC_DECISION_AR.lead)}</p></div></header>${decision}${toc}</section>` : '';
-  const inner = (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
-  const body = STYLE + IN_STYLE + VERIFY_STYLE + (lean ? LEAN_STYLE : '') + `<style>:root { --acc: ${accent}; --acc-text: ${accentText(accent)}; }</style>` + (lean ? `<div class="in-lean-doc">${inner}</div>` : inner);
+  // نسخة الإرسال بلا صفحة القرار: صفحة «المحتويات» مستقلة بعد الغلاف، تفتحها التوصية بصيغة مؤسسية
+  const contents = send && !lean && !decisionPage ? `<section class="in-sec in-contents" id="in-contents"><header class="in-open"><span class="n">◆</span><div><h2>${esc(DOC_TEXT.toc.title)}</h2></div></header><p class="in-lead">${esc(DOC_TEXT.send.recommend(m.initiative, m.sponsor ? String(m.sponsor).split(/[:：]/)[0].trim() : null))}</p><ol class="in-contents-list">${parts.map(([en, ar], i) => `<li><a href="#${doorId(en)}"><span class="n">${doorNo(en, i)}</span>${esc(ar)}</a><span class="cp-pgno" data-ref="#${doorId(en)}"></span></li>`).join('')}</ol></section>` : '';
+  const inner = (decisionPage || contents) + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
+  const body = (send ? nowrapNumbers : (x) => x)(STYLE + IN_STYLE + VERIFY_STYLE + (lean ? LEAN_STYLE : '') + `<style>:root { --acc: ${accent}; --acc-text: ${accentText(accent)}; }</style>` + (lean ? `<div class="in-lean-doc">${inner}</div>` : inner));
   // بلا اسم للمبادرة: العنوان اسم الوثيقة وحده، فلا يتكرر في العنوان الفرعي
   const title = m.initiative || form.name;
-  const subtitle = [m.initiative ? form.name : null, m.scope_title].filter(Boolean).join(' · ') || null;
+  const subtitle = send ? DOC_TEXT.send.docType : [m.initiative ? form.name : null, m.scope_title].filter(Boolean).join(' · ') || null;
   const org = m.org || null;
   return {
     fingerprint: fp,
@@ -498,14 +549,18 @@ export function institutionalReport(input, options = {}) {
       brand,
       eyebrow: brand.program || 'برنامج القادة', title, subtitle,
       // المرحلة 25: صف رسمي واحد (الجهة، الراعي، القائد)، والرمز والإصدار والتاريخ والحالة في شريط الضبط اللاتيني، والحالة في الختم
-      rows: [['الجهة', org?.name || m.host], ['الراعي', m.sponsor], ['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
-      control: controlStrip([`${m.ref || 'MI-CP'}`, `V${m.version || 1}`, isoDay(approved ? m.approved_at : (m.generated_at || new Date())), approved ? 'APPROVED' : 'DRAFT']),
+      rows: [['الجهة', org?.name || m.host], ['الراعي', m.sponsor ? String(m.sponsor).split(/[:：]/)[0].trim() : null], ['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
+      // نسخة الإرسال: رقم الوثيقة وحده في شريطه اللاتيني، والتاريخ بالصيغة العربية نفسها في بقية الوثيقة بجانبه (لا ISO ولا رمز إصدار)
+      control: send ? controlStrip([`${m.ref || 'MI-CP'}`]) : controlStrip([`${m.ref || 'MI-CP'}`, `V${m.version || 1}`, isoDay(approved ? m.approved_at : (m.generated_at || new Date())), approved ? 'APPROVED' : 'DRAFT']),
+      ...(send ? { controlDate: fmt(approved ? m.approved_at : (m.generated_at || new Date())) } : {}),
+      // المعتمدة برمز تحقق: رمز صغير ورابطه على الغلاف أيضًا
+      ...(send && url ? { coverMark: `<div class="vm cover" data-verify="cover">${qrSvg(url)}<div class="vm-l"><span>${esc(DOC_VERIFY_AR.scan)}</span><a href="${esc(url)}">${esc(url.replace(/^https?:\/\//, ''))}</a></div></div>` } : {}),
       stamp: approved ? DOC_APPROVED_AR : DOC_LIVE_AR,
       // المرحلة 28: الحية بعلامة مائية في كل صفحة وترويسة DOC_LIVE_HEAD_AR، والختم الذهبي في إغلاق المعتمدة وحدها
       live: !approved,
-      controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${isoDay(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : DOC_LIVE_AR}`,
-      confidential: CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR,
-      closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', shownFp) : docClosingLiveAr(built),
+      controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${isoDay(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : send ? DOC_SEND_STAMP_AR : DOC_LIVE_AR}`,
+      confidential: send ? DOC_TEXT.send.confidential : CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR,
+      closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', shownFp) : send ? DOC_TEXT.sendClosing : docClosingLiveAr(built),
     },
     body,
   };
@@ -561,17 +616,23 @@ export function renderInitiative(doc, kind = 'working', options = {}) {
 export function finalDocument(doc, options = EXPORT_PRESETS.send) {
   const src = withoutReadiness(doc);
   const opt = docOptions(options, 'institutional');
-  const inst = institutionalReport(src, opt);
+  const send = !opt.appendix;
+  const inst = institutionalReport(src, { ...opt, send });
   const out = inst.blocked ? capstoneReport(src, { ...opt, final: true }) : inst;
-  return { ...out, kind: inst.blocked ? 'working' : 'institutional' };
+  // نسخة الإرسال من المؤسسية غير المعتمدة: ختم واحد رصين على الغلاف، بلا علامة مائية ولا ترويسة مسودة في الصفحات
+  const approved = src?.meta?.status === 'approved';
+  const meta = !inst.blocked && send && !approved ? { ...out.meta, stamp: DOC_SEND_STAMP_AR, live: false } : out.meta;
+  return { ...out, meta, kind: inst.blocked ? 'working' : 'institutional' };
 }
 
 /** وصف ما سيحويه الملف في سطر، للوح التحميل */
-export function exportSummary(options = EXPORT_PRESETS.send, { approved = false } = {}) {
+export function exportSummary(options = EXPORT_PRESETS.send, { approved = false, available = true } = {}) {
   const o = docOptions(options, 'institutional');
-  const has = [o.decision && 'صفحة القرار', o.appendix && 'ملحق ما ينقص', o.annex && 'ملحق المراجع', approved && o.qr && 'رمز التحقق'].filter(Boolean);
-  const not = [!o.decision && 'صفحة القرار', !o.appendix && 'ملحق ما ينقص', !o.annex && 'ملحق المراجع', approved && !o.qr && 'رمز التحقق'].filter(Boolean);
-  return [`الوثيقة${has.length ? ` مع ${has.join(' و')}` : ''}`, not.length ? `بلا ${not.join(' ولا ')}` : '', 'وبلا نسبة الجاهزية', approved ? '' : `وبختم «${DOC_LIVE_AR}»`].filter(Boolean).join('، ') + '.';
+  const qrNote = !approved || !available ? DOC_QR_EXPORT_AR.summaryNone : '';
+  const has = [o.decision && 'صفحة القرار', o.appendix && 'ملحق ما ينقص', o.annex && 'ملحق المراجع', approved && available && o.qr && 'رمز التحقق'].filter(Boolean);
+  const not = [!o.decision && 'صفحة القرار', !o.appendix && 'ملحق ما ينقص', !o.annex && 'ملحق المراجع', approved && available && !o.qr && 'رمز التحقق'].filter(Boolean);
+  const stamp = approved ? '' : `وبختم «${o.appendix ? DOC_LIVE_AR : DOC_SEND_STAMP_AR}»`;
+  return [`الوثيقة${has.length ? ` مع ${has.join(' و')}` : ''}`, not.length ? `بلا ${not.join(' ولا ')}` : '', 'وبلا نسبة الجاهزية', qrNote, stamp].filter(Boolean).join('، ') + '.';
 }
 
 /** رسالة ما ينقص لإصدار النسخة المؤسسية، بلغة المشارك */

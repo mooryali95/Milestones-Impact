@@ -19,6 +19,7 @@ const ptPx = (pt) => (pt * 96) / 72;
 const CONTENT_H = PAGE.h - PAGE.top - PAGE.bottom;
 const FIRST_H = PAGE.h - PAGE.bottom;
 const KEEP_NEXT = 110;
+const KEEP_LABEL = 30;
 const BLOCKISH = new Set(['block', 'flex', 'grid', 'table', 'table-row', 'list-item', 'table-row-group', 'flow-root']);
 
 /**
@@ -27,7 +28,23 @@ const BLOCKISH = new Set(['block', 'flex', 'grid', 'table', 'table-row', 'list-i
  * cands مواضع كسر مسموحة (أعلى عنصر يبدأ عنده الكسر)، وhead رأس جدول يتكرر في الصفحة التالية إن كان الكسر بين صفوفه.
  * يعيد [{ start, end, head }]: head رأس الجدول الذي يُرسم أعلى الصفحة قبل محتواها
  */
-export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH = FIRST_H }) {
+// lines: صناديق أسطر النص والصور وصفوف الجداول [{ top, bottom }]، وheads: صناديق العناوين. القطع لا يقع داخل أي منها أبدًا،
+// ولا يبقى عنوان آخر الصفحة بلا سطر بعده: صفحة أقصر قليلًا مقبولة، والسطر المقطوع والعنوان المقسوم غير مقبولين
+export function safeEnd(y, s, { lines = [], heads = [] } = {}) {
+  let end = y;
+  for (let i = 0; i < 8; i++) {
+    const inBox = [...lines, ...heads].filter((b) => end > b.top + 0.5 && end < b.bottom - 0.5 && b.top > s + 2).sort((a, b) => a.top - b.top)[0];
+    // العنوان اليتيم: الكسر بعد العنوان مباشرة (قبل أول سطر يليه) يرد إلى أعلى العنوان
+    const orphan = heads.find((h) => end >= h.bottom - 0.5 && end <= h.bottom + ORPHAN_GAP && h.top > s + 2);
+    const back = inBox?.top ?? orphan?.top;
+    if (back == null || back >= end) break;
+    end = back;
+  }
+  return end;
+}
+const ORPHAN_GAP = 48;
+
+export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH = FIRST_H, lines = [], heads = [] }) {
   const ys = [...cands].sort((a, b) => a.y - b.y);
   const fs = [...new Set(forced)].sort((a, b) => a - b);
   const pages = [];
@@ -44,8 +61,18 @@ export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH
       const ok = ys.filter((c) => c.y > s + 2 && c.y <= limit);
       const full = ok.filter((c) => c.y >= s + room * 0.3);
       const pick = (full.length ? full : ok).at(-1);
-      end = pick ? pick.y : limit;
-      next = pick?.head || null;
+      if (pick) { end = pick.y; next = pick.head || null; }
+      else {
+        // لا كسر مسموح في النافذة: الحد نفسه إن وقع في فراغ واضح (4 بكسل فأكثر عن أي سطر)، وإلا أعلى آخر سطر أو صندوق يبدأ فيها
+        const boxes = [...lines, ...heads];
+        const clear = !boxes.some((b) => limit > b.top - 4 && limit < b.bottom + 4);
+        const tops = boxes.map((b) => b.top).filter((y) => y > s + 2 && y <= limit).sort((a, b) => a - b);
+        end = clear || !tops.length ? limit : tops.at(-1);
+      }
+      const safe = safeEnd(end, s, { lines, heads });
+      if (safe > s + 2) end = safe;
+      // رجع الحد فوق رأس الجدول: الرأس نفسه يبدأ الصفحة التالية، فلا يُكرر فوقه نسخة ثانية
+      if (next && end < next.bottom - 0.5) next = null;
     }
     pages.push({ start: s, end, head });
     s = end;
@@ -58,11 +85,13 @@ export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH
  * اسم الباب في ترويسة صفحة، كما تفعل string(chapter) في الطباعة: أول باب يبدأ في الصفحة، وإلا آخر باب بدأ قبلها. منطق خالص.
  * @param {{ y: number, text: string }[]} heads عناوين الأبواب بمواضعها
  */
+// الصفحة التي تبدأ بتتمة باب سابق تحمل اسمه هو (لا اسم باب يبدأ في أسفلها): الباب الجديد يُسمّي الصفحة إن بدأ في أعلاها
+export const HEAD_TOP = 80;
 export function chapterAt(heads, start, end) {
   let cur = '';
   for (const h of [...heads].sort((a, b) => a.y - b.y)) {
     if (h.y < start) cur = h.text;
-    else if (h.y < end) return h.text;
+    else if (h.y < end) return !cur || h.y - start <= HEAD_TOP ? h.text : cur;
     else break;
   }
   return cur;
@@ -80,15 +109,22 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
   const root = doc.querySelector('.sheet');
   const base = root.getBoundingClientRect().top;
   const total = Math.ceil(root.getBoundingClientRect().height);
-  const avoid = [], after = [], forced = [], raw = [];
+  const avoid = [], after = [], forced = [], raw = [], lines = [], heads = [];
   for (const el of root.querySelectorAll('*')) {
     const cs = win.getComputedStyle(el);
     if (!BLOCKISH.has(cs.display)) continue;
     const r = rectOf(el, base);
     if (r.bottom - r.top < 1 && cs.breakBefore !== 'page') continue;
     if (cs.breakBefore === 'page' && r.top > 4) forced.push(Math.floor(r.top));
-    if ((cs.breakInside === 'avoid' || cs.breakInside === 'avoid-page') && r.bottom - r.top < pageH * 0.9) avoid.push(r);
-    if (cs.breakAfter === 'avoid' || cs.breakAfter === 'avoid-page') after.push(r);
+    // الغلاف صفحة كاملة (html.pdf .mast.co) لا ينقسم أبدًا، فلا تنتقل بيانات أسفله إلى الصفحة الثانية
+    if ((cs.breakInside === 'avoid' || cs.breakInside === 'avoid-page') && (r.bottom - r.top < pageH * 0.5 || (el.classList.contains('mast') && r.bottom - r.top <= FIRST_H + 2))) avoid.push(r);
+    // العنوان: h1-h4 ورأس القسم، وتسمية الحقل ذات الشريط (.cp-f > b مثل «كيف يحدث التغيير») فلا تبقى وحدها أسفل الصفحة
+    const isHead = /^H[1-4]$/.test(el.tagName) || (el.tagName === 'HEADER' && el.parentElement?.classList.contains('sec'))
+      || (el.tagName === 'B' && el.parentElement?.classList.contains('cp-f') && el === el.parentElement.firstElementChild);
+    if (isHead && r.bottom - r.top < pageH * 0.4) heads.push(r);
+    if (/^(IMG|SVG|CANVAS|FIGURE|TR)$/i.test(el.tagName) && r.bottom - r.top < pageH * 0.9) lines.push({ top: r.top, bottom: r.bottom });
+    // العنوان يبقى معه نحو أربعة أسطر؛ والوسم الصغير (تسمية حقل) يبقى معه سطره الأول وحده، فلا يمحو بداية الفصل التالي
+    if (cs.breakAfter === 'avoid' || cs.breakAfter === 'avoid-page' || isHead) after.push({ ...r, keep: isHead ? KEEP_NEXT : KEEP_LABEL });
     // break-before: avoid (خاتمة الوثيقة): لا كسر قبله ولا بين أوله وما قبله، فلا تبقى الخاتمة وحدها في صفحة أخيرة
     if (cs.breakBefore === 'avoid' || cs.breakBefore === 'avoid-page') after.push({ top: r.top - 140, bottom: r.top - 140 + 0.5, before: r.top });
     // رأس الجدول يتكرر إن انكسر الجدول بين صفوفه
@@ -99,18 +135,21 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
     }
     raw.push({ y: Math.floor(r.top), head });
     // أسطر الفقرة الطويلة: كسر بين أسطرها، ويبقى سطران على الأقل في كل جانب (orphans وwidows)
-    if ((el.tagName === 'P' || el.tagName === 'LI' || el.tagName === 'TD') && r.bottom - r.top > 120) {
+    if (/^(P|LI|TD|TH|H[1-6]|DT|DD|B|SPAN|SMALL|A)$/.test(el.tagName) || (el.tagName === 'DIV' && !el.firstElementChild)) {
       const range = doc.createRange();
       range.selectNodeContents(el);
-      const lines = [...new Set([...range.getClientRects()].map((x) => Math.floor(x.top - base)))].sort((a, b) => a - b);
-      lines.slice(2, -2).forEach((y) => raw.push({ y, head, line: true }));
+      for (const x of range.getClientRects()) if (x.height > 2) lines.push({ top: x.top - base, bottom: x.bottom - base });
+      if ((el.tagName === 'P' || el.tagName === 'LI' || el.tagName === 'TD') && r.bottom - r.top > 120) {
+        const ls = [...new Set([...range.getClientRects()].map((x) => Math.floor(x.top - base)))].sort((a, b) => a - b);
+        ls.slice(2, -2).forEach((y) => raw.push({ y, head, line: true }));
+      }
     }
   }
   const cands = raw.filter((c) => c.y > 0
     && !avoid.some((a) => c.y > a.top + 1 && c.y < a.bottom - 1)
     // ما بعد عنوان لا ينفصل عنه (break-after: avoid): يبقى معه نحو أربعة أسطر من محتواه، لا رأس جدول وحده ولا سطر واحد
-    && !after.some((a) => (a.before != null ? c.y > a.top && c.y <= a.before + 1 : c.y >= a.bottom - 1 && c.y - a.bottom < KEEP_NEXT)));
-  return { total, cands, forced };
+    && !after.some((a) => (a.before != null ? c.y > a.top && c.y <= a.before + 1 : c.y >= a.bottom - 1 && c.y - a.bottom < (a.keep ?? KEEP_NEXT))));
+  return { total, cands, forced, lines, heads };
 }
 
 // ── الرسم ──
@@ -271,7 +310,8 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
         if (hc) { ctx.drawImage(hc, 0, y); y += hc.height; }
         const h = (p.end - p.start) * scale;
         ctx.drawImage(canvas, 0, (p.start - ch.start) * scale, page.width, h, 0, y, page.width, h);
-        footer(ctx, k + 1, plan.length, scale, line);
+        // الغلاف بلا رقم صفحة ولا مرجع تذييل
+        if (k > 0) footer(ctx, k + 1, plan.length, scale, line);
         if (k > 0) pdf.addPage('a4');
         // JPEG بجودة 0.8: نص حاد بدقة مضاعفة، والملف بحجم يُرسل بالبريد
         pdf.addImage(page.toDataURL('image/jpeg', 0.8), 'JPEG', 0, 0, 595.28, 841.89, undefined, 'FAST');
