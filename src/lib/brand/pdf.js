@@ -9,7 +9,7 @@
 //   3. planPages (منطق خالص مختبر) يختار حد كل صفحة: لا عنوان وحده أسفل الصفحة، ولا صف جدول مقطوع، ولا سطر يتيم.
 //   4. تُرسم المقاطع (html-to-image) وتُركَّب صفحات A4 بهوامشها وترقيمها العربي، ويتكرر رأس الجدول المنقسم.
 //   5. jsPDF يجمعها ملفًا، وروابط الفهرس تقفز إلى صفحاتها، وأرقام صفحاتها تُكتب في الفهرس.
-import { documentHtml, docId, PAGE_MM, TYPE_SCALE, mmPx, WATERMARK, isLiveDoc } from './doc.js';
+import { documentHtml, docId, PAGE_MM, TYPE_SCALE, mmPx, WATERMARK, isLiveDoc, C } from './doc.js';
 import { DOC_LIVE_HEAD_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 // A4 بدقة 96: 210×297 مم. الهوامش مشتقة من PAGE_MM في doc.js، وهو نفسه مصدر قاعدة @page، والغلاف يبدأ من حافة الورقة
@@ -70,8 +70,8 @@ function planWith({ total, cands, forced = [], pageH = CONTENT_H, firstH = FIRST
       // المرحلة 5: الكسر اللين (soft) داخل كتلة break-inside: avoid يُقبل حين لا كسر صلب يملأ الصفحة، فلا تبقى صفحة تحت 25%
       const ok = ys.filter((c) => c.y > s + 2 && c.y <= limit);
       const hard = ok.filter((c) => !c.soft);
-      const full = hard.filter((c) => c.y >= s + room * 0.3);
-      const softFull = ok.filter((c) => c.soft && c.y >= s + room * 0.3);
+      const full = hard.filter((c) => c.y >= s + room * 0.45);
+      const softFull = ok.filter((c) => c.soft && c.y >= s + room * 0.45);
       const sparse = preferFill && full.length && softFull.at(-1)?.y > full.at(-1).y;
       const pick = (sparse ? softFull : full.length ? full : softFull.length ? softFull : hard.length ? hard : ok).at(-1);
       if (pick) { end = pick.y; next = pick.head || null; }
@@ -149,9 +149,18 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
     if (isHead && r.bottom - r.top < pageH * 0.4) heads.push(r);
     if (/^(IMG|SVG|CANVAS|FIGURE|TR)$/i.test(el.tagName) && r.bottom - r.top < pageH * 0.9) lines.push({ top: r.top, bottom: r.bottom });
     // العنوان يبقى معه نحو أربعة أسطر؛ والوسم الصغير (تسمية حقل) يبقى معه سطره الأول وحده، فلا يمحو بداية الفصل التالي
-    if (cs.breakAfter === 'avoid' || cs.breakAfter === 'avoid-page' || isHead) after.push({ ...r, keep: isHead ? KEEP_NEXT : KEEP_LABEL });
+    // تسمية الحقل لا تمتد حمايتها خارج حقلها: حقل قصير في آخر الباب لا يمنع الكسر قبل الباب التالي فيُترك نصف الصفحة فارغًا
+    const isLabel = el.tagName === 'B' && el.parentElement?.classList.contains('cp-f');
+    const keep0 = isHead ? KEEP_NEXT : KEEP_LABEL;
+    const keep = isLabel ? Math.min(keep0, Math.max(0, rectOf(el.parentElement, base).bottom - r.bottom - 1)) : keep0;
+    if (cs.breakAfter === 'avoid' || cs.breakAfter === 'avoid-page' || isHead) after.push({ ...r, keep });
     // break-before: avoid (خاتمة الوثيقة): لا كسر قبله ولا بين أوله وما قبله، فلا تبقى الخاتمة وحدها في صفحة أخيرة
-    if (cs.breakBefore === 'avoid' || cs.breakBefore === 'avoid-page') after.push({ top: r.top - 140, bottom: r.top - 140 + 0.5, before: r.top });
+    // النافذة لا تتجاوز أعلى العنصر السابق: «.sec > header + *» لا يمنع الكسر قبل القسم نفسه (فوق رأسه)، وإلا بدأ القسم التالي صفحة جديدة بلا سبب
+    if (cs.breakBefore === 'avoid' || cs.breakBefore === 'avoid-page') {
+      const prev = el.previousElementSibling;
+      const top = prev ? Math.max(r.top - 140, rectOf(prev, base).top) : r.top - 140;
+      after.push({ top, bottom: top + 0.5, before: r.top });
+    }
     // رأس الجدول يتكرر إن انكسر الجدول بين صفوفه
     let head = null;
     if (el.tagName === 'TR' && el.parentElement?.tagName === 'TBODY') {
@@ -217,14 +226,66 @@ function footer(ctx, n, of, scale, line) {
   ctx.fillText(line, (PAGE.w - PAGE.side) * scale, y);
   ctx.restore();
 }
-function chapterHead(ctx, text, scale) {
+// x0: أول بكسل بعد صندوق علامة Milestone في الترويسة (يقاس من #pdf-head .ph-mi) وهامش ثابت، فلا يُكتب الباب فوق العلامة
+export const HEAD_GAP = 10;
+function chapterHead(ctx, text, scale, x0 = PAGE.side) {
   if (!text) return;
   ctx.save();
   ctx.fillStyle = TYPE_SCALE.footerColor;
   ctx.direction = 'rtl';
   ctx.textAlign = 'left';
   ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px ${CHROME_FONTS.ar}`;
-  ctx.fillText(text.length > 60 ? `${text.slice(0, 59)}…` : text, PAGE.side * scale, (PAGE.top / 2 + 9) * scale);
+  ctx.fillText(text.length > 60 ? `${text.slice(0, 59)}…` : text, x0 * scale, (PAGE.top / 2 + 9) * scale);
+  ctx.restore();
+}
+
+// ── ضبط الفراغات (قرار المالك 2026-11-27): ما يبقى أسفل صفحة آخر الباب تملؤه زخرفة رصينة من الهوية نفسها ──
+// شبكة المعين الخافتة التي على الغلاف (LATTICE في doc.js) تتلاشى من أعلى، وفي رأسها علامة Milestone (معين ذهبي) بين خطين رفيعين.
+// خلفية بشفافية منخفضة لا صورة خارجية، ولا تمس المتن: تبدأ بعد آخر سطر بفاصل ORNAMENT_PAD وتنتهي قبل التذييل.
+// cap: أقصى ارتفاع للزخرفة نسبةً إلى المتن، مثبتة فوق التذييل، فلا تبدو صفحة بسطور قليلة صفحةً منقوشة فارغة
+export const ORNAMENT = Object.freeze({ min: 0.22, pad: mmPx(8), cell: 40, lattice: 0.07, mark: 0.55, rule: 0.35, cap: 0.4, big: 0.6, capBig: 0.6 });
+/** الفراغ أسفل صفحة من الخطة نسبةً إلى مساحة المتن، ومنطقة الزخرفة (بكسل الصفحة)، أو null إن كان الفراغ دون الحد. منطق خالص */
+export function pageGap(p, k, { pageH = CONTENT_H, top = PAGE.top, headH = 0 } = {}) {
+  if (!p || k === 0) return { ratio: 0, zone: null };
+  const used = headH + (p.end - p.start);
+  const gap = Math.max(0, pageH - used);
+  const ratio = gap / pageH;
+  // فراغ كبير (فوق big): سقف أعلى للزخرفة (capBig) فتبدأ قرب منتصف الفراغ ولا يبقى شريط أبيض بين المتن والنقش
+  const cap = ratio > ORNAMENT.big ? Math.max(ORNAMENT.capBig, ratio - 0.12) : ORNAMENT.cap;
+  const y1 = top + pageH - mmPx(4), y0 = Math.max(top + used + ORNAMENT.pad, y1 - pageH * cap);
+  return { ratio, zone: ratio >= ORNAMENT.min && y1 - y0 > mmPx(20) ? { y0, y1 } : null };
+}
+function drawOrnament(ctx, zone, scale) {
+  const x0 = PAGE.side, x1 = PAGE.w - PAGE.side, w = x1 - x0, h = zone.y1 - zone.y0;
+  const off = ctx.canvas.ownerDocument.createElement('canvas');
+  off.width = Math.ceil(w * scale); off.height = Math.ceil(h * scale);
+  const o = off.getContext('2d');
+  o.scale(scale, scale);
+  // شبكة المعين: خط 0.6 بلون الجرافيت، كما على الغلاف
+  o.strokeStyle = C.graphite; o.lineWidth = 0.6; o.globalAlpha = ORNAMENT.lattice;
+  const n = ORNAMENT.cell, half = n / 2;
+  o.beginPath();
+  for (let gy = -n; gy < h + n; gy += n) for (let gx = -n; gx < w + n; gx += n) {
+    o.moveTo(gx, gy + half); o.lineTo(gx + half, gy); o.lineTo(gx + n, gy + half); o.lineTo(gx + half, gy + n); o.closePath();
+  }
+  o.stroke();
+  // تلاشٍ من أعلى (لا حد صلب تحت المتن) ومن الجانبين
+  o.globalAlpha = 1; o.globalCompositeOperation = 'destination-in';
+  const gv = o.createLinearGradient(0, 0, 0, h);
+  gv.addColorStop(0, 'rgba(0,0,0,0)'); gv.addColorStop(Math.min(0.5, mmPx(30) / h), 'rgba(0,0,0,1)'); gv.addColorStop(1, 'rgba(0,0,0,1)');
+  o.fillStyle = gv; o.fillRect(0, 0, w, h);
+  const gh = o.createLinearGradient(0, 0, w, 0);
+  gh.addColorStop(0, 'rgba(0,0,0,0)'); gh.addColorStop(0.18, 'rgba(0,0,0,1)'); gh.addColorStop(0.82, 'rgba(0,0,0,1)'); gh.addColorStop(1, 'rgba(0,0,0,0)');
+  o.fillStyle = gh; o.fillRect(0, 0, w, h);
+  ctx.drawImage(off, x0 * scale, zone.y0 * scale);
+  // علامة الختام: معين ذهبي بين خطين رفيعين
+  const cx = PAGE.w / 2, cy = zone.y0 + mmPx(6), r = 5;
+  ctx.save();
+  ctx.globalAlpha = ORNAMENT.rule; ctx.strokeStyle = C.gold; ctx.lineWidth = 0.6 * scale;
+  ctx.beginPath(); ctx.moveTo((cx - 60) * scale, cy * scale); ctx.lineTo((cx - r - 6) * scale, cy * scale);
+  ctx.moveTo((cx + r + 6) * scale, cy * scale); ctx.lineTo((cx + 60) * scale, cy * scale); ctx.stroke();
+  ctx.globalAlpha = ORNAMENT.mark; ctx.fillStyle = C.gold;
+  ctx.beginPath(); ctx.moveTo(cx * scale, (cy - r) * scale); ctx.lineTo((cx + r) * scale, cy * scale); ctx.lineTo(cx * scale, (cy + r) * scale); ctx.lineTo((cx - r) * scale, cy * scale); ctx.closePath(); ctx.fill();
   ctx.restore();
 }
 
@@ -301,6 +362,8 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RAS
     const fontEmbedCSS = await getFontEmbedCSS(root);
     // ترويسة الصفحات بعد الغلاف (doc.js runningHead): تُرسم مرة وتتكرر
     const headEl = doc.getElementById('pdf-head');
+    const miBox = headEl?.querySelector('.ph-mi')?.getBoundingClientRect();
+    const headX = miBox && miBox.width ? Math.max(PAGE.side, miBox.right - headEl.getBoundingClientRect().left + HEAD_GAP) : PAGE.side;
     const runHead = headEl ? await toCanvas(headEl, { width: PAGE.w, height: PAGE.top, pixelRatio: scale, fontEmbedCSS, backgroundColor: '#ffffff', cacheBust: false }) : null;
     // المقاطع: صفحات متتالية حتى CHUNK_PX في كل رسم (نحو 2340 بكسل بمقياس 3)، لحد مساحة اللوحة في المتصفحات
     const chunks = [];
@@ -311,6 +374,7 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RAS
       i = j + 1;
     }
     const theads = new Map();
+    const fills = [];
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
     pdf.setProperties({ title: meta.title || 'وثيقة', subject: [meta.subtitle, SCANNED_NOTE_AR].filter(Boolean).join(' · '), keywords: 'scanned-copy', creator: 'Milestone Impact', author: 'Milestone Impact' });
     // التذييل بالرقم المرجعي للوثيقة، ومعه عنوان الباب لكل صفحة
@@ -342,12 +406,15 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RAS
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, page.width, page.height);
         if (k > 0 && runHead) ctx.drawImage(runHead, 0, 0, page.width, PAGE.top * scale);
-        if (k > 0 && runHead) chapterHead(ctx, isLiveDoc(meta) ? DOC_LIVE_HEAD_AR : (chapterAt(heads, p.start, p.end) || meta.title || ''), scale);
+        if (k > 0 && runHead) chapterHead(ctx, isLiveDoc(meta) ? DOC_LIVE_HEAD_AR : (chapterAt(heads, p.start, p.end) || meta.title || ''), scale, headX);
         let y = (k === 0 ? 0 : PAGE.top) * scale;
         const hc = p.head && theads.get(p.head.top);
         if (hc) { ctx.drawImage(hc, 0, y); y += hc.height; }
         const h = (p.end - p.start) * scale;
         ctx.drawImage(canvas, 0, (p.start - ch.start) * scale, page.width, h, 0, y, page.width, h);
+        const gap = pageGap(p, k, { headH: hc ? hc.height / scale : 0 });
+        if (gap.zone) drawOrnament(ctx, gap.zone, scale);
+        fills.push({ page: k + 1, gap: Number(gap.ratio.toFixed(3)), ornament: Boolean(gap.zone) });
         // الغلاف بلا رقم صفحة ولا مرجع تذييل
         if (k > 0) footer(ctx, k + 1, plan.length, scale, line);
         if (k > 0) pdf.addPage('a4');
@@ -367,7 +434,7 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RAS
     // الفهرس الجانبي (المرحلة 5): باب لكل عنوان، كما يولّده المسار المتجهي (outline: true في workers/pdf-render)
     for (const it of outlineItems(heads, pageOf)) pdf.outline.add(null, it.title, { pageNumber: it.page });
     onProgress('اكتمل الملف');
-    return { blob: pdf.output('blob'), pages: plan.length, plan };
+    return { blob: pdf.output('blob'), pages: plan.length, plan, fills };
   } finally {
     frame.remove();
   }

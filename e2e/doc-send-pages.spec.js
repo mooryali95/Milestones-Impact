@@ -113,6 +113,15 @@ for (const [name, make] of CASES) {
       for (const p of plan) if (p.head && p.start < p.head.bottom - 0.5) bad.push({ kind: 'thead-twice', e: p.start });
       // الرقم في الخلية لا ينكسر بين سطرين
       for (const n of d.querySelectorAll('.sheet td .num')) if (n.getClientRects().length > 1) bad.push({ kind: 'num-split', text: n.textContent });
+      // الكلمة المفردة في خلية (شهري، ربعي...) لا تنكسر بين سطرين، ولا تفيض عن خليتها
+      for (const td of d.querySelectorAll('.sheet td')) {
+        const t = td.textContent.trim();
+        if (!t || /\s/.test(t)) continue;
+        const range = d.createRange(); range.selectNodeContents(td);
+        const tops = new Set([...range.getClientRects()].filter((x) => x.height > 2).map((x) => Math.round(x.top)));
+        if (tops.size > 1) bad.push({ kind: 'word-split', text: t });
+        if (td.scrollWidth > td.clientWidth + 1) bad.push({ kind: 'word-overflow', text: t });
+      }
       // لا سؤال توجيهي تحت عنوان باب، ولا وسم لاتيني فوقه
       for (const n of d.querySelectorAll('.in-open p')) if (/[؟?]/.test(n.textContent)) bad.push({ kind: 'ask', text: n.textContent.slice(0, 40) });
       if (d.querySelector('.in-sec .in-open .eyebrow')) bad.push({ kind: 'latin-eyebrow' });
@@ -127,15 +136,18 @@ for (const [name, make] of CASES) {
           if (vb.left < svg.left - 1 || bars.some((b) => vb.right > b.left + 0.5 && vb.left < b.right - 0.5 && vb.bottom > b.top + 0.5 && vb.top < b.bottom - 0.5)) bad.push({ kind: 'bar-overlap', text: v.textContent });
         }
       }
+      // الصفحة الأخيرة ليست إشعار الحقوق وحده: الخاتمة (.close) تبدأ قبل آخر حد صفحة أو في الصفحة الأخيرة نفسها
+      const closeTop = d.querySelector('.close')?.getBoundingClientRect().top - top0;
+      const lastStart = plan.at(-1).start;
+      if (!(closeTop >= lastStart - 0.5)) bad.push({ kind: 'orphan-rights', e: lastStart });
       const verify = { qr: Boolean(d.querySelector('[data-verify="qr"] svg.qr')), cover: Boolean(d.querySelector('.mast [data-verify="cover"] svg.qr')) };
-      const blend = Boolean(d.querySelector('.mast.co .org.blend img'));
       const contents = d.querySelector('#in-contents')?.innerText || '';
       const text = d.body.innerText;
       frame.remove();
-      const { blob, pages: built } = await buildPdf(out.meta, out.body);
+      const { blob, pages: built, fills } = await buildPdf(out.meta, out.body);
       const bytes = new Uint8Array(await blob.arrayBuffer());
       let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      return { verify, blend, contents, kind: out.kind, stamp: out.meta.stamp, pages: built, bad, text, pdf: btoa(bin) };
+      return { verify, contents, kind: out.kind, stamp: out.meta.stamp, pages: built, fills, bad, text, pdf: btoa(bin) };
     }, make());
     const buf = Buffer.from(r.pdf, 'base64');
     expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
@@ -152,11 +164,15 @@ for (const [name, make] of CASES) {
       await p.close();
     }
     expect(r.bad, JSON.stringify(r.bad.slice(0, 5))).toEqual([]);
+    // ضبط الفراغات: لا صفحة داخلية يبقى فيها أكثر من 30% من المتن فارغًا بلا زخرفة الهوية
+    expect(r.fills.length).toBe(r.pages);
+    const bare = r.fills.filter((f) => f.gap > 0.3 && !f.ornament);
+    expect(bare, JSON.stringify(bare)).toEqual([]);
+    console.log(`${name}: ${r.pages} صفحة، بزخرفة ${r.fills.filter((f) => f.ornament).map((f) => `${f.page}(${Math.round(f.gap * 100)}%)`).join(' ')}`);
     for (const b of BANNED) expect(r.text.includes(b), b).toBe(false);
     if (name === 'approved') { expect(r.verify.qr, 'رمز التحقق في صفحة الاعتماد').toBe(true); expect(r.verify.cover, 'رمز التحقق على الغلاف').toBe(true); }
     else expect(r.stamp).toMatch(/غير معتمدة/);
     if (r.kind === 'institutional') {
-      expect(r.blend, 'شعار PNG بدمج multiply').toBe(true);
       expect(r.contents).toContain('المحتويات');
       expect(r.contents).toContain('يُوصى باعتماد');
     }

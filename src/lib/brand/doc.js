@@ -7,6 +7,7 @@
 // المرجع: Milestone-Impact-Brand-Brief (الألوان، الخطوط الخفيفة، الماسة، الختم مرة واحدة).
 // كل نص يدخل الوثيقة يمر عبر esc(): النافذة ترث نطاق التطبيق.
 import { pdfServer } from './pdf-source.js';
+import { orgLogoHtml, refreshLogos, primeLogos, logosPending, logoInfo, logoIsLight } from './logo.js';
 import { DOC_LIVE_HEAD_AR, DOC_WATERMARK_AR, REPORT_RIGHTS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 
@@ -87,9 +88,13 @@ export const bars = (rows, total, { ltr = false } = {}) => (rows.length ? `<div 
   return `<div class="bar"><span class="bl"${ltr ? ' dir="ltr"' : ''}>${esc(r.label)}</span><span class="bt"><i style="width:${pct.toFixed(1)}%"></i>${diamond(7)}</span><b>${num(r.value)}</b></div>`;
 }).join('')}</div>` : '<p class="muted">لا بيانات بعد.</p>');
 
+// ضبط الفراغات (2026-11-27): يكمل الباب في الصفحة نفسها إن بقي منها هذا القدر على الأقل (نحو ثلث مساحة المتن). مصدر واحد للحالة والنسخة المؤسسية
+export const SOFT_KEEP_MM = 85;
+// كلمة مفردة في خلية (شهري، ربعي، عالٍ...) لا تنكسر بين سطرين (قرار المالك 2026-11-27)
+export const oneWord = (v) => !isRaw(v) && /^\S{1,16}$/.test(String(v ?? '').trim());
 // جدول: cols [{ label, align?, ltr?, width? }]، rows مصفوفة قيم (نص أو { html })
 export const table = (cols, rows, empty = 'لا بيانات') => `<table class="tbl"><thead><tr>${cols.map((c) => `<th${c.width ? ` style="width:${c.width}"` : ''}>${esc(c.label)}</th>`).join('')}</tr></thead>
-<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${isNumeric(v) ? ' class="num"' : ''}${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : num(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
+<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${isNumeric(v) ? ' class="num"' : oneWord(v) ? ' class="w1"' : ''}${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : num(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
 
 export const progress = (pct) => `<span class="pg"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span><span class="pgn">${num(Math.round(pct))}%</span>`;
 // علامة HTML الخام رمز لا يُزوَّر (المرحلة 21): كائن قادم من القاعدة أو JSON يحمل html لا يمر خامًا، بل يُهرَّب نصًا
@@ -109,7 +114,6 @@ const cssStr = (v) => String(v ?? '').replace(/[\\"\n\r<>]/g, ' ');
 export const brandColor = (c) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : null);
 // الشعار مضمّن (data:) أو من أصل المنصة نفسها وحده (المرحلة 21): رابط https خارجي يُرفض، فلا يجلب قارئ الوثيقة أو مولّد PDF
 // شيئًا من خارجها ولا يُتتبع من يفتحها. بلا شعار صالح يُكتب اسم الجهة نصًا
-export const LOGO_MM = Object.freeze({ max: 26, w: 85, box: 24, by: 8, pad: 3 });
 export const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|\/(?!\/))/i.test(String(u || '')) ? u : null);
 // ── التباين: لون الجهة أو الدفعة يقود العناصر البنيوية (أرقام الأبواب وخطوطها) بعد فحص آلي، وإلا لون الهوية ──
 // WCAG 2.x: النسبة بين الإضاءتين النسبيتين. الأرقام الكبيرة والخطوط نص كبير أو عناصر غير نصية، فالحد 3:1 على الأبيض
@@ -128,20 +132,24 @@ export function structuralAccent(...candidates) {
 }
 
 // ── قواعد التشارك (قرار المالك 2026-11-25): الجهة في الصدارة، والبرنامج (هوية الدفعة) سطر توقيع صغير، وMilestone علامة خافتة.
-// شعار الجهة (إصلاح 2026-11-27، بطلب المالك): بلا لوحة بيضاء، في شريط علوي مسطح بلون الغلاف بلا نقش تحته، والصورة النقطية
-// تُدمج بـ multiply فيذوب بياضها في لون الغلاف (SVG والشفاف بلا دمج). ارتفاع أقصى LOGO_MM.max مم وعرض أقصى LOGO_MM.w مم.
-// شعار الدفعة: ارتفاع أقصى 9 مم. علامة Milestone: LOGO_MM.by مم. safeLogo كما هو
+// شعار الجهة بفئة أبعاده (logo.js): عريض 14 مم بعرض أقصى 64 مم، مربع 20 مم، طويل 24 مم بعرض أقصى 20 مم، داخل لوحة 4×5 مم. شعار الدفعة 9 مم. علامة Milestone 9 مم
 function coBrand(b, id, kindLabel, ctl, refLabel) {
-  const logo = safeLogo(b.logo);
-  const org = logo ? `<img src="${esc(logo)}" alt="${esc(b.name || '')}">`
-    : `<span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span>`;
   const plogo = safeLogo(b.programLogo);
   const program = b.program || plogo ? `<div class="prog">${plogo ? `<img src="${esc(plogo)}" alt="${esc(b.program || '')}">` : ''}${b.program ? `<span>${esc(b.program)}</span>` : ''}</div>` : '';
+  // نسخة الإرسال: الرقم المرجعي بتسمية عربية (refLabel) بلا لاحقة
   const ref = ctl ? '' : refLabel
     ? `<div class="ref ar" style="margin-top:4mm;text-align:start;letter-spacing:0;text-transform:none;font-family:'Noto Kufi Arabic',sans-serif">${esc(refLabel)}<b><bdi dir="ltr">${esc(id)}</bdi></b>${esc(kindLabel || '')}</div>`
     : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
-  const blend = logo && !/^data:image\/svg|\.svg(\?|$)/i.test(logo) ? ' blend' : '';
-  return `<div class="top"><div class="org${logo ? ` logo-zone${blend}` : ''}">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>${program}${ref}`;
+  return `${lockup(b)}${program}${ref}`;
+}
+
+// العلامة المشتركة (الغلاف وصفحة الاعتماد): شعار الجهة بفئة أبعاده، فاصل ذهبي بارتفاعه، ثم «بإعداد» فوق علامة المنصة.
+// الفئة والفاتح وسقف الحدة من logo.js (orgLogoHtml): من قياس الصورة المحمّلة إن سبق (primeLogos في writeDocument)، وإلا من الترويسة وSVG
+export function lockup(b) {
+  const logo = safeLogo(b.logo);
+  const org = logo ? orgLogoHtml(logo, { escape: esc, alt: b.name || '', base: 'org plate', light: b.logoLight ?? null })
+    : `<div class="org"><span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span></div>`;
+  return `<div class="top">${org}<i class="dv"></i><div class="by"><span>بإعداد</span>${LOGO}</div></div>`;
 }
 
 // ── المرحلة 25: خط لون الجهة أسفل الغلاف (1.6 مم موحدًا). يمر بـ structuralAccent، وإن لم يجتزه يُرسم بلون الجهة الخام
@@ -170,7 +178,7 @@ export function documentHtml(meta, body, opts = {}) {
   const rows = (meta.rows || []).slice(0, meta.brand ? (meta.control ? 3 : 6) : 4);
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
   // opts.print: الوثيقة نفسها لمولّد PDF على الخادم (workers/pdf-render): بلا شريط، وbase لخطوط المنصة وصورها
-  return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
+  return refreshLogos(`<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
 <meta name="color-scheme" content="light"><meta name="darkreader-lock">
 ${opts.base ? `<base href="${esc(opts.base)}">` : ''}
 <title>${esc(meta.title)} · Milestone Impact</title>
@@ -267,6 +275,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .tbl td { padding: 2.2mm 1.5mm; border-bottom: 1px solid ${C.line}; vertical-align: top; }
 .tbl tr { break-inside: avoid; }
 .tbl td.c { text-align: center; padding: 6mm; }
+.tbl td.w1 { white-space: nowrap; }
 .tbl td.num { white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 22mm; }
 .tbl td:has(.pg) { white-space: nowrap; }
 .pg { display: inline-block; width: 16mm; height: 2px; background: ${C.line}; vertical-align: middle; margin-inline-end: 2mm; }
@@ -276,7 +285,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .callout b { display: block; font-weight: 400; font-size: ${TS.h3}pt; color: ${C.graphite}; margin-bottom: 1.5mm; }
 .callout p { margin: 0; font-size: ${TS.body}pt; line-height: 1.9; color: ${C.slate}; }
 .points { list-style: none; margin: 0; padding: 0; display: grid; gap: 2.2mm; }
-.points li { position: relative; padding-right: 5mm; font-size: ${TS.body}pt; line-height: 1.8; color: ${C.slate}; }
+.points li { position: relative; padding-right: 5mm; text-align: justify; text-justify: inter-word; box-sizing: border-box; width: 100%; font-size: ${TS.body}pt; line-height: 1.8; color: ${C.slate}; }
 .points li::before { content: ''; position: absolute; right: 0; top: 2.2mm; width: 1.8mm; height: 1.8mm; background: ${C.gold}; transform: rotate(45deg); }
 .tag { display: inline-block; border: 1px solid ${C.line}; padding: 0 2mm; border-radius: 2px; font-size: ${TS.footer}pt; color: ${C.slate}; white-space: nowrap; }
 .tag.gold { border-color: ${C.gold}; color: ${C.gold}; }
@@ -288,6 +297,11 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .rights { margin-top: 8mm; font-size: ${TS.footer}pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; word-break: keep-all; overflow-wrap: normal; }
 .rights .rt-meta { display: block; white-space: nowrap; margin-top: 1mm; font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .rights b { font-weight: 400; color: ${C.slate}; }
+/* إشعار الحقوق لا ينفصل عن الخاتمة والختم (لا صفحة أخيرة يتيمة بسطرين)، وفي الملف خاتمة أقصر وختم أصغر يتسعان معه */
+.close + .rights { break-before: avoid; }
+html.pdf .close { margin-top: 6mm; padding-top: 4mm; }
+html.pdf .close .seal { width: 26mm !important; height: 26mm !important; }
+html.pdf .rights { margin-top: 4mm; }
 .dm { display: inline-block; vertical-align: middle; }
 .mast .stamp { display: inline-block; border: 1px solid ${C.gold}; color: ${C.goldText}; padding: .5mm 3mm; border-radius: 2px; font-size: ${TS.small}pt; font-weight: 500; letter-spacing: 0; background: ${C.paper}; line-height: 1.6; }
 .mast > .stamp { position: absolute; top: 6mm; inset-inline-end: 18mm; }
@@ -297,23 +311,24 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .mast .ctl-dt::before { content: '·'; margin-inline-end: 2mm; }
 .mast .vm.cover { margin-top: 4mm; border-top: 0; padding-top: 0; }
 .mast .vm.cover .qr { width: 18mm; height: 18mm; }
-.mast.co .top { direction: rtl; align-items: center; }
-.mast.co { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.mast.co .top { background: ${C.mist}; margin: -14mm -18mm 0; padding: 14mm 18mm ${LOGO_MM.pad}mm; }
-.mast.co .org { padding: ${LOGO_MM.pad}mm; margin: -${LOGO_MM.pad}mm; }
-.mast.co .org.logo-zone { background: transparent; isolation: isolate; }
-.mast.co .org img { height: ${LOGO_MM.box}mm; max-height: ${LOGO_MM.max}mm; max-width: ${LOGO_MM.w}mm; width: auto; display: block; object-fit: contain; object-position: right center; }
-.mast.co .org.blend img { mix-blend-mode: multiply; }
-/* الدمج يحتاج خلفية الشريط تحته: لا مجموعة معزولة حول الشعار، وإلا بقيت لوحته البيضاء مربعًا ظاهرًا */
-.mast.co .org.logo-zone.blend { isolation: auto; }
+.mast.co .top { direction: rtl; align-items: center; justify-content: flex-start; }
+.mast.co .org { display: flex; align-items: center; }
+.mast.co .org.plate { background: ${C.paper}; background-color: ${C.paper}; margin: 0; padding: 4mm 5mm; border: 0.25mm solid ${C.line}; border-radius: 0; box-shadow: none; }
+.mast.co .org.plate.light { background: ${C.graphite}; background-color: ${C.graphite}; }
+.mast.co .org img { display: block; width: auto; object-fit: contain; }
+.mast.co .org.w img { height: 14mm; max-width: 64mm; }
+.mast.co .org.s img { height: 20mm; max-width: 60mm; }
+.mast.co .org.t img { height: 24mm; max-width: 20mm; }
+.mast.co .dv { display: block; width: 0.3mm; align-self: stretch; margin: 0 6mm; background: ${C.gold}; }
+.mast.co .org.w + .dv { align-self: center; height: 14mm; } .mast.co .org.s + .dv { align-self: center; height: 20mm; } .mast.co .org.t + .dv { align-self: center; height: 24mm; }
 .mast.co .prog { display: flex; align-items: center; gap: 2.5mm; margin-top: 6mm; direction: rtl; font-size: ${TS.small}pt; font-weight: 400; color: ${C.slate}; }
 .mast.co .prog img { max-height: 9mm; max-width: 40mm; object-fit: contain; display: block; }
 .mast.co .meta { grid-template-columns: repeat(var(--n, 3), 1fr); row-gap: 4mm; }
 .mast.co .meta div:first-child { border-inline-start: 0; padding-inline-start: 0; }
-.mast.co .org .nm { font-weight: 400; font-size: ${TS.chapter}pt; line-height: 1.3; color: ${C.graphite}; display: block; }
-.mast.co .org .nm small { display: block; font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.muted}; text-transform: uppercase; }
-.mast.co .by { display: flex; align-items: center; gap: 2mm; direction: rtl; font-size: ${TS.footer}pt; color: ${C.muted}; }
-.mast.co .by svg { height: ${LOGO_MM.by}mm; width: auto; display: block; }
+.mast.co .org .nm { font-weight: 500; font-size: ${TS.h3}pt; line-height: 1.4; color: ${C.graphite}; display: block; }
+.mast.co .by { display: flex; flex-direction: column; align-items: flex-start; gap: 1mm; direction: rtl; color: ${C.muted}; }
+.mast.co .by span { font-size: ${TS.footer}pt; line-height: 1; }
+.mast.co .by svg { height: 9mm; width: auto; display: block; }
 .mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.6mm; }
 .mast .accent.guard { box-shadow: 0 .3mm 0 ${C.graphite}; }
 .mast.co { padding: 14mm 18mm 12mm; }
@@ -330,7 +345,6 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 /* ملف PDF: الغلاف صفحة كاملة وحده (إلى حافة الورقة بلا تذييل، المرحلة 5: FIRST_H = PAGE.h في pdf.js)، والعنوان في ثلثه الأوسط،
    وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
 html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; break-after: page; }
-html.pdf .mast.co .top { margin: -16mm -18mm 0; padding-top: 16mm; }
 html.pdf .mast.co .eyebrow { margin-top: auto; }
 html.pdf .mast.co .meta { margin-top: auto; }
 html.pdf .mast.co .accent { bottom: 0; }
@@ -351,7 +365,7 @@ html.pdf .mast.co .accent { bottom: 0; }
   ${body}
   <div class="close">
     <p class="thesis">من النية… إلى الأثر</p>
-    <p>${esc(meta.closing || 'أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.')}</p>
+    <p>${esc(meta.closing || 'أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.').replace(/[A-Z0-9]{4}(?:-[A-Z0-9]{4})+/g, (f) => `<bdi dir="ltr" style="white-space:nowrap;unicode-bidi:isolate">${f}</bdi>`)}</p>
     ${isLiveDoc(meta) ? `<span class="mi-mark" aria-hidden="true">${LOGO}</span>` : SEAL()}
   </div>
   <footer class="rights">
@@ -362,7 +376,7 @@ html.pdf .mast.co .accent { bottom: 0; }
 </article>
 ${isLiveDoc(meta) && !opts.pdf ? `<div class="wm" aria-hidden="true"><span>${esc(WATERMARK.text)}</span></div>` : ''}
 ${opts.pdf ? runningHead(meta) : ''}
-</body></html>`;
+</body></html>`);
 }
 
 // ترويسة صفحات ملف PDF بعد الغلاف (pdf.js يرسمها مرة ويكررها): شعار الجهة أو اسمها ولونها في جهة، واسم الباب الحالي في الأخرى
@@ -372,11 +386,13 @@ function runningHead(meta) {
   const b = meta.brand;
   const logo = b && safeLogo(b.logo);
   const color = (b && brandColor(b.color)) || C.gold;
-  const org = b ? (logo ? `<img src="${esc(logo)}" alt="">` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
+  // الشعار الفاتح على رقعة جرافيتية كما في الغلاف، فلا يضيع على أبيض الترويسة
+  const light = logo && (logoInfo(logo)?.light ?? logoIsLight(logo));
+  const org = b ? (logo ? `<span class="ph-logo${light ? ' light' : ''}"><img src="${esc(logo)}" alt=""></span>` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
   return `<div id="pdf-head" style="position:absolute;top:0;left:0;width:794px;height:${mmPx(PAGE_MM.top)}px;background:#fff;direction:rtl;display:flex;align-items:center;gap:10px;padding:14px ${mmPx(PAGE_MM.side)}px 0;font:400 ${TYPE_SCALE.footer}pt 'Noto Kufi Arabic',sans-serif;color:${C.muted}">
-<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:22px">${org}</span>` : ''}</span>${b ? '' : `<span style="display:flex;align-items:center;direction:ltr" class="ph-mi">${LOGO}</span>`}
+<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:6mm">${org}</span>` : ''}</span><span style="display:flex;align-items:center;direction:ltr;margin-right:auto" class="ph-mi">${LOGO}</span>
 <i style="position:absolute;bottom:12px;left:${mmPx(PAGE_MM.side)}px;right:${mmPx(PAGE_MM.side)}px;height:1px;background:${color};opacity:.7"></i>
-</div><style>#pdf-head img{max-height:22px;max-width:150px;object-fit:contain;display:block}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:17px;width:auto;display:block}</style>`;
+</div><style>#pdf-head .ph-org img{height:6mm;max-width:40mm;object-fit:contain;display:block}#pdf-head .ph-logo{display:flex;align-items:center}#pdf-head .ph-logo.light{background:${C.graphite};padding:1mm 1.5mm}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:4mm;width:auto;display:block}</style>`;
 }
 
 // يفتح الوثيقة في نافذة مستقلة بشريط «طباعة أو حفظ PDF». يعيد false إن حُجبت النافذة.
@@ -388,8 +404,16 @@ export const openDocument = (meta, body) => writeDocument(window.open('', '_blan
 // opts.pdf: مصدر تذكرة لهذه الوثيقة وحدها بدل مصدر التطبيق
 export function writeDocument(win, meta, body, opts = {}) {
   if (!win) return false;
+  // الشعار يُقاس من الصورة نفسها مرة ثم تُكتب الوثيقة بفئته ولوحته (ينتظر أول مرة فقط)
+  const first = documentHtml(meta, body);
+  if (logosPending(first)) primeLogos(first).then(() => fill(win, meta, body, opts, documentHtml(meta, body)));
+  else fill(win, meta, body, opts, first);
+  return true;
+}
+
+function fill(win, meta, body, opts, html) {
   win.document.open();
-  win.document.write(documentHtml(meta, body));
+  win.document.write(html);
   win.document.close();
   win.document.querySelector('[data-act="print"]')?.addEventListener('click', () => win.print());
   // «تحميل PDF»: من الخادم حين تتاح تذكرة، وإلا يُبنى في نافذة المنصة (pdf.js downloadBest)، ويُحفظ من النافذة نفسها، والزر يعرض تقدمه
@@ -411,5 +435,4 @@ export function writeDocument(win, meta, body, opts = {}) {
     }
   });
   win.document.querySelector('[data-act="close"]')?.addEventListener('click', () => win.close());
-  return true;
 }

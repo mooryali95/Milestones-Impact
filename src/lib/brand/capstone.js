@@ -5,7 +5,7 @@
 // (capstone.doc / admin.capstone / sponsor.get / coord.capstone). يبني على
 // محرك الوثائق doc.js فتخرج بالهوية نفسها، ويضيف رسوم الوثيقة: شجرة هيكل
 // التجزئة، والمخطط الزمني، وخريطة المخاطر، وملخص التكلفة.
-import { bars, callout, esc, kpis, points, raw, section, table, TYPE_SCALE as TS } from './doc.js';
+import { bars, callout, esc, kpis, points, raw, section, table, SOFT_KEEP_MM, TYPE_SCALE as TS } from './doc.js';
 import { costLabel, dateAr, displayPages, pageNumberOf, parseDate, parseNumber, CHAPTER_STANDING_AR, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
@@ -28,6 +28,9 @@ export const paras = (t) => String(t || '').split(/\n+/).map((x) => x.trim()).fi
 export const STYLE = `<style>
 .cp-p { margin: 0 0 2mm; font-size: ${TS.body}pt; line-height: ${TS.workLeading}; color: #2C4148; }
 .cp-f { margin: 0 0 4mm; break-inside: avoid; }
+.cp-f ul:not([class]) { list-style: none; margin: 0; padding: 0; }
+.cp-f ul:not([class]) li { position: relative; text-align: justify; box-sizing: border-box; padding-inline-start: 5mm; margin: 0 0 1.2mm; width: auto; max-width: none; text-indent: 0; }
+.cp-f ul:not([class]) li::before { content: ''; position: absolute; inset-inline-start: 0.6mm; top: 2.2mm; width: 1.6mm; height: 1.6mm; background: #A97A2E; transform: rotate(45deg); }
 .cp-f > b { display: block; font-weight: 400; font-size: ${TS.caption}pt; color: #5F7176; margin-bottom: 1mm; }
 .cp-toc { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 10mm; }
 .cp-toc li { display: flex; gap: 3mm; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; font-size: ${TS.small}pt; break-inside: avoid; }
@@ -81,6 +84,9 @@ export const STYLE = `<style>
 .tbl td { overflow-wrap: break-word; }
 /* صفحات تبدأ من أعلى الورقة: الفهرس، والميثاق، ومسوّغات المبادرة، وخطة الانطلاق، وأول الفصول، والملاحق. قاعدة واحدة تحكم الطباعة وملف PDF (pdf.js) */
 .cp-np + .sec { break-before: page; }
+/* نسخة الإرسال (ضبط الفراغات 2026-11-27): الميثاق والمسوّغات وخطة الانطلاق تكمل في الصفحة نفسها إن بقي منها نحو ثلثها
+   (حاجز SOFT_KEEP_MM غير مرئي يمنع بدء الباب في أسفل صفحة)، ولا تُفرض لها صفحة جديدة */
+.cp-keep { display: block; height: ${SOFT_KEEP_MM}mm; margin-bottom: -${SOFT_KEEP_MM}mm; break-inside: avoid; visibility: hidden; }
 .cp-why { break-after: avoid; }
 .tbl thead { break-after: avoid; }
 .kpis, .cp-case, .cp-launch > div, .cp-toc2 li, .cp-charter tr, .cp-gloss tr, .points li, .cp-check li, .cp-tree li { break-inside: avoid; }
@@ -225,7 +231,8 @@ export function columnWidths(columns, rows) {
     const avg = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
     // أطول كلمة لا تنكسر (تاريخ أو رقم أو رمز) تحدد أدنى عرض للعمود
     const word = Math.max(0, ...list.flatMap((r) => String(r[i] ?? '').split(/\s+/).map((t) => t.length)));
-    return Math.max(Math.pow(Math.max(avg, String(c).length * 0.45, 4), 0.85), Math.min(16, word) * 0.95);
+    // والكلمة المفردة لا تنكسر (td.w1)، فيحسب لها هامش الخلية (نحو حرفين ونصف) فلا تضيق عنها في الجدول العريض
+    return Math.max(Math.pow(Math.max(avg, String(c).length * 0.45, 4), 0.85), (Math.min(16, word) + 2.5) * 0.95);
   });
   const sum = w.reduce((a, b) => a + b, 0) || 1;
   return w.map((x) => `${((x / sum) * 100).toFixed(1)}%`);
@@ -628,7 +635,10 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
   const gapsHtml = example || !appendix ? '' : gapsBlock(gaps);
   const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'مسوّغات المبادرة'], launch && ['launch', 'خطة الانطلاق'], visuals && ['visuals', 'اللوحات المرئية'], ['glossary', 'مسرد المصطلحات'], gapsHtml && ['gaps', 'ما ينقص لإكمال الوثيقة']].filter(Boolean);
   body += tocBlock(pages, front);
-  body += charter + bcase + launch;
+  // نسخة الإرسال: لا صفحة مفروضة لهذه الأبواب، بل حاجز لين (cp-keep) قبل كل منها
+  // الحاجز أول ما في القسم (كما in-keep في النسخة المؤسسية)، لا قبله: فلا يتداخل هامشه السالب مع هامش القسم ومرساته
+  const softly = (h) => (send && h ? h.replace(/^<span class="cp-anchor cp-np"/, '<span class="cp-anchor"').replace(/<section class="sec[^"]*">/, '$&<i class="cp-keep" aria-hidden="true"></i>') : h);
+  body += softly(charter) + softly(bcase) + softly(launch);
 
   // الفصول بصفحات العرض: للتأسيسي يُجمع الفصلان القصيران في صفحة (displayPages)، والبيانات والجاهزية كما هي
   const marked = new Map(secs.map((s, i) => [s.key, annotated.sections[i] || s]));

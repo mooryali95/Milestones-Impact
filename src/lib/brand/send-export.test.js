@@ -1,11 +1,11 @@
 // إصلاح الوثيقة (2026-11-27): نسخة الإرسال وثيقة خارجية تُسلَّم لجهة. لا أدوات عمل داخلية فيها، وختم واحد للمسودة،
-// وفهرس مؤسسي، وملخص تنفيذي غير فارغ، وشعار الجهة بلا لوحة بيضاء، وسجل البوابات بلا تكرار، وسبب غياب رمز التحقق قبل التحميل،
+// وفهرس مؤسسي، وملخص تنفيذي غير فارغ، وسجل البوابات بلا تكرار، وسبب غياب رمز التحقق قبل التحميل،
 // ومخطط الصفحات لا يقطع سطرًا ولا عنوانًا أبدًا
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { capstoneReport } from './capstone.js';
 import { EXPORT_PRESETS, exportSummary, finalDocument, nowrapNumbers } from './institutional.js';
-import { documentHtml, LOGO_MM, C } from './doc.js';
+import { documentHtml } from './doc.js';
 import { planPages, safeEnd } from './pdf.js';
 import { gateDecisions } from '../../../supabase/functions/leaders-api/closure.js';
 import { execSummary, firstSentences } from '../../../supabase/functions/leaders-api/business-case.js';
@@ -112,22 +112,8 @@ describe('الملخص التنفيذي: لا صفحة شبه فارغة', () =>
 });
 
 describe('شعار الجهة على الغلاف', () => {
-  const out = finalDocument(live(), EXPORT_PRESETS.send);
-  const h = html(out);
-  it('بلا لوحة بيضاء، ودمج multiply للنقطي، وشريط مسطح بلا نقش تحته، وحجم أكبر متوازن', () => {
-    expect(h).not.toMatch(/class="org plate"/);
-    expect(h).toMatch(/class="org logo-zone blend"/);
-    expect(h).not.toMatch(/\.org\.plate/);
-    expect(h).toMatch(/\.mast\.co \.org\.blend img \{ mix-blend-mode: multiply; \}/);
-    expect(h).toMatch(new RegExp(`\\.mast\\.co \\.top \\{ background: ${C.mist};`));
-    expect(LOGO_MM.max).toBeGreaterThanOrEqual(24);
-    expect(LOGO_MM.max / LOGO_MM.by).toBeGreaterThanOrEqual(2.5);
-    expect(LOGO_MM.max / LOGO_MM.by).toBeLessThanOrEqual(4);
-  });
-  it('SVG بلا دمج، والرابط الخارجي يُرفض فيُكتب الاسم', () => {
-    const d = live(); d.meta.org.logo = `data:image/svg+xml;base64,${btoa('<svg/>')}`;
-    expect(html(finalDocument(d, EXPORT_PRESETS.send))).toMatch(/class="org logo-zone"/);
-    d.meta.org.logo = 'https://evil.example/x.png';
+  it('الرابط الخارجي يُرفض فيُكتب الاسم', () => {
+    const d = live(); d.meta.org.logo = 'https://evil.example/x.png';
     expect(html(finalDocument(d, EXPORT_PRESETS.send))).not.toContain('evil.example');
   });
 });
