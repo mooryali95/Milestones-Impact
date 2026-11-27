@@ -117,3 +117,103 @@ describe('رمز التحقق والعدد في الملخص (مراجعة ال�
     expect(meta.rows.find(([k]) => k === 'عدد المبادرات')[1]).toBe('1');
   });
 });
+
+// ── المرحلة 3: الفهرس المرتبط والإشارات بمستويين، والتخزين المؤقت بالبصمة للاستئناف ──
+import { PDFHexString, PDFName, PDFString } from 'pdf-lib';
+import { TOC_PREFIX, bookStarts, docKey, cachedPart, memoryCache, readOutline, tocHref } from './cohort-export.js';
+
+// وثيقة فيها إشارات مرجعية (فصول) كما يخرجها العامل، وغلاف فيه روابط الفهرس
+async function pdfWithOutline(pages, chapters) {
+  const d = await PDFDocument.create();
+  for (let i = 0; i < pages; i++) d.addPage([595, 842]);
+  const ctx = d.context;
+  const root = ctx.nextRef();
+  const refs = chapters.map(() => ctx.nextRef());
+  chapters.forEach(([title, pg], i) => {
+    const o = { Title: PDFHexString.fromText(title), Parent: root, Dest: [d.getPage(pg).ref, 'XYZ', null, null, null] };
+    if (i > 0) o.Prev = refs[i - 1];
+    if (i < refs.length - 1) o.Next = refs[i + 1];
+    ctx.assign(refs[i], ctx.obj(o));
+  });
+  ctx.assign(root, ctx.obj({ Type: 'Outlines', First: refs[0], Last: refs[refs.length - 1], Count: refs.length }));
+  d.catalog.set(PDFName.of('Outlines'), root);
+  return d.save();
+}
+async function coverWithLinks(ids) {
+  const d = await PDFDocument.create();
+  const page = d.addPage([595, 842]);
+  const annots = ids.map((id, i) => d.context.register(d.context.obj({
+    Type: 'Annot', Subtype: 'Link', Rect: [50, 700 - i * 20, 300, 715 - i * 20], Border: [0, 0, 0],
+    A: { S: 'URI', URI: PDFString.of(tocHref(id)) },
+  })));
+  page.node.set(PDFName.of('Annots'), d.context.obj(annots));
+  return d.save();
+}
+
+describe('الفهرس المرتبط والإشارات بمستويين', () => {
+  it('الغلاف فيه فهرس: لكل مبادرة رابط داخلي برقم صفحتها', () => {
+    const rows = summaryRows([{ participant_id: 'p1', full_name: 'أحمد', initiative: 'رقمنة' }], { p1: { fingerprint: 'F', start: 4 } });
+    const { body } = bookCover({ cohort: { name: 'د' }, rows, date: 'ت' });
+    expect(body).toContain('الفهرس');
+    expect(body).toContain(`href="${TOC_PREFIX}p1"`);
+    expect(body).toMatch(/>4</);
+  });
+  it('bookStarts: صفحة بداية كل مبادرة بعد صفحات الغلاف', () => {
+    expect(bookStarts(2, [{ id: 'p1', pages: 3 }, { id: 'p2', pages: 1 }, { id: 'p3', pages: 5 }])).toEqual({ p1: 3, p2: 6, p3: 7 });
+  });
+  it('readOutline يقرأ فصول الوثيقة بأرقام صفحاتها', async () => {
+    const src = await PDFDocument.load(await pdfWithOutline(3, [['الملخص', 0], ['الخطة', 2]]));
+    expect(readOutline(src)).toEqual([{ title: 'الملخص', page: 0, children: [] }, { title: 'الخطة', page: 2, children: [] }]);
+  });
+  it('mergeBook: المستوى الأول لكل مبادرة باسمها، والثاني فصولها على صفحاتها في الكتاب، وروابط الفهرس تقفز إلى البداية', async () => {
+    const parts = [
+      { id: 'cover', label: 'الغلاف والفهرس', bytes: await coverWithLinks(['p1', 'p2']) },
+      { id: 'p1', label: 'أحمد: رقمنة', bytes: await pdfWithOutline(3, [['الملخص', 0], ['الخطة', 2]]) },
+      { id: 'p2', label: 'سارة: تسريع', bytes: await pdfWithOutline(2, [['الملخص', 0], ['الأثر', 1]]) },
+    ];
+    const out = await mergeBook(parts, { stamp: () => {}, title: 'ك' });
+    const doc = await PDFDocument.load(out.bytes);
+    const tree = readOutline(doc);
+    expect(tree.map((t) => [t.title, t.page])).toEqual([['الغلاف والفهرس', 0], ['أحمد: رقمنة', 1], ['سارة: تسريع', 4]]);
+    expect(tree[1].children).toEqual([{ title: 'الملخص', page: 1, children: [] }, { title: 'الخطة', page: 3, children: [] }]);
+    expect(tree[2].children.map((c) => c.page)).toEqual([4, 5]);
+    const annots = doc.getPage(0).node.Annots();
+    const targets = annots.asArray().map((ref) => {
+      const a = doc.context.lookup(ref);
+      expect(a.get(PDFName.of('A'))).toBeUndefined();
+      const dest = a.lookup(PDFName.of('Dest'));
+      return doc.getPages().findIndex((p) => p.ref === dest.get(0));
+    });
+    expect(targets).toEqual([1, 4]);
+  });
+});
+
+describe('التخزين المؤقت ببصمة الوثيقة (الاستئناف)', () => {
+  it('docKey ثابت للوثيقة نفسها ويتغير بأي تغير في محتواها أو مسارها', async () => {
+    const a = await docKey({ title: 'م' }, '<p>1</p>');
+    expect(a).toBe(await docKey({ title: 'م' }, '<p>1</p>'));
+    expect(a).not.toBe(await docKey({ title: 'م' }, '<p>2</p>'));
+    expect(a).not.toBe(await docKey({ title: 'ن' }, '<p>1</p>'));
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+  });
+  it('cachedPart يعيد المخزن دون توليد، ويخزن ملف العامل وحده لا البديل المرسوم', async () => {
+    const cache = memoryCache();
+    const make = vi.fn(async () => ({ bytes: new Uint8Array([7]), via: 'server' }));
+    const first = await cachedPart('k1', make, cache);
+    const again = await cachedPart('k1', make, cache);
+    expect(make).toHaveBeenCalledTimes(1);
+    expect(first.via).toBe('server');
+    expect(again).toMatchObject({ via: 'cache' });
+    expect([...again.bytes]).toEqual([7]);
+    const raster = vi.fn(async () => ({ bytes: new Uint8Array([1]), via: 'browser' }));
+    await cachedPart('k2', raster, cache);
+    await cachedPart('k2', raster, cache);
+    expect(raster).toHaveBeenCalledTimes(2);
+  });
+  it('تعذر التخزين لا يوقف التصدير', async () => {
+    const broken = { get: async () => { throw new Error('blocked'); }, put: async () => { throw new Error('blocked'); } };
+    const out = await cachedPart('k', async () => ({ bytes: new Uint8Array([1]), via: 'server' }), broken);
+    expect(out.via).toBe('server');
+    expect((await cachedPart('k', async () => ({ bytes: new Uint8Array([2]), via: 'server' }), null)).via).toBe('server');
+  });
+});

@@ -124,3 +124,25 @@ test('الكتاب المدمج: المتعذر لا يوقف الباقي وي�
   expect((await PDFDocument.load(readFileSync(await file.path()))).getPageCount()).toBe(1 + 2);
   await expect(dlg.getByTestId('cohort-book-report')).toContainText('سارة: الوثيقة غير مكتملة');
 });
+
+// ── المرحلة 3: الإشارات بمستويين في الكتاب، والاستئناف من التخزين المؤقت ببصمة الوثيقة ──
+test('الكتاب المدمج: إشارات لكل مبادرة باسمها، وتصدير ثانٍ يعيد المخزن دون توليد', async ({ page }) => {
+  const { worker } = await bookSetup(page);
+  const dlg = await openExport(page, 'سفراء 2026');
+  const [file] = await Promise.all([page.waitForEvent('download'), dlg.getByRole('button', { name: 'الكتاب المدمج (PDF)' }).click()]);
+  const merged = await PDFDocument.load(readFileSync(await file.path()));
+  const { PDFName } = await import('pdf-lib');
+  const outlines = merged.catalog.lookup(PDFName.of('Outlines'));
+  const titles = [];
+  for (let ref = outlines.get(PDFName.of('First')); ref; ) {
+    const item = merged.context.lookup(ref);
+    titles.push(item.lookup(PDFName.of('Title')).decodeText());
+    ref = item.get(PDFName.of('Next'));
+  }
+  expect(titles).toEqual(['الغلاف والملخص والفهرس', 'أحمد: رقمنة الأرشيف', 'سارة: تسريع الخدمة']);
+  expect(worker).toEqual(['p1', 'p2', 'cover']);
+  await dlg.getByRole('button', { name: 'رجوع' }).click();
+  const [again] = await Promise.all([page.waitForEvent('download'), dlg.getByRole('button', { name: 'الكتاب المدمج (PDF)' }).click()]);
+  expect((await PDFDocument.load(readFileSync(await again.path()))).getPageCount()).toBe(1 + 2 + 2);
+  expect(worker).toEqual(['p1', 'p2', 'cover', 'cover']);
+});

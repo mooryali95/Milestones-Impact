@@ -6,6 +6,8 @@
 // المرحلة 2: «الكتاب المدمج (PDF)»: كل مبادرة من admin.doc-export وfinalDocument (المصدر الواحد للوثيقة المؤسسية) بالتتابع، عبر
 // العامل المتجهي بتذكرتها مع إعادة عند 429، وإلا المتصفح، ثم الدمج بـ pdf-lib بغلاف الدفعة والملخص التنفيذي (src/lib/brand/cohort-export.js).
 // كل مجلد من d.volumes ملف مستقل (التقسيم التلقائي)، والإيقاف ممكن في أي لحظة، والمتعذر يُذكر بالاسم.
+// المرحلة 3: فهرس في الغلاف بأرقام صفحات تقفز إلى بداية كل مبادرة، وإشارات بمستويين (المبادرة ثم فصولها)، وملف العامل
+// يُخزن في IndexedDB ببصمة الوثيقة (docKey) فيعيد الاستئناف ما لم يتغير دون توليد جديد.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner, useEscape } from '../ui.jsx';
@@ -21,6 +23,7 @@ async function buildVolume({ cohort, rows, volume, signal, onProgress }) {
     import('../../../src/lib/brand/pdf-source.js'), import('../../../src/lib/brand/doc.js'),
   ]);
   let docMeta = null;
+  const cache = B.idbCache();
   const run = await B.runBook(rows, {
     signal, onProgress,
     part: async (r) => {
@@ -28,17 +31,31 @@ async function buildVolume({ cohort, rows, volume, signal, onProgress }) {
       if (!x?.success) throw new Error(x?.message || 'تعذر جلب الوثيقة');
       docMeta = docMeta || x.doc?.meta || null;
       const out = finalDocument(x.doc, BOOK_OPTIONS);
-      const p = await B.renderPart(out.meta, out.body, x.pdf);
+      // المفتاح لوثيقة هذا المشارك وحده، فلا تُستعار وثيقة مشارك آخر ولو تطابق محتواهما
+      const key = await B.docKey({ participant_id: r.participant_id, meta: out.meta }, out.body).catch(() => null);
+      const p = await B.cachedPart(key, () => B.renderPart(out.meta, out.body, x.pdf), cache);
       return { ...p, fingerprint: B.bookCode(x.doc) };
     },
   });
   if (run.cancelled || !run.parts.length) return run;
   onProgress({ done: rows.length, total: rows.length, name: '', merging: true });
-  // الغلاف بلا بصمة فيكفيه تذكرة الجلسة العامة
-  const draft = B.bookCover({ cohort, docMeta, rows: B.summaryRows(rows, run.results), date: humanDate(new Date()), volume });
+  const sizes = await Promise.all(run.parts.map(async (p) => ({ id: p.id, pages: await B.pageCount(p.bytes) })));
   const server = await pdfServer();
-  const cover = await B.renderPart(draft.meta, draft.body, server);
-  const book = await B.mergeBook([{ id: 'cover', bytes: cover.bytes }, ...run.parts], { title: draft.meta.title });
+  // الغلاف بلا بصمة فيكفيه تذكرة الجلسة العامة. أرقام الفهرس تعتمد على صفحات الغلاف نفسه، فإن خالفت التقدير أُعيد مرة
+  const coverOf = async (coverPages) => {
+    const starts = B.bookStarts(coverPages, sizes);
+    const results = Object.fromEntries(Object.entries(run.results).map(([id, v]) => [id, { ...v, start: starts[id] }]));
+    const draft = B.bookCover({ cohort, docMeta, rows: B.summaryRows(rows, results), date: humanDate(new Date()), volume });
+    const pdf = await B.renderPart(draft.meta, draft.body, server);
+    return { draft, pdf, pages: await B.pageCount(pdf.bytes), coverPages };
+  };
+  let cover = await coverOf(1);
+  if (cover.pages !== cover.coverPages) cover = await coverOf(cover.pages);
+  const draft = cover.draft;
+  const label = (r) => [r.full_name, r.initiative].filter(Boolean).join(': ');
+  const byId = Object.fromEntries(rows.map((r) => [r.participant_id, r]));
+  const book = await B.mergeBook([{ id: 'cover', label: 'الغلاف والملخص والفهرس', bytes: cover.pdf.bytes },
+    ...run.parts.map((p) => ({ ...p, label: label(byId[p.id] || {}) || p.id }))], { title: draft.meta.title });
   await B.saveBook(book.bytes, draft.meta);
   return { ...run, pages: book.pages };
 }

@@ -5,7 +5,10 @@
 // العامل المتجهي (workers/pdf-render) بتذكرتها، وعند 429 انتظار متزايد وإعادة، وإلا البناء في المتصفح (buildPdf). الغلاف والملخص
 // التنفيذي وثيقة واحدة بقالب documentHtml نفسه وعلامة الجهة المشتركة (lockup عبر meta.brand من identityOf)، ثم الدمج بـ pdf-lib
 // بترقيم متصل. لا يمس هذا الملف مصادر الوثيقة، ويستورد منها فقط.
-import { esc, table } from './doc.js';
+// المرحلة 3: فهرس في الغلاف بروابط تقفز إلى صفحة بداية كل مبادرة، وإشارات مرجعية بمستويين (المبادرة ثم فصولها من outline
+// ملفها)، وتخزين مؤقت في IndexedDB ببصمة الوثيقة فيعيد الاستئناف ما لم يتغير دون توليد.
+import { PDFHexString, PDFName } from 'pdf-lib';
+import { esc, raw, table } from './doc.js';
 import { identityOf } from './institutional.js';
 import { issuedFingerprint } from '../../../supabase/functions/leaders-api/doc-quality.js';
 
@@ -65,6 +68,30 @@ export function summaryRows(rows, results = {}) {
   });
 }
 
+// روابط الفهرس في الغلاف عناوين بهذه البادئة، تحولها mergeBook إلى قفزة داخلية لصفحة البداية
+export const TOC_PREFIX = 'https://toc.invalid/';
+export const tocHref = (id) => `${TOC_PREFIX}${encodeURIComponent(id)}`;
+const TOC_COLUMNS = [{ key: 'n', label: 'م', width: '7mm' }, { key: 'full_name', label: 'المشارك' }, { key: 'initiative', label: 'المبادرة' }, { key: 'page', label: 'الصفحة', width: '16mm' }];
+function tocSection(rows) {
+  const list = rows.filter((r) => r.status !== 'تعذر توليدها');
+  if (!list.length) return '';
+  const link = (r, v) => raw(`<a href="${esc(tocHref(r.participant_id))}">${esc(v ?? '')}</a>`);
+  return `<section class="sec"><header><h2>الفهرس</h2></header>
+${table(TOC_COLUMNS, list.map((r) => [r.n, r.full_name, link(r, r.initiative), r.page ? link(r, String(r.page)) : '']))}</section>`;
+}
+
+/** صفحة بداية كل مبادرة إن سبقتها صفحات الغلاف coverPages ({ id, pages } بالترتيب) */
+export function bookStarts(coverPages, parts) {
+  const starts = {};
+  let at = coverPages + 1;
+  for (const p of parts) { starts[p.id] = at; at += p.pages; }
+  return starts;
+}
+export async function pageCount(bytes) {
+  const { PDFDocument } = await import('pdf-lib');
+  return (await PDFDocument.load(bytes, { ignoreEncryption: true })).getPageCount();
+}
+
 /** الغلاف والملخص التنفيذي: meta بهوية الجهة من أول وثيقة (identityOf)، وجسم بجدول الملخص */
 export function bookCover({ cohort, docMeta = {}, rows = [], date, volume = { n: 1, of: 1 } }) {
   const { brand } = identityOf(docMeta || {});
@@ -79,19 +106,30 @@ export function bookCover({ cohort, docMeta = {}, rows = [], date, volume = { n:
   };
   const body = `<section class="sec"><header><h2>الملخص التنفيذي</h2></header>
 <p>${esc(`يضم هذا الكتاب ${included} مبادرة معتمدة من «${name}» بنسختها المؤسسية، ولكل منها رمز تحقق يثبت مطابقتها لما اعتُمد في المنصة.`)}</p>
-${table(BOOK_COLUMNS, rows.map((r) => BOOK_COLUMNS.map((c) => r[c.key] ?? '')))}</section>`;
+${table(BOOK_COLUMNS, rows.map((r) => BOOK_COLUMNS.map((c) => r[c.key] ?? '')))}</section>${tocSection(rows)}`;
   return { meta, body };
 }
 
-/** يدمج الأجزاء ({ id, bytes }) بالترتيب في ملف واحد ويختم كل صفحة برقمها المتصل. يعيد { bytes, pages, starts } */
+/** يدمج الأجزاء ({ id, label?, bytes }) بالترتيب في ملف واحد ويختم كل صفحة برقمها المتصل، ويبني الإشارات بمستويين ويحول
+ * روابط الفهرس إلى قفزات داخلية. يعيد { bytes, pages, starts } */
 export async function mergeBook(parts, { stamp = null, title = '' } = {}) {
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
   const out = await PDFDocument.create();
   const starts = {};
+  const tree = [];
+  const pageRefs = [];
   for (const p of parts) {
     const src = await PDFDocument.load(p.bytes, { ignoreEncryption: true });
     starts[p.id] = out.getPageCount() + 1;
-    for (const pg of await out.copyPages(src, src.getPageIndices())) out.addPage(pg);
+    const copied = await out.copyPages(src, src.getPageIndices());
+    copied.forEach((pg) => { out.addPage(pg); pageRefs.push(pg.ref); });
+    if (!copied.length) continue;
+    let chapters = safeOutline(src);
+    if (chapters.length === 1 && chapters[0].children.length) chapters = chapters[0].children;
+    tree.push({
+      title: p.label || String(p.id), ref: copied[0].ref,
+      children: chapters.filter((c) => copied[c.page]).map((c) => ({ title: c.title, ref: copied[c.page].ref, children: [] })),
+    });
   }
   const total = out.getPageCount();
   const font = stamp ? null : await out.embedFont(StandardFonts.Helvetica);
@@ -101,9 +139,160 @@ export async function mergeBook(parts, { stamp = null, title = '' } = {}) {
     const size = 7;
     page.drawText(t, { x: (page.getWidth() - font.widthOfTextAtSize(t, size)) / 2, y: 18, size, font, color: rgb(0.37, 0.44, 0.46) });
   });
+  linkToc(out, starts, pageRefs);
+  if (tree.length && parts.some((p) => p.label)) writeOutline(out, tree);
   if (title) out.setTitle(title);
   out.setProducer('Milestone Impact');
   return { bytes: await out.save(), pages: total, starts };
+}
+
+const textOf = (v) => (v && typeof v.decodeText === 'function' ? v.decodeText() : '');
+function safeOutline(doc) {
+  try { return readOutline(doc); } catch (e) { console.warn('cohort book: outline unreadable:', e?.message || e); return []; }
+}
+function namedDest(doc, name) {
+  const cat = doc.catalog;
+  const old = cat.lookup(PDFName.of('Dests'));
+  if (old && old.lookup) { const d = old.lookup(PDFName.of(name)); if (d) return d; }
+  const names = cat.lookup(PDFName.of('Names'));
+  const node = names && names.lookup ? names.lookup(PDFName.of('Dests')) : null;
+  const walk = (n, depth) => {
+    if (!n || depth > 32) return null;
+    const arr = n.lookup(PDFName.of('Names'));
+    if (arr) for (let i = 0; i + 1 < arr.size(); i += 2) if (textOf(arr.lookup(i)) === name) return arr.lookup(i + 1);
+    const kids = n.lookup(PDFName.of('Kids'));
+    if (kids) for (let i = 0; i < kids.size(); i++) { const r = walk(kids.lookup(i), depth + 1); if (r) return r; }
+    return null;
+  };
+  const d = walk(node, 0);
+  return d && d.lookup && !d.size ? d.lookup(PDFName.of('D')) : d;
+}
+
+/** إشارات الوثيقة المرجعية: [{ title, page (من صفر), children }]، وما لا تُعرف صفحته يُترك */
+export function readOutline(doc) {
+  const { catalog, context } = doc;
+  const key = (k) => PDFName.of(k);
+  const root = catalog.lookup(key('Outlines'));
+  if (!root || !root.lookup) return [];
+  const pages = doc.getPages().map((p) => p.ref);
+  const pageOf = (item) => {
+    let dest = item.lookup(key('Dest'));
+    if (!dest) { const a = item.lookup(key('A')); dest = a && a.lookup ? a.lookup(key('D')) : null; }
+    if (dest && !dest.size) dest = namedDest(doc, dest.decodeText ? dest.decodeText() : String(dest.asString?.() ?? dest).replace(/^\//, ''));
+    if (!dest || !dest.size || !dest.size()) return -1;
+    return pages.indexOf(dest.get(0));
+  };
+  const seen = new Set();
+  const walk = (first, depth) => {
+    const list = [];
+    for (let ref = first; ref && !seen.has(ref) && depth < 8; ) {
+      seen.add(ref);
+      const item = context.lookup(ref);
+      if (!item || !item.lookup) break;
+      const page = pageOf(item);
+      const children = walk(item.get(key('First')), depth + 1);
+      if (page >= 0) list.push({ title: textOf(item.lookup(key('Title'))), page, children });
+      ref = item.get(key('Next'));
+    }
+    return list;
+  };
+  return walk(root.get(key('First')), 0);
+}
+
+function writeOutline(out, tree) {
+  const ctx = out.context;
+  const rootRef = ctx.nextRef();
+  const build = (items, parent) => {
+    const refs = items.map(() => ctx.nextRef());
+    items.forEach((it, i) => {
+      const d = ctx.obj({ Title: PDFHexString.fromText(it.title), Parent: parent, Dest: [it.ref, 'XYZ', null, null, null] });
+      if (i > 0) d.set(PDFName.of('Prev'), refs[i - 1]);
+      if (i < refs.length - 1) d.set(PDFName.of('Next'), refs[i + 1]);
+      if (it.children.length) {
+        const kids = build(it.children, refs[i]);
+        d.set(PDFName.of('First'), kids[0]);
+        d.set(PDFName.of('Last'), kids[kids.length - 1]);
+        d.set(PDFName.of('Count'), ctx.obj(-it.children.length)); // مطوية: المبادرة تُفتح على فصولها
+      }
+      ctx.assign(refs[i], d);
+    });
+    return refs;
+  };
+  const top = build(tree, rootRef);
+  ctx.assign(rootRef, ctx.obj({ Type: 'Outlines', First: top[0], Last: top[top.length - 1], Count: top.length }));
+  out.catalog.set(PDFName.of('Outlines'), rootRef);
+  out.catalog.set(PDFName.of('PageMode'), PDFName.of('UseOutlines'));
+}
+
+/** روابط الفهرس (TOC_PREFIX) في أي صفحة تصير قفزة إلى صفحة بداية المبادرة */
+function linkToc(out, starts, pageRefs) {
+  const ctx = out.context;
+  for (const page of out.getPages()) {
+    const annots = page.node.Annots();
+    if (!annots) continue;
+    for (let i = 0; i < annots.size(); i++) {
+      const a = annots.lookup(i);
+      const act = a && a.lookup ? a.lookup(PDFName.of('A')) : null;
+      const uri = act && act.lookup ? textOf(act.lookup(PDFName.of('URI'))) : '';
+      if (!uri.startsWith(TOC_PREFIX)) continue;
+      const at = starts[decodeURIComponent(uri.slice(TOC_PREFIX.length).replace(/\/$/, ''))];
+      if (!at || !pageRefs[at - 1]) continue;
+      a.delete(PDFName.of('A'));
+      a.set(PDFName.of('Dest'), ctx.obj([pageRefs[at - 1], 'XYZ', null, null, null]));
+    }
+  }
+}
+
+// ── التخزين المؤقت ببصمة الوثيقة: SHA-256 لما يُرسل إلى العامل (meta والجسم)، فأي تغير في الوثيقة أو هويتها يغير المفتاح ──
+export async function docKey(meta, body) {
+  const data = new TextEncoder().encode(JSON.stringify([meta ?? null, String(body ?? '')]));
+  const h = await globalThis.crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+export function memoryCache() {
+  const m = new Map();
+  return { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); } };
+}
+const IDB = { name: 'mi-cohort-book', store: 'parts', max: 400 };
+/** مخزن IndexedDB في متصفح المستخدم وحده؛ إن تعذر فتحه يعيد null فيمضي التصدير بلا تخزين */
+export function idbCache(idb = globalThis.indexedDB) {
+  if (!idb) return null;
+  let dbp = null;
+  const open = () => (dbp ||= new Promise((ok, no) => {
+    const r = idb.open(IDB.name, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(IDB.store);
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => no(r.error);
+  }));
+  const tx = async (mode, fn) => {
+    const db = await open();
+    return new Promise((ok, no) => {
+      const t = db.transaction(IDB.store, mode);
+      const req = fn(t.objectStore(IDB.store));
+      t.oncomplete = () => ok(req?.result ?? null);
+      t.onerror = () => no(t.error);
+      t.onabort = () => no(t.error);
+    });
+  };
+  return {
+    get: (k) => tx('readonly', (s) => s.get(k)).then((v) => v?.bytes ? new Uint8Array(v.bytes) : null),
+    put: async (k, bytes) => {
+      await tx('readwrite', (s) => s.put({ bytes, at: Date.now() }, k));
+      const n = await tx('readonly', (s) => s.count());
+      if (n > IDB.max) await tx('readwrite', (s) => s.clear()); // سقف بسيط يمنع تراكم بلا حد
+    },
+  };
+}
+/** يعيد الملف المخزن بالمفتاح، وإلا يولده؛ ويخزن ملف العامل وحده (البديل المرسوم يُعاد ليأخذ المتجهي لاحقًا) */
+export async function cachedPart(key, make, cache) {
+  if (cache && key) {
+    try { const hit = await cache.get(key); if (hit) return { bytes: hit, via: 'cache' }; } catch (e) { console.warn('cohort book cache:', e?.message || e); }
+  }
+  const x = await make();
+  if (cache && key && x?.via === 'server') {
+    try { await cache.put(key, x.bytes); } catch (e) { console.warn('cohort book cache:', e?.message || e); }
+  }
+  return x;
 }
 
 /** يولد المبادرات واحدة بعد واحدة: part(row) يعيد { bytes, fingerprint }. المتعذر يُجمع ولا يوقف الباقي، والإيقاف بـ signal */
