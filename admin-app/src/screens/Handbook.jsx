@@ -18,7 +18,7 @@ import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, sortRows } from '../filters.js';
 import { Empty, Move, moveKeys, NoMatch, Spinner, StatusChip, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { ScreenHead } from '../PageHeader.jsx';
-import { keepSpot, takeSpot } from '../review-queue.js';
+import { keepSpot, saveQueue, takeSpot } from '../review-queue.js';
 import { CHAPTER_READY, CHAPTER_READY_TONE, chapterReady, countAr, DIM_ROMAN, levelFrom, RUBRIC_SCALE, TERMS, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
 
@@ -28,7 +28,7 @@ export const chaptersAr = (n) => (n ? countAr(n, 'باب واحد', 'بابان'
 export const modelsAr = (n) => (n ? countAr(n, 'نموذج واحد', 'نموذجان', 'نماذج', 'نموذجًا') : 'لا نماذج');
 
 // نقل الباب أو النموذج (المرحلة 18): مكون Move المشترك (ui.jsx) بهدف 32px وtitle يسمي الباب، وAlt مع الأسهم على الصف
-// (moveKeys)، وإعلان الموضع الجديد. الكتابة عبر admin.reorder القائم، وkeepSpot يحفظ موضع القائمة فلا يقفز التمرير بعد إعادة التحميل
+// (moveKeys)، وإعلان الموضع الجديد. الكتابة عبر admin.reorder القائم، ويُحفظ الترتيب الجديد بـsaveQueue، وkeepSpot يحفظ موضع القائمة فلا يقفز التمرير بعد إعادة التحميل
 export const SPOT_SCOPE = 'handbook';
 function RowMove({ rows, entity, id, kind, name, index, total, reload, canWrite, keysRef }) {
   const { toast } = useUI();
@@ -37,6 +37,7 @@ function RowMove({ rows, entity, id, kind, name, index, total, reload, canWrite,
     if (!ids) return null;
     const r = await L('admin.reorder', { entity, ids });
     if (!r.success) { toast(r.message); return null; }
+    saveQueue(ids, `${kind} ${name}`);
     keepSpot(typeof window === 'undefined' ? 0 : window.scrollY, id, SPOT_SCOPE);
     spotDir = dir;
     reload();

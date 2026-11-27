@@ -16,7 +16,8 @@ vi.mock('./ui.jsx', async (orig) => ({ ...(await orig()), useUI: () => ({ toast:
 
 const { default: Handbook } = await import('./screens/Handbook.jsx');
 const { CHAPTER_READY, CHAPTER_READY_TONE, chapterReady, levelFrom } = await import('../../supabase/functions/leaders-api/labels.js');
-const { takeSpot } = await import('./review-queue.js');
+const { takeSpot, readQueue } = await import('./review-queue.js');
+const { Journey } = await import('./screens/Methodology.jsx');
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host, root;
@@ -125,6 +126,7 @@ describe('Move المشترك في كتاب القائد', () => {
     expect(reload).toHaveBeenCalled();
     expect(first.querySelector('[aria-live="polite"]').textContent).toBe('الباب باب a صار في الموضع 2 من 3');
     expect(takeSpot('handbook')).toMatchObject({ id: 'a' });
+    expect(readQueue().ids).toEqual(['b', 'a', 'c']);
   });
   it('Alt مع السهم على الصف ينقل بالمسار نفسه، والسهم وحده لا', async () => {
     await mount(<Handbook catalog={catalog()} reload={() => {}} canWrite />);
@@ -143,5 +145,28 @@ describe('Move المشترك في كتاب القائد', () => {
     await flush();
     expect(row.querySelector('[aria-live="polite"]').textContent).toBe('');
     expect(takeSpot('handbook')).toBeNull();
+  });
+});
+
+describe('Move المشترك في المنهجية (Methodology.jsx)', () => {
+  const jcat = () => ({
+    program_id: 'p1', assessment_minutes: 20, learning_models: [], lab_links: [],
+    journey_stages: [{ key: 's1', sort: 1, phase: 'qualification', title_ar: 'م1', active: true }],
+    stage_requirements: [
+      { id: 'r1', code: 'R1', stage_key: 's1', sort: 1, title_ar: 'أ', kind: 'task', active: true, required: true },
+      { id: 'r2', code: 'R2', stage_key: 's1', sort: 2, title_ar: 'ب', kind: 'task', active: true, required: true },
+    ],
+  });
+  it('Alt مع السهم على صف المتطلب ينقله وحده، ثم saveQueue وkeepSpot', async () => {
+    await mount(<Journey catalog={jcat()} reload={() => {}} canWrite onProgram={() => {}} />);
+    const row = host.querySelector('[data-mt-row="r2"]');
+    expect(row).not.toBeNull();
+    await act(async () => { row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true })); });
+    await flush();
+    const rs = calls.filter(([a]) => a === 'admin.reorder');
+    expect(rs.length).toBe(1);
+    expect(rs[0][1]).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
+    expect(readQueue().ids).toEqual(['r2', 'r1']);
+    expect(takeSpot('methodology')).toMatchObject({ id: 'r2' });
   });
 });

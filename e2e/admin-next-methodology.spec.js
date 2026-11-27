@@ -125,6 +125,15 @@ test('الرحلة: متطلب جديد بمربعات الاختيار، وتر
   await expect.poll(() => calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
 });
 
+test('المرحلة 18: Alt مع السهم على صف المتطلب ينقله وحده دون مرحلته', async ({ page }) => {
+  const calls = await setup(page);
+  await tab(page, 'الرحلة والمتطلبات');
+  await page.getByRole('button', { name: 'انقل المتطلب T-1 لأسفل' }).focus();
+  await page.keyboard.press('Alt+ArrowDown');
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.reorder')).toHaveLength(1);
+  expect(calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
+});
+
 test('القياس: الفقرة وخياراتها ودرجاتها من المستودع، واللوحة تحرر التلميح وحده (D01)', async ({ page }) => {
   const calls = await setup(page);
   await tab(page, 'أسئلة القياس');
