@@ -232,7 +232,7 @@ test('نموذج الجهة: مفتاح «تذكير المنسق» لجهة ق�
     'admin.coordinator': () => ({ success: true, coordinator: null }),
   } });
   // أفعال الجهة الثانوية في قائمة ⋯ (تدقيق اللوحة، المرحلة 2)
-  await page.getByRole('button', { name: 'إجراءات أخرى لجهة «هيئة المثال»' }).click();
+  await page.getByRole('button', { name: 'إجراءات: جهة «هيئة المثال»' }).click();
   await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog').filter({ hasText: 'تذكير المنسق لمشاركي الجهة' });
   await expect(form).toContainText('يظهر «ذكّرهم» في «يحتاج تدخلك» ببوابة الجهة');

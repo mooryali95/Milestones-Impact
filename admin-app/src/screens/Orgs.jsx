@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // الجهات: البطاقات، ولوحة الجهة بمصادرها ومشاركيها وتقريرها
 // ════════════════════════════════════════════════════════════════
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import OrgFinance from './OrgFinance.jsx';
 import {
   date, domainsOf, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
@@ -10,7 +10,8 @@ import { assignOrgGuarded } from '../cohort-guard.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
-import { Empty, NoMatch, Spinner, StatusChip, useCopy, useUI } from '../ui.jsx';
+import { Empty, Meter, NoMatch, Spinner, StatusChip, useCopy, useUI } from '../ui.jsx';
+import { keepSpot, takeSpot } from '../review-queue.js';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import { trackName } from '../../../supabase/functions/leaders-api/labels.js';
@@ -20,14 +21,16 @@ import OrgJourney from './OrgJourney.jsx';
 import SponsorCodes from './SponsorCodes.jsx';
 import { orgReadiness, readinessSummary, seatsUsedOf, seatsView } from '../org-hub.js';
 import { navigate, readQuery, writeQuery } from '../route.js';
-import { MoreMenu } from './PersonShell.jsx';
+import { MENU_TEXT, MoreMenu } from './PersonShell.jsx';
 
 
+// القمع بمقام صريح (المرحلة 10): كل مرحلة «من المسجلين»، والمقام مكتوب في النص لا مضمر في طول الشريط
+export const FUNNEL_UNIT = 'من المسجلين';
 export function Funnel({ f, big }) {
-  const top = Math.max(1, f.registered || 0);
+  const top = f.registered || 0;
   return (
     <div className={`la-funnel${big ? ' big' : ''}`}>{FUNNEL.map(([k, l]) => (
-      <div key={k} className="la-fn"><span className="la-fn-l">{l}</span><span className="la-fn-bar"><i style={{ width: `${(((f[k] || 0) / top) * 100).toFixed(1)}%` }} /></span><b>{f[k] || 0}</b></div>
+      <div key={k} className="la-fn"><span className="la-fn-l">{l}</span><Meter value={f[k] || 0} max={top} unit="مسجلًا" label={`${l} ${FUNNEL_UNIT}`} /></div>
     ))}</div>
   );
 }
@@ -36,8 +39,9 @@ function Seats({ org, members }) {
   const v = seatsView(org, members);
   return (
     <div className="la-seats">
-      <div className="la-row between"><span>{v.label}</span><b>{v.value}{v.hint ? <small> · {v.hint}</small> : null}</b></div>
-      {v.pct != null ? <span className="la-fn-bar"><i style={{ width: `${v.pct.toFixed(1)}%` }} /></span> : null}
+      {org?.seats
+        ? <div className="la-row between"><span>{v.label}</span><Meter value={seatsUsedOf(org, members)} max={org.seats} unit="مقعدًا" label="المقاعد المشغولة" /></div>
+        : <div className="la-row between"><span>{v.label}</span><b>{v.value}{v.hint ? <small> · {v.hint}</small> : null}</b></div>}
     </div>
   );
 }
@@ -79,13 +83,53 @@ function AccessLine({ o, canWrite, onEdit, toast }) {
 // الجهات بطاقات لا جدول، فالترتيب من قائمة في الشريط
 const ORG_SORTS = { name: (o) => o.name, total: (o) => o.stats?.total || 0, pending: (o) => o.stats?.pending_approval || 0, active: (o) => o.stats?.active_week || 0 };
 
-function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
+// شريط مهمة واحد (المرحلة 10) بدل بطاقة الإحصاء والبطاقة الوهمية: «بدون جهة» ليست جهة بل عمل ينتظر.
+// يختفي عند الصفر، ومن لا يملك canWrite يرى العدد وحده. الربط بالمسار القائم (assignOrgGuarded) مع confirm يسمي الجهة.
+export function UnassignedTask({ un, list, canWrite, onOpen, onLinked }) {
   const { toast, confirm } = useUI();
+  const [typedTo, setTypedTo] = useState({});
+  const n = un?.total || 0;
+  if (!n) return null;
+  const typed = canWrite && list.length ? (un.typed || []) : [];
+  const linkTyped = async (t) => {
+    const org = list.find((o) => o.id === typedTo[t.name]);
+    if (!org) return toast('اختر الجهة');
+    if (!(await confirm(`ربط ${t.n} مشارك كتبوا «${t.name}» بجهة «${org.name}»؟ يُنسبون إليها، ويُثبَّت لهم إعفاء رعايتها إن كانت ترعى مشاركيها.`))) return;
+    const r = await assignOrgGuarded({ typed_name: t.name, organization_id: org.id }, confirm);
+    toast(r.success ? `رُبط ${r.moved} مشارك` : r.message);
+    if (r.success) onLinked?.();
+  };
+  return (
+    <section className="la-card la-task org-unassigned" aria-label="مشاركون بلا جهة">
+      <div className="la-row between">
+        <b>{n} بلا جهة{canWrite ? ' · اربطهم' : ''}</b>
+        {canWrite && <button type="button" className="btn-sm primary" onClick={() => onOpen('none')}>اربطهم</button>}
+      </div>
+      {typed.length > 0 && (
+        <div className="la-typed"><small className="la-muted">ما كتبوه في خانة الجهة، اربطه بجهته:</small>
+          {typed.map((t) => (
+            <div key={t.name} className="la-row between"><span>{t.name} <small className="la-muted">{t.n}</small></span>
+              <span className="la-row">
+                <select aria-label={`جهة ${t.name}`} value={typedTo[t.name] || ''} onChange={(e) => setTypedTo({ ...typedTo, [t.name]: e.target.value })}>
+                  <option value="">اختر جهة…</option>
+                  {list.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+                <button type="button" className="la-link" disabled={!typedTo[t.name]} onClick={() => linkTyped(t)}>ربط</button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
+  const { toast } = useUI();
   const copy = useCopy();
   // جهة بلا إحصاءات (ردّ أقدم أو ناقص) تُعدّ صفرًا لا تكسر الفلاتر والبطاقات
   const list = useMemo(() => (data.orgs || []).map((o) => (o.stats ? o : { ...o, stats: { total: 0, pending_approval: 0, active_week: 0 } })), [data.orgs]);
   const un = data.unassigned || {};
-  const [typedTo, setTypedTo] = useState({});
   const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'sector', 'state', 'sort'], {}, { scope: 'orgs' });
   const fields = useMemo(() => [
     { key: 'sector', label: 'القطاعات', get: (o) => o.sector || '', options: [...new Set(list.map((o) => o.sector).filter(Boolean))].sort().map((x) => [x, x]) },
@@ -97,15 +141,20 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
   const seats = list.reduce((a, o) => a + (o.seats || 0), 0);
   const filled = list.reduce((a, o) => a + (o.seats ? seatsUsedOf(o, o.stats.total) : 0), 0);
 
-  // الجهة يختارها المدير صراحةً (لا أول جهة في القائمة)، ويؤكد الربط باسمها وعدد من يُنقلون
-  const linkTyped = async (t) => {
-    const org = list.find((o) => o.id === typedTo[t.name]);
-    if (!org) return toast('اختر الجهة');
-    if (!(await confirm(`ربط ${t.n} مشارك كتبوا «${t.name}» بجهة «${org.name}»؟ يُنسبون إليها، ويُثبَّت لهم إعفاء رعايتها إن كانت ترعى مشاركيها.`))) return;
-    const r = await assignOrgGuarded({ typed_name: t.name, organization_id: org.id }, confirm);
-    toast(r.success ? `رُبط ${r.moved} مشارك` : r.message);
-    if (r.success) reload();
-  };
+  // الرجوع من لوحة الجهة: التمرير نفسه والتركيز على زر آخر جهة فُتحت (keepSpot العام، نطاق الجهات)
+  const openOrg = (id) => { keepSpot(window.scrollY, id, 'orgs'); onOpen(id); };
+  const spot = useRef(undefined);
+  if (spot.current === undefined) spot.current = takeSpot('orgs');
+  useEffect(() => {
+    const s = spot.current;
+    if (!s) return;
+    spot.current = null;
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: s.y });
+      const btn = s.id && document.querySelector(`[data-org="${CSS.escape(s.id)}"] .la-org-open`);
+      btn?.focus({ preventScroll: true });
+    });
+  }, []);
 
   return (
     <>
@@ -113,8 +162,8 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
         <div className="stat-card"><div className="stat-label">الجهات</div><div className="stat-value">{list.length}</div><div className="stat-sub">{list.filter((o) => o.status !== 'inactive').length} نشطة</div></div>
         <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{total}</div><div className="stat-sub">من كل الجهات</div></div>
         <div className="stat-card"><div className="stat-label">المقاعد المشغولة</div><div className="stat-value s-replied">{filled}{seats ? <small> من {seats}</small> : null}</div><div className="stat-sub">{seats ? 'في عقود الجهات' : 'لا حد مقاعد في العقود'}</div></div>
-        <div className="stat-card"><div className="stat-label">بدون جهة</div><div className="stat-value s-new">{un.total || 0}</div><div className="stat-sub">اربطهم بجهاتهم</div></div>
       </div>
+      <UnassignedTask un={un} list={list} canWrite={canWrite} onOpen={openOrg} onLinked={reload} />
       <div className="la-row between la-tracks-bar">
         <p className="la-muted">يُنسب المشارك لجهته تلقائيًا إن جاء برابطها أو من موقعها، ويبقى الانتساب محفوظًا 30 يومًا حتى يسجّل.</p>
         {canWrite && <button className="btn-sm primary" onClick={onAdd}>+ جهة جديدة</button>}
@@ -127,8 +176,8 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
         : <Empty title="لا جهات بعد" hint="الجهة ترعى مشاركيها: لها رابط دعوة ومقاعد ومنسق يتابعهم.">{canWrite && <button className="btn-sm primary" type="button" onClick={onAdd}>+ جهة جديدة</button>}</Empty>)}
       <div className="la-orgs">
         {shown.map((o) => (
-          <article key={o.id} className={`la-org${o.status === 'inactive' ? ' off' : ''}`} style={{ '--org': orgColor(o) }}>
-            <header onClick={() => onOpen(o.id)} style={{ cursor: 'pointer' }}>
+          <article key={o.id} data-org={o.id} className={`la-org${o.status === 'inactive' ? ' off' : ''}`} style={{ '--org': orgColor(o) }}>
+            <header onClick={() => openOrg(o.id)} style={{ cursor: 'pointer' }}>
               <span className="la-org-mark">{(o.short_name || o.name).slice(0, 2)}</span>
               <div><b>{o.name}</b><small>{o.sector}{o.status === 'inactive' ? ' · موقوفة' : ''}</small></div>
             </header>
@@ -141,37 +190,15 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
               <span className="la-muted">{o.stats.active_week} نشط هذا الأسبوع</span>
             </div>
             <div className="la-row la-org-acts">
-              <button className="btn-sm primary" onClick={() => onOpen(o.id)}>لوحة الجهة</button>
-              {/* فعل أساسي واحد ظاهر والثانوية في قائمة ⋯ (تدقيق 2026-11-23، المرحلة 2) */}
-              <MoreMenu label={`إجراءات أخرى لجهة «${o.name}»`} items={[
+              <button className="btn-sm primary la-org-open" onClick={() => openOrg(o.id)}>لوحة الجهة</button>
+              {/* فعل أساسي واحد ظاهر والثانوية في «إجراءات ▾» (المرحلة 10)، وأفعال الكتابة خلف canWrite */}
+              <MoreMenu text={MENU_TEXT} label={`جهة «${o.name}»`} items={[
                 { label: 'نسخ رابط الدعوة', run: () => copy(inviteUrl(o), 'نُسخ رابط الدعوة') },
                 canWrite && { label: 'تحرير', run: () => onEdit(o) },
               ]} />
             </div>
           </article>
         ))}
-        <article className="la-org none" style={{ '--org': 'var(--brand-muted-faint)' }}>
-          <header onClick={() => onOpen('none')} style={{ cursor: 'pointer' }}><span className="la-org-mark">؟</span><div><b>بدون جهة</b><small>سجّلوا دون رابط جهة</small></div></header>
-          <Seats n={un.total || 0} />
-          {(un.typed || []).length ? (
-            <div className="la-typed"><small className="la-muted">ما كتبوه في خانة الجهة، اربطه بنقرة:</small>
-              {un.typed.map((t) => (
-                <div key={t.name} className="la-row between"><span>{t.name} <small className="la-muted">{t.n}</small></span>
-                  {canWrite && list.length > 0 && (
-                    <span className="la-row">
-                      <select aria-label={`جهة ${t.name}`} value={typedTo[t.name] || ''} onChange={(e) => setTypedTo({ ...typedTo, [t.name]: e.target.value })}>
-                        <option value="">اختر جهة…</option>
-                        {list.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                      </select>
-                      <button className="la-link" disabled={!typedTo[t.name]} onClick={() => linkTyped(t)}>ربط</button>
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : <p className="la-muted">كل المشاركين مربوطون بجهاتهم.</p>}
-          <div className="la-row la-org-acts"><button className="btn-sm ghost" onClick={() => onOpen('none')}>عرض القائمة</button></div>
-        </article>
       </div>
     </>
   );
@@ -183,7 +210,7 @@ function Sources({ d, total }) {
     if (!list.length) return <p className="la-muted">لا بيانات بعد.</p>;
     return <div className="la-funnel">{list.map(([k, n]) => (
       <div key={k} className="la-fn"><span className="la-fn-l" dir={ltr ? 'ltr' : undefined}>{label(k)}</span>
-        <span className="la-fn-bar"><i style={{ width: `${((n / Math.max(1, total)) * 100).toFixed(1)}%` }} /></span><b>{n}</b></div>
+        <Meter value={n} max={total} unit="مشاركًا" label={label(k)} /></div>
     ))}</div>;
   };
   return (

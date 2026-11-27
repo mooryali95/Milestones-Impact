@@ -117,7 +117,7 @@ test('المشاركون: «+ مشارك» ظاهر والاستيراد وفا�
   const card = page.locator('.la-org', { hasText: 'جهة النور' });
   await expect(card.locator('.la-org-acts').getByRole('button', { name: 'لوحة الجهة' })).toBeVisible();
   await expect(card.getByRole('button', { name: 'نسخ رابط الدعوة' })).toHaveCount(0);
-  await card.getByRole('button', { name: 'إجراءات أخرى لجهة «جهة النور»' }).click();
+  await card.getByRole('button', { name: 'إجراءات: جهة «جهة النور»' }).click();
   await expect(page.getByRole('menu').getByRole('menuitem')).toHaveText(['نسخ رابط الدعوة', 'تحرير']);
 });
 
