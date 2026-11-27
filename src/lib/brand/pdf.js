@@ -331,7 +331,7 @@ export async function embedAssets(html, get) {
 }
 
 /** جالب المتصفح لـ embedAssets: من أصل الصفحة نفسها، نصًا أو data URI */
-async function fetchAsset(path, as) {
+export async function fetchAsset(path, as) {
   const r = await fetch(new URL(path, location.origin), { cache: 'force-cache' });
   if (!r.ok) throw new Error(`asset ${r.status}`);
   if (as === 'text') return r.text();
@@ -361,7 +361,7 @@ export async function downloadBest(meta, body, { server = null, onProgress = () 
   return 'browser';
 }
 
-function saveBlob(blob, meta) {
+export function saveBlob(blob, meta) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
