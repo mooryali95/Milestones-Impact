@@ -121,7 +121,7 @@ test('الرحلة: متطلب جديد بمربعات الاختيار، وتر
   await page.getByLabel('يعتمده المستشار بعد الإنجاز').check();
   await page.getByRole('button', { name: 'حفظ' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ stage_key: 's1', code: 'T-9', needs_review: true, required: true, dimension: null, sort: 3 });
-  await page.getByRole('button', { name: 'نقل لأسفل' }).nth(1).click();
+  await page.getByRole('button', { name: 'انقل المتطلب T-1 لأسفل' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
 });
 

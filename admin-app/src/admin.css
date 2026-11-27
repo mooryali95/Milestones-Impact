@@ -565,6 +565,7 @@ a { text-decoration: none; color: inherit; }
 .stat-card.s-total::before  { background: linear-gradient(90deg, var(--petrol-s), var(--petrol-soft)); }
 .stat-card.s-new::before    { background: linear-gradient(90deg, var(--c-new), var(--st-info-dark)); }
 .stat-card.s-replied::before { background: linear-gradient(90deg, var(--c-replied), var(--brand-copper)); }
+.stat-card.s-warn::before    { background: var(--st-warn); }
 .stat-card.s-archived::before{ background: linear-gradient(90deg, var(--c-archived), var(--brand-clay)); }
 
 .stat-label {

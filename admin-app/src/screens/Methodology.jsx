@@ -15,7 +15,7 @@ import {
 import Form from '../Form.jsx';
 import ItemQuality from './ItemQuality.jsx';
 import { ProgramMilestones } from './Milestones.jsx';
-import { useUI } from '../ui.jsx';
+import { Move, useUI } from '../ui.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import { journeyAudience, journeyAudienceAr } from '../program-reach.js';
@@ -34,22 +34,20 @@ function useEditor(reload) {
   return [setForm, node];
 }
 
-function Move({ catalog, entity, id, reload, canWrite }) {
+// النقل بمكون Move المشترك (ui.jsx، المرحلة 18): هدف 32px وtitle يسمي ما يُنقل، وإعلان الموضع الجديد، ولمن يملك canWrite فقط
+function RowMove({ catalog, entity, id, name, reload, canWrite }) {
   const { toast } = useUI();
-  if (!canWrite) return null;
-  const go = async (dir) => {
+  const ids0 = reorderIds(catalog[entity], entity, id, 0) || [];
+  const i = ids0.indexOf(id);
+  const onMove = async (dir) => {
     const ids = reorderIds(catalog[entity], entity, id, dir);
-    if (!ids) return;
+    if (!ids) return null;
     const r = await L('admin.reorder', { entity, ids, program_id: catalog.program_id });
-    if (!r.success) return toast(r.message);
+    if (!r.success) { toast(r.message); return null; }
     reload();
+    return ids.indexOf(id) + 1;
   };
-  return (
-    <>
-      <button className="la-mv" onClick={() => go(-1)} aria-label="نقل لأعلى" title="أعلى">▲</button>
-      <button className="la-mv" onClick={() => go(1)} aria-label="نقل لأسفل" title="أسفل">▼</button>
-    </>
-  );
+  return <Move name={name} onMove={onMove} canWrite={canWrite} first={i === 0} last={i === ids0.length - 1} total={ids0.length} />;
 }
 
 // ══ الرحلة والمتطلبات ══
@@ -162,7 +160,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
               <div className="la-row between">
                 <div><b>{s.sort}. {shown(s.title_ar, s)}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
                 <div className="la-row">
-                  <Move {...mv} entity="journey_stages" id={s.key} />
+                  <RowMove {...mv} entity="journey_stages" id={s.key} name={`المرحلة ${s.sort}`} />
                   {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs, stages, s.key, catalog.assessment_minutes), values: stageToForm(s), onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) })}>تحرير</button>}
                 </div>
               </div>
@@ -178,7 +176,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
                       {r.needs_review && <small className="la-chip warn">مراجعة</small>}
                     </span>
                     <span className="la-row">
-                      <Move {...mv} entity="stage_requirements" id={r.id} />
+                      <RowMove {...mv} entity="stage_requirements" id={r.id} name={`المتطلب ${r.code}`} />
                       {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: lockReqCode(reqFields(stages, catalog.learning_models || [], catalog.lab_links || [])), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
                     </span>
                   </li>
@@ -239,7 +237,7 @@ export function Assessment({ catalog, reload, canWrite }) {
                 <div className="la-row between">
                   <span><code>{q.code}</code> {q.text_ar}</span>
                   <span className="la-row">
-                    <Move catalog={catalog} reload={reload} canWrite={canWrite} entity="questions" id={q.id} />
+                    <RowMove catalog={catalog} reload={reload} canWrite={canWrite} entity="questions" id={q.id} name={`السؤال ${q.code}`} />
                     {canWrite && <button className="la-link" onClick={() => edit({
                       title: `سؤال ${q.code}`, fields: Q_SAFE, values: q,
                       onSave: save('questions', { id: q.id }), onDelete: null,
