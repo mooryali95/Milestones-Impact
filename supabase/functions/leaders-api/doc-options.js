@@ -45,6 +45,7 @@ export function withOwnerQr(options, qr) {
 }
 
 /** الكتابة من الأدمن: follow يحذف قراره، وshow وwithhold يكتبان { qr, by, at, reason } */
+/** @param {any} options @param {string} choice @param {{ by?: string | null, at?: string, reason?: string }} [meta] */
 export function withAdminQr(options, choice, { by, at = new Date().toISOString(), reason = '' } = {}) {
   if (!ADMIN_QR_CHOICES.includes(choice)) throw new Error('اختيار الرمز غير صالح');
   const { admin: _drop, ...rest } = obj(options);
