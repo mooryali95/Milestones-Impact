@@ -117,11 +117,18 @@ describe('N17: سر المهمة الدورية يُقارن بزمن ثابت',
 
 describe('N8: قفل دخول الإدارة لكل شبكة، وسقف يومي لرموز البريد', () => {
   const a = read('supabase/functions/admin-api/index.ts');
-  it('المحاولات الخاطئة تُسجَّل بعنوان شبكتها وتُحسب لها، وللبريد كله سقف أعلى', () => {
-    expect(a).toContain('const MAX_FAILS_ALL = 20;');
-    expect(a).toContain('fails().eq("ip", ip)');
-    expect(a.match(/tooManyFails\(sb, \w+\)/g) || []).toEqual([]);
-    expect(a.match(/from\("totp_attempts"\)\.insert\(\{[^}]*\}\)/g).every((x) => x.includes('ip:'))).toBe(true);
+  it('المحاولات الخاطئة تُسجَّل بعنوان شبكتها وتُحسب لها، وللبريد كله سقف أعلى، والحجز ذري قبل فحص الرمز', () => {
+    // تقرير الأمن 2026-11-27: العد والتسجيل في دالة واحدة تقفل على البريد (login_guard.ts وترحيل 20261130040000)
+    const g = read('supabase/functions/admin-api/login_guard.ts');
+    const m = read('supabase/migrations/20261130040000_admin_login_attempts_atomic.sql');
+    expect(g).toContain('export const MAX_FAILS_ALL = 20;');
+    expect(g).toContain("sb.rpc('admin_login_attempt'");
+    expect(g).toContain("fails().eq('ip', ip)");
+    expect(m).toMatch(/pg_advisory_xact_lock\(hashtextextended\('admin\.login:' \|\| p_email, 0\)\)/);
+    expect(m).toMatch(/n_ip >= p_max_ip/);
+    expect(a).not.toMatch(/tooManyFails/);
+    expect(a).not.toMatch(/from\("totp_attempts"\)\.insert/);
+    expect((a.match(/await reserveAttempt\(sb, \w+, [^)]+\)/g) || []).length).toBe(3);
   });
   it('رمز الدخول ببريد واحد محدود في اليوم، والرد لا يكشف شيئًا', () => {
     const i = a.indexOf('if (action === "login-send")');
@@ -156,7 +163,7 @@ describe('P1-02: جلسة رمز البريد لا ترتقي إلى عامل ث
     expect(b.indexOf('"TOTP غير مفعّل"')).toBeLessThan(b.indexOf('notifyAccountAndOwners('));
     const c = block('if (action === "confirm-totp")', 'await audit("confirm-totp")');
     expect(c).toContain('if (us?.[0]?.totp_enabled) return json({ success: false, message: "TOTP مفعّل بالفعل" });');
-    expect(c.indexOf('NEED_PASSKEY')).toBeLessThan(c.indexOf('verifyTotp('));
+    expect(c.indexOf('NEED_PASSKEY')).toBeLessThan(c.indexOf('useTotp('));
     expect(c).toMatch(/\.in\("action", \["setup-totp", "reset-totp"\]\)/);
   });
   it('مفتاح المرور: من له مفتاح يضيف بجلسة مفتاح، ومن له TOTP يضيف أول مفتاح بجلسة TOTP، وأول مفتاح من غير جلسة مفتاح يبلغ المالكين', () => {
