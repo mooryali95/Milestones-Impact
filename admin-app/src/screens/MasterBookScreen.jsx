@@ -11,6 +11,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import MasterBook from '../../../shared/master-book/MasterBook.jsx';
 import { L } from '../leaders.js';
+import { ScreenHead } from '../PageHeader.jsx';
+import { MENU_TEXT, MoreMenu } from './PersonShell.jsx';
+
+// مكونات المرحلتين 6 و18 تمر إلى القارئ المشترك: الترويسة الموحدة و«إجراءات ▾»
+const UI = { Head: ScreenHead, Menu: MoreMenu, menuText: MENU_TEXT };
 
 const FULL_KEY = 'mi_admin_book_full';
 const typing = (t) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(t?.tagName) || t?.isContentEditable;
@@ -45,15 +50,13 @@ export default function MasterBookScreen({ onClose, onExperts }) {
   }), []);
   return (
     <div className={`mbs${full ? ' full' : ''}`}>
+      {/* المرحلة 20: لا مسار (يكرر القائمة الجانبية)، و«ملء الشاشة» الزر الثانوي الوحيد، والرجوع يظهر في ملء الشاشة وحده ومعه Esc */}
       <div className="mbs-bar" role="navigation" aria-label="شريط الكتاب الأم">
-        <button type="button" className="btn-sm ghost" onClick={onClose} title="Esc">→ رجوع إلى لوحة الإدارة</button>
-        <ol className="mbs-crumbs" aria-label="المسار">
-          <li>لوحة الإدارة</li><li>المنهج والمحتوى</li><li aria-current="page"><b>الكتاب الأم</b></li>
-        </ol>
-        <button type="button" className="btn-sm ghost" aria-pressed={full} onClick={() => setFull(!full)}>{full ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}</button>
+        {full && <button type="button" className="btn-sm ghost" onClick={onClose} title="Esc">رجوع إلى لوحة الإدارة</button>}
+        <button type="button" className="btn-sm ghost mbs-full" aria-pressed={full} onClick={() => setFull(!full)}>{full ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}</button>
       </div>
       <div className="mbs-frame">
-        <MasterBook api={api} onClose={onClose} onExperts={onExperts} place="admin" />
+        <MasterBook api={api} onClose={onClose} onExperts={onExperts} place="admin" ui={UI} />
       </div>
     </div>
   );
