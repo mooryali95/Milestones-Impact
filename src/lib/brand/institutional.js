@@ -108,7 +108,7 @@ body { font-weight: 400; }
 .in-lock .org { display: flex; align-items: center; } .in-lock .org.plate { padding: 2.5mm 3.5mm; border: 0.25mm solid #DCE2E1; border-radius: 0; box-shadow: none; background: #FFFFFF; }
 .in-lock .org.plate.light { background: #0B272F; }
 .in-lock .org img, .in-lock .by svg { height: 12mm; width: auto; max-width: 48mm; object-fit: contain; display: block; }
-.in-lock .org.t img { max-width: 14mm; } .in-lock .by svg { height: 7mm; }
+.in-lock .org.t img { max-width: 14mm; } .in-lock .org.w img { max-width: 64mm; } .in-lock .by svg { height: 7mm; }
 .in-lock .org .nm { font-size: ${TS.h3}pt; font-weight: 500; color: #0B272F; }
 .in-lock .dv { display: block; width: 0.3mm; align-self: stretch; margin: 0 6mm; background: #B08D57; }
 .in-lock .org.plate + .dv { align-self: center; height: 12mm; }

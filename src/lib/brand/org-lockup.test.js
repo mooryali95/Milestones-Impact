@@ -97,6 +97,12 @@ describe('العلامة المشتركة على الغلاف', () => {
     expect(head).toContain('class="ph-mi"');
     expect(head).toMatch(/#pdf-head \.ph-mi svg\{height:4mm/);
   });
+  it('علامة المنصة في الطرف المقابل: الهامش التلقائي فيزيائي، فاتجاهها ltr يقلب الهامش المنطقي إلى اليسار فتلتصق بالجهة', () => {
+    const p = documentHtml(meta({ name: 'ج', logo: png(400, 100) }), '', { pdf: true });
+    const mi = p.match(/<span style="([^"]*)" class="ph-mi">/)[1];
+    expect(mi).toMatch(/margin-right:auto/);
+    expect(mi).not.toMatch(/margin-inline-start:auto/);
+  });
 });
 
 describe('الشهادة', () => {
@@ -110,6 +116,13 @@ describe('الشهادة', () => {
     expect(rule(h, '.brands .org.t img')).toMatch(/max-width: 18mm/);
     expect(rule(h, '.brands .org small')).toMatch(/9pt/);
     expect(h).toContain('class="org t"');
+  });
+  it('العريض يأخذ عرضه الأقصى 64 مم كما في الغلاف، فلا يصغر عن العلامة إلى 9 مم', () => {
+    const h = certificateHtml({ ...base, org: { name: 'هيئة', logo: png(500, 100) } }, '');
+    expect(h).toContain('class="org w"');
+    expect(rule(h, '.brands .org.w img')).toMatch(/max-width: 64mm/);
+    const inst = readFileSync('src/lib/brand/institutional.js', 'utf8');
+    expect(inst).toMatch(/\.in-lock \.org\.w img \{[^}]*max-width: 64mm/);
   });
 });
 

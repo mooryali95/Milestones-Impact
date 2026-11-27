@@ -367,7 +367,7 @@ function runningHead(meta) {
   const color = (b && brandColor(b.color)) || C.gold;
   const org = b ? (logo ? `<img src="${esc(logo)}" alt="">` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
   return `<div id="pdf-head" style="position:absolute;top:0;left:0;width:794px;height:${mmPx(PAGE_MM.top)}px;background:#fff;direction:rtl;display:flex;align-items:center;gap:10px;padding:14px ${mmPx(PAGE_MM.side)}px 0;font:400 ${TYPE_SCALE.footer}pt 'Noto Kufi Arabic',sans-serif;color:${C.muted}">
-<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:6mm">${org}</span>` : ''}</span><span style="display:flex;align-items:center;direction:ltr;margin-inline-start:auto" class="ph-mi">${LOGO}</span>
+<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:6mm">${org}</span>` : ''}</span><span style="display:flex;align-items:center;direction:ltr;margin-right:auto" class="ph-mi">${LOGO}</span>
 <i style="position:absolute;bottom:12px;left:${mmPx(PAGE_MM.side)}px;right:${mmPx(PAGE_MM.side)}px;height:1px;background:${color};opacity:.7"></i>
 </div><style>#pdf-head .ph-org img{height:6mm;max-width:40mm;object-fit:contain;display:block}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:4mm;width:auto;display:block}</style>`;
 }

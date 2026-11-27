@@ -139,6 +139,7 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 40
 .brands .org { display: grid; justify-items: center; gap: 1mm; }
 .brands .org img { height: 15mm; width: auto; max-width: 48mm; object-fit: contain; display: block; }
 .brands .org.t img { max-width: 18mm; }
+.brands .org.w img { max-width: 64mm; }
 .brands .org small { font: 400 9pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; direction: rtl; }
 .main { align-self: center; }
 .kind-en { font: 400 8pt "Noto Sans", sans-serif; letter-spacing: .28em; color: ${C.gold}; text-transform: uppercase; margin: 0 0 1.5mm; }
