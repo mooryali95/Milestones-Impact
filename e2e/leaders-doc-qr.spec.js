@@ -48,7 +48,7 @@ test('القائد: يمنع الرمز من وثيقته المعتمدة بم�
   await openLeader(page, srv);
   const sw = page.getByRole('checkbox', { name: /إظهار رمز التحقق في وثيقتي المعتمدة/ });
   await expect(sw).toBeChecked();
-  await expect(page.getByText(/من يمسح الرمز يرى أن الوثيقة أصلية/)).toBeVisible();
+  await expect(page.getByText(/من يمسح الرمز يرى أن بصمة الوثيقة مسجلة/)).toBeVisible();
   await shot(page, 'leader-on');
   await page.locator('.cp-qr .sh-toggle').click();
   await expect.poll(() => srv.calls.find((c) => c.action === 'capstone.options')).toMatchObject({ qr: false });
@@ -101,11 +101,19 @@ test('الأدمن: ثلاثة خيارات، والمنع بسبب يُرسل a
   await shot(page, 'admin-withhold');
 });
 
-test('التحقق المحجوب: وثيقة صحيحة بلا اسم المبادرة ولا الجهة', async ({ page }) => {
-  await page.route(/functions\/v1\/leaders-api/, (r) => r.fulfill({ json: { success: true, found: true, authentic: true, withheld: true, document: { fingerprint: '1A2B-3C4D-5E6F-7A8B', issuer: 'Milestone Impact' } } }));
+test('التحقق المحجوب: بصمة مسجلة ومحتوى محجوب، بلا ادعاء صحة ولا اسم المبادرة ولا الجهة', async ({ page }) => {
+  await page.route(/functions\/v1\/leaders-api/, (r) => r.fulfill({ json: { success: true, found: true, registered: true, withheld: true, document: { fingerprint: '1A2B-3C4D-5E6F-7A8B', issuer: 'Milestone Impact' } } }));
   await page.goto(`${APP}v/doc/1A2B-3C4D-5E6F-7A8B`);
-  await expect(page.getByText('وثيقة صحيحة صادرة عن Milestone Impact، وتفاصيلها محجوبة بقرار صاحبها')).toBeVisible();
+  await expect(page.getByText('هذه البصمة مسجلة لوثيقة معتمدة لدى Milestone Impact، ومحتواها محجوب بقرار صاحبها، فلا يمكن هنا مطابقة ما بين يديك')).toBeVisible();
+  await expect(page.getByText('وثيقة معتمدة وأصلية', { exact: false })).toHaveCount(0);
   await expect(page.getByText('1A2B-3C4D-5E6F-7A8B')).toBeVisible();
   await expect(page.getByText('الجهة', { exact: true })).toHaveCount(0);
   await shot(page, 'verify-withheld');
+});
+
+test('التحقق الظاهر: بصمة مسجلة وبيانات الغلاف، بلا ادعاء أصالة المحتوى', async ({ page }) => {
+  await page.route(/functions\/v1\/leaders-api/, (r) => r.fulfill({ json: { success: true, found: true, registered: true, document: { fingerprint: '1A2B-3C4D-5E6F-7A8B', ref: 'MI-CP-V1', initiative: 'مبادرة', org: 'جهة', issuer: 'Milestone Impact' } } }));
+  await page.goto(`${APP}v/doc/1A2B-3C4D-5E6F-7A8B`);
+  await expect(page.getByText('طابقها مع غلاف ما بين يديك', { exact: false })).toBeVisible();
+  await expect(page.getByText(/أصلية|صحيحة/)).toHaveCount(0);
 });

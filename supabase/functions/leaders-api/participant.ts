@@ -8,6 +8,7 @@ import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { deviceOf } from '../_shared/login-device.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
+import { uploadRefusal, UPLOAD_PURPOSES } from './upload-limits.js';
 import { saveEffort } from './effort.ts';
 import { markAliasVerified, participantByEmail } from './account-emails.ts';
 import { assertPhoneFree, isPhoneConflict, phoneConflictFail } from './phone-guard.ts';
@@ -890,6 +891,21 @@ export async function uploadUrl(p: any, b: Body) {
   const purpose = b.purpose === 'cv' ? 'cv' : 'evidence';
   const ext = String(b.ext || '').toLowerCase();
   if (!['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg'].includes(ext)) throw new Fail('نوع الملف غير مدعوم. ارفع PDF أو Word أو Excel أو PowerPoint أو صورة.');
+  // حد يومي لكل مشارك (upload-limits.js): عدد الروابط الصادرة من سجل التدقيق، والحجم مما رُفع تحت مساره. تعذّر العد يرفض ولا يفتح
+  // يُكتب سطر الرابط أولًا ثم يُعد، فالطلبات المتزامنة يرى كل منها سطور غيره ولا يعبر الحد إلا ثلاثون (تقرير الأمن الثالث).
+  // السطر يبقى إن رُفض الطلب فيُحسب على صاحبه. وحجم كل ملف مسقوف في المخزن نفسه (file_size_limit في الترحيل)
+  const dayAgo = new Date(Date.now() - 864e5).toISOString();
+  await audit('participant', p.id, 'upload.url', 'participants', p.id, null, { purpose, ext });
+  const issued = await db.from('audit_log').select('id', { count: 'exact', head: true })
+    .eq('actor_type', 'participant').eq('actor', p.id).eq('action', 'upload.url').gte('created_at', dayAgo);
+  if (issued.error) throw new Fail('تعذّر رفع الملف. حاول مرة أخرى.', 503);
+  const files: any[] = [];
+  for (const dir of UPLOAD_PURPOSES) {
+    const { data, error } = await storage.from(BUCKET).list(`${p.id}/${dir}`, { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) throw new Fail('تعذّر رفع الملف. حاول مرة أخرى.', 503);
+    files.push(...(data || []));
+  }
+  if (uploadRefusal({ issued: Math.max(0, (issued.count ?? 1) - 1), files })) throw new Fail('رفعت ملفات كثيرة اليوم، حاول غدًا', 429, 'rate');
   const path = `${p.id}/${purpose}/${crypto.randomUUID()}.${ext}`;
   const { data, error } = await storage.from(BUCKET).createSignedUploadUrl(path);
   if (error) throw new Fail('تعذّر رفع الملف. حاول مرة أخرى.', 500);

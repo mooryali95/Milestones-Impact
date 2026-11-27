@@ -732,7 +732,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .vf-card { background: var(--surface); border: 1px solid var(--line); border-radius: 2px; padding: 28px; text-align: center; }
 .vf-state { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 300; margin: 6px 0 4px; }
 .vf-state i { width: 12px; height: 12px; transform: rotate(45deg); background: var(--ok); }
-.vf-state.revoked i, .vf-state.replaced i, .vf-state.invalid i, .vf-state.missing i { background: var(--brand-muted-ghost); }
+.vf-state.revoked i, .vf-state.replaced i, .vf-state.invalid i, .vf-state.missing i, .vf-state.registered i { background: var(--brand-muted-ghost); }
 .vf-name { font-size: 26px; font-weight: 300; margin: 18px 0 2px; }
 .vf-en { direction: ltr; letter-spacing: .18em; text-transform: uppercase; font-size: 14px; color: var(--muted); margin: 0 0 16px; }
 .vf dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; text-align: start; margin: 18px 0; padding-top: 18px; border-top: 1px solid var(--line); font-size: 14px; }

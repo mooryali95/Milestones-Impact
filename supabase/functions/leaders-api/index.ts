@@ -113,7 +113,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     const commitments: any = await CM.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) }));
     return { ...r, commitments, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), sponsors, coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth({ sponsorExpired: sponsors.expired || 0 }).catch((e) => ({ sent: false, reason: String(e?.message || e) })),
       // تنظيف دوري: رموز الدخول والجلسات المنتهية وسجلات التحقق وعناوين IP بعد 90 يومًا
-      purge: await S.purge().catch((e) => ({ error: String(e?.message || e) })) };
+      purge: await S.purge().catch((e) => ({ error: String(e?.message || e) })),
+      // والملفات اليتيمة في المخزن الخاص بعد 48 ساعة (orphan-files.ts): تعذّر القراءة يوقف الحذف كله
+      orphan_files: await (await import('./orphan-files.ts')).sweepOrphans().catch((e) => ({ removed: 0, error: String(e?.message || e) })) };
   },
   'coord.auth-start': C.authStart,
   'coord.auth-verify': C.authVerify,

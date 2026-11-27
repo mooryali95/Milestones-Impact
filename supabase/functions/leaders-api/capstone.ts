@@ -407,13 +407,15 @@ export async function verifyDoc(b: Body, ctx: { ip: string | null; ua: string | 
   // السجل اختياري: قبل ترحيله يعمل التحقق ولا يُسجَّل
   await db.from('document_checks').insert({ fingerprint: valid ? fp : null, found: !!row, ip: ctx.ip, user_agent: ctx.ua }).then(() => null, () => null);
   if (!row) return { success: true, found: false };
-  // المنع: رد محايد يثبت الصحة ولا يكشف شيئًا، بلا اسم المبادرة ولا الجهة ولا البرنامج (نهج الشهادات القابلة للتحقق)
+  // المنع: رد محايد يثبت أن البصمة مسجلة ولا يكشف شيئًا، بلا اسم المبادرة ولا الجهة ولا البرنامج. ولا يقول authentic: المحتوى
+  // لا يُعرض فلا يُطابَق، وملف بالبصمة نفسها ومحتوى آخر يُرد عليه بالجواب نفسه (تقرير الأمن الأول)
   if (!effectiveQr(row.doc_options).qr) {
-    return { success: true, found: true, authentic: true, withheld: true, message: DOC_VERIFY_AR.withheld, document: { fingerprint: fp, issuer: 'Milestone Impact' } };
+    return { success: true, found: true, registered: true, withheld: true, message: DOC_VERIFY_AR.withheld, document: { fingerprint: fp, issuer: 'Milestone Impact' } };
   }
+  // الظاهر كذلك مسجلة لا أصلية: الخادم لا يطابق المحتوى، والبصمة نص مطبوع يُنسخ
   const s = row.snapshot || {}, m = { ...(s.meta || {}), ...(s.issued?.meta || {}) };
   return {
-    success: true, found: true, authentic: true,
+    success: true, found: true, registered: true,
     document: {
       fingerprint: fp, ref: `${m.ref || 'MI-CP'}-V${m.version || 1}`, initiative: m.initiative || null,
       form: m.doc_form?.name || null, org: m.org?.name || null, program: m.cohort_brand?.program || null,
