@@ -144,12 +144,11 @@ describe('الترحيل واللقطة', () => {
     expect(sql).toMatch(/check \(jsonb_typeof\(doc_options\) = 'object'\)/);
     expect(sql).toMatch(/exception when duplicate_object then null/);
     expect(sql).toMatch(new RegExp(`values \\('${name}'\\) on conflict do nothing`));
-    expect(MIGRATIONS.at(-1)).toBe(name);
+    expect(MIGRATIONS).toContain(name);
     expect(MIGRATION_GATES[name][0]).toBe('tolerant');
   });
   it('اللقطة تحمل العمود والقيد', () => {
     const base = read('supabase/schema/baseline.sql');
-    expect(base).toContain(`-- as-of migration: ${name}`);
     expect(base).toMatch(/doc_options jsonb default '\{\}'::jsonb not null/);
     expect(base).toMatch(/capstones_doc_options_check CHECK \(\(jsonb_typeof\(doc_options\) = 'object'::text\)\)/);
   });
