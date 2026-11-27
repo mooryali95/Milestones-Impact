@@ -5,20 +5,21 @@
 // والساعات والتقييم تُبنى فوقه في المراحل التالية. سعر الساعة للإدارة وحدها.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
+import { Empty, LoadError, Meter, Missing, NoMatch, Spinner, StatusChip, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, recallState, sortRows } from '../filters.js';
-import { RequestsBoard, requestView } from './ExpertMatch.jsx';
+import { attentionCount, RequestsBoard, requestView } from './ExpertMatch.jsx';
 import { readQuery } from '../route.js';
-import { COACH_STATUS_ADMIN as COACH_AR, DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS_ADMIN as COACH_AR, COMMITTEE_STATE, COMMITTEE_STATE_TONE, DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, EXPERT_STATUS_TONE, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
 import { COMMITTEE_AR, committeeApplication, committeeApplicationAr, CONTENT_TRACK_AR, contentOnly, expertService } from '../../../supabase/functions/leaders-api/committees.js';
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
 import { cohortStateAr } from '../methodology.js';
 import { periodAr, scopeText } from '../team.js';
 import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
-const TONE = { applied: 'warn', invited: '', active: 'ok', paused: '', suspended: 'bad', rejected: '' };
+// الحالة بشارة StatusChip وحدها، والنبرة من EXPERT_STATUS_TONE في labels (المرحلة 16)
+const ExpertChip = ({ status }) => <StatusChip status={status} labels={EXPERT_STATUS} tones={EXPERT_STATUS_TONE} />;
 const ROLES = Object.entries(EXPERT_ROLE_AR);
 const LANG = { ar: 'العربية', en: 'English' };
 const ACT = { apply: 'قدّم طلب الانضمام', create: 'أُضيف', update: 'عُدّل الملف', invite: 'أُرسلت الدعوة', active: 'اعتُمد', paused: 'أُوقف مؤقتًا', suspended: 'أُوقف', rejected: 'لم يُقبل' };
@@ -222,7 +223,7 @@ function Profile({ id, canWrite, onBack }) {
           {committeeApplication(e) && <p className="ex-app"><span className="la-chip warn">{CONTENT_TRACK_AR}</span> {committeeApplicationAr(e)}</p>}
         </div>
         <div className="ex-side">
-          <span className={`la-chip ${TONE[e.status]}`}>{EXPERT_STATUS[e.status]}</span>
+          <ExpertChip status={e.status} />
           <span className="la-chip">{serviceAr(e)}</span>
           {canWrite && <div className="la-row">{(NEXT[e.status] || []).map(([to, l, tone]) => <button key={to} className={`btn-sm ${tone}`} onClick={() => move(to, l)}>{l}</button>)}
             {['applied', 'invited', 'active', 'paused'].includes(e.status) && <button className="btn-sm ghost" onClick={async () => { const r = await L('admin.expert-invite', { id: e.id }); toast(r.success ? 'أُرسلت الدعوة' : r.message); if (r.success) load(); }}>إرسال دعوة</button>}</div>}
@@ -247,7 +248,9 @@ function Profile({ id, canWrite, onBack }) {
 const SORTS = { name: (e) => e.full_name, hours: (e) => e.weekly_hours, given: (e) => e.stats?.hours || null, status: (e) => EXPERT_STATUS[e.status] };
 const roleLabels = Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]));
 const EXPERT_COLS = [
-  { key: 'name', label: 'الخبير', width: 26, get: (e) => e.full_name }, { key: 'email', label: 'البريد', width: 30, get: (e) => e.email },
+  // البريد والجوال غير مختارين افتراضيًا (sensitive)، كالمشاركين: يُصدَّران إن اختارهما المدير صراحة
+  { key: 'name', label: 'الخبير', width: 26, get: (e) => e.full_name }, { key: 'email', label: 'البريد', width: 30, sensitive: true, get: (e) => e.email },
+  { key: 'phone', label: 'الجوال', width: 18, sensitive: true, get: (e) => e.phone },
   { key: 'title', label: 'المسمى', width: 26, get: (e) => e.title }, { key: 'roles', label: 'الأدوار', width: 24, get: (e) => (e.roles || []).map((k) => roleLabels[k] || k) },
   { key: 'dims', label: 'الأبعاد', width: 24, get: (e) => (e.dimensions || []).map((k) => DIM_AR[k] || k) },
   { key: 'levels', label: 'المستويات', width: 20, get: (e) => (e.levels || []).map((k) => LEVEL_AR[k] || k) },
@@ -265,18 +268,58 @@ export function gridAfterBoardLink(state, kept) {
   return { ...state, ...back, view: PRESETS.some((p) => p.key === k.view) ? k.view : '' };
 }
 
+// تبويبا الشاشة (المرحلة 16): الطلبات والشبكة، والتبويب في الرابط ?tab=requests|network
+export const EXPERT_TABS = ['requests', 'network'];
+// التبويب الظاهر: الصريح في الرابط، ثم رابط «ينتظرني» (?view=attention) يفتح الطلبات، ثم الطلبات إن كان فيها ما يحتاج
+// تدخلًا وإلا الشبكة. null ما دامت الطلبات لم تُحمَّل ولا صريح (لا قفز قبل معرفة الرقم). الافتراضي لا يُكتب في الرابط
+// تعذّر تحميل الطلبات (failed) يفتح الطلبات لتظهر رسالة الخطأ، لا الشبكة كأن لا شيء يحتاج تدخلًا
+export function expertTab({ tab = '', reqView = '', attention = null, failed = false } = {}) {
+  if (EXPERT_TABS.includes(tab)) return tab;
+  if (reqView || failed) return 'requests';
+  if (attention == null) return null;
+  return attention > 0 ? 'requests' : 'network';
+}
+// الطاقة غير المحددة: حقل مخفي في شريط الشبكة يبلغه رابط «لم تُحدد ساعات متاحة»
+const noCapacity = (e) => e.weekly_hours == null || e.weekly_hours === '';
+const CAP_FIELD = { key: 'cap', label: 'الطاقة', hidden: true, get: (e) => (noCapacity(e) ? 'none' : 'set'), options: [['none', 'لم تُحدد طاقته']] };
+
+// شريط اللجان (المرحلة 16): اسم اللجنة وعدد أعضائها وشارة اكتمالها ونص فجواتها. لجنة بلا أعضاء تظهر بـEmpty وفعل واحد
+// لمن يكتب يفتح نموذج الخبير ولجنتها محددة، فيبقى committees في ملف الخبير المصدر الواحد للعضوية
+function Committees({ list, canWrite, onAdd, onShow }) {
+  if (!list?.length) return null;
+  return (
+    <section className="ex-committees" aria-label="اللجان">
+      <h3 className="ex-committees-h">اللجان</h3>
+      <ul className="ex-committees-list">{list.map((c) => (
+        <li key={c.key} className="la-card ex-committee">
+          <div className="la-row between"><b>{c.title}</b><StatusChip status={c.ready ? 'ready' : 'gaps'} labels={COMMITTEE_STATE} tones={COMMITTEE_STATE_TONE} /></div>
+          {c.members.length ? (
+            <button type="button" className="la-link" onClick={() => onShow(c.key)}>{countAr(c.members.length)}</button>
+          ) : (
+            <Empty compact title={c.gaps?.[0] || 'لا أعضاء بعد'}>{canWrite && <button type="button" className="btn-sm primary" onClick={() => onAdd(c.key)}>أضف عضوًا</button>}</Empty>
+          )}
+          {c.members.length > 0 && !c.ready && c.gaps?.length > 0 && <small className="la-muted ex-gaps">{c.gaps.join('، ')}</small>}
+        </li>
+      ))}</ul>
+    </section>
+  );
+}
+const countAr = (n) => (n === 1 ? 'عضو واحد' : n === 2 ? 'عضوان' : n <= 10 ? `${n} أعضاء` : `${n} عضوًا`);
+
 export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
   const [d, setD] = useState(null);
-  const [adding, setAdding] = useState(false);
+  const [reqs, setReqs] = useState(null);
+  const [adding, setAdding] = useState(null);
   // رابط «ينتظرني» (?view=attention) يفتح لوحة طلبات الإسناد على عرضه. يُقرأ قبل شريط الشبكة الذي يقرأ العنوان نفسه
   // وما تركه المدير في شبكة الخبراء يُحفظ قبل أن يكتب الشريط حالة الرابط فوقه، فيعود إليها
   const [entry] = useState(() => { const view = requestView(readQuery()); return { view, kept: view ? recallState('experts') : null }; });
   const reqView = entry.view;
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source', 'committee', 'sort'], {}, { scope: 'experts' });
-  // عرض اللوحة ليس عرضًا للشبكة: لا يبقى في شريطها ولا في عنوانها
-  useEffect(() => { if (f.view && !PRESETS.some((p) => p.key === f.view)) replaceF((s) => gridAfterBoardLink(s, entry.kept)); }, []); // eslint-disable-line
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source', 'committee', 'cap', 'sort', 'tab'], {}, { scope: 'experts' });
+  // عرض اللوحة ليس عرضًا للشبكة: لا يبقى في شريطها ولا في عنوانها، والتبويب المتروك لا يغلب رابط «ينتظرني»
+  useEffect(() => { if (f.view && !PRESETS.some((p) => p.key === f.view)) replaceF((s) => ({ ...gridAfterBoardLink(s, entry.kept), tab: '' })); }, []); // eslint-disable-line
   const load = useCallback(async () => setD(await L('admin.experts')), []);
-  useEffect(() => { if (!expertId) load(); }, [load, expertId]);
+  const loadReqs = useCallback(async () => setReqs(await L('admin.expert-requests')), []);
+  useEffect(() => { if (!expertId) { load(); loadReqs(); } }, [load, loadReqs, expertId]);
   const all = d?.experts || [];
   const fields = useMemo(() => [
     { key: 'role', label: 'الأدوار', get: (e) => e.roles, options: ROLES.map(([k, [l]]) => [k, l]) },
@@ -284,63 +327,100 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
     { key: 'level', label: 'المستويات', get: (e) => e.levels, options: Object.entries(LEVEL_AR) },
     { key: 'source', label: 'المصادر', get: (e) => e.source, options: [['application', 'طلب انضمام'], ['admin', 'أضافته الإدارة']] },
     { key: 'committee', label: 'اللجان', get: (e) => e.committees || [], options: Object.entries(COMMITTEE_AR) },
+    CAP_FIELD,
   ], []);
-  const rows = useMemo(() => sortRows(applyFilters(all, { fields, presets: PRESETS, text: (e) => [e.full_name, e.email, e.title, ...(e.sectors || [])].join(' ') }, f), SORTS, f.sort), [all, f, fields]);
+  // التبويب ليس فلترًا: لا يدخل التصفية ولا «امسح الكل»
+  const filt = useMemo(() => ({ ...f, tab: '' }), [f]);
+  const rows = useMemo(() => sortRows(applyFilters(all, { fields, presets: PRESETS, text: (e) => [e.full_name, e.email, e.title, ...(e.sectors || [])].join(' ') }, filt), SORTS, f.sort), [all, filt, fields, f.sort]);
   const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
+  const attention = reqs?.success ? attentionCount(reqs.requests) : null;
+  const tab = expertTab({ tab: f.tab, reqView, attention, failed: !!reqs && !reqs.success });
 
   if (expertId) return <Profile id={expertId} canWrite={canWrite} onBack={() => onOpen(null)} />;
   const active = all.filter((e) => e.status === 'active');
   // خبراء الرحلة وحدهم في العدّ، وأعضاء اللجان بلا دور سطرٌ تحته
   const journeyActive = active.filter((e) => (e.roles || []).length);
-  const hours = active.reduce((a, e) => a + (e.weekly_hours || 0), 0);
+  const hours = active.reduce((a, e) => a + (Number(e.weekly_hours) || 0), 0);
+  const given = Math.round(all.reduce((a, e) => a + (e.stats?.hours || 0), 0) * 10) / 10;
+  const pickTab = (t) => setF({ tab: t });
+  const tabKey = (ev) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(ev.key)) return;
+    ev.preventDefault();
+    const i = EXPERT_TABS.indexOf(tab);
+    const next = ev.key === 'Home' ? 0 : ev.key === 'End' ? EXPERT_TABS.length - 1 : (i + (ev.key === 'ArrowLeft' ? 1 : -1) + EXPERT_TABS.length) % EXPERT_TABS.length;
+    pickTab(EXPERT_TABS[next]);
+    ev.currentTarget.querySelector(`#ex-tab-${EXPERT_TABS[next]}`)?.focus();
+  };
+  const toNetwork = (patch) => { setF({ ...patch, tab: 'network' }); };
+  const clearNet = () => { const t = f.tab; clearF(); if (t) setF({ tab: t }); };
+  const v = (x) => (d ? x : <Missing state="loading" />);
+  const TAB_TEXT = {
+    requests: `طلبات الإسناد${attention != null ? ` (${attention} يحتاج تدخلًا)` : ''}`,
+    network: `شبكة الخبراء${d?.success ? ` (${all.length})` : ''}`,
+  };
   return (
     <div className="ex">
-      <div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">خبراء نشطون</div><div className="stat-value s-replied">{d ? journeyActive.length : '·'}</div><div className="stat-sub">من {all.length} في الشبكة{active.length > journeyActive.length ? ` · أعضاء لجان بلا دور: ${active.length - journeyActive.length}` : ''}</div></div>
-        <div className="stat-card"><div className="stat-label">طلبات بانتظارك</div><div className="stat-value s-new">{d ? counts.applied : '·'}</div><div className="stat-sub">طلب انضمام</div></div>
-        <div className="stat-card"><div className="stat-label">ساعات مقدّمة</div><div className="stat-value">{d ? Math.round(all.reduce((a, e) => a + (e.stats?.hours || 0), 0) * 10) / 10 : '·'}</div><div className="stat-sub">من {hours} ساعة متاحة أسبوعيًا</div></div>
+      {/* صف الأرقام (المرحلة 16): أربع بطاقات بالبطاقة الموحدة، واللجنتان خرجتا إلى شريطهما لأنهما قائمتا أسماء */}
+      <div className="stats-grid ex-stats">
+        <div className="stat-card"><div className="stat-label">خبراء نشطون</div><div className="stat-value s-replied">{v(journeyActive.length)}</div>
+          {d && <div className="stat-sub">من {all.length} في الشبكة{active.length > journeyActive.length ? ` · أعضاء لجان بلا دور: ${active.length - journeyActive.length}` : ''}</div>}</div>
+        <div className="stat-card"><div className="stat-label">طلبات بانتظارك</div><div className="stat-value s-new">{v(counts.applied)}</div><div className="stat-sub">طلب انضمام</div></div>
+        <div className="stat-card"><div className="stat-label">ساعات مقدّمة</div>
+          {!d ? <div className="stat-value"><Missing state="loading" /></div> : hours > 0 ? (
+            <><div className="stat-value">{given}</div><div className="stat-sub"><Meter value={given} max={hours} label="ساعات مقدّمة من المتاحة أسبوعيًا" unit="ساعة" /></div></>
+          ) : (
+            <><div className="stat-value">{given}</div><div className="stat-sub">لم تُحدد ساعات متاحة · <button type="button" className="la-link" onClick={() => toNetwork({ cap: 'none' })}>اعرض من لم تُحدد طاقته</button></div></>
+          )}</div>
         <div className="stat-card ex-cover"><div className="stat-label">التغطية بالأدوار</div>
-          <div className="ex-cover-list">{ROLES.map(([k, [l]]) => <span key={k}><b>{active.filter((e) => e.roles.includes(k)).length}</b>{l}</span>)}</div></div>
-        {/* لجنتا المحتوى والقياس من سجل الخبراء نفسه (committees.js): من فيهما وما ينقص كل لجنة */}
-        {(d?.committees || []).map((c) => (
-          <div key={c.key} className="stat-card ex-committee"><div className="stat-label">{c.title}</div>
-            <div className="ex-cover-list">
-              {c.members.length ? c.members.map((m) => <span key={m.id}>{m.name}</span>) : <span className="la-muted">لا أعضاء</span>}
-            </div>
-            {c.ready ? <small className="la-chip ok">مكتملة</small> : <small className="la-chip warn">{c.gaps.join('، ')}</small>}
-          </div>
+          {d ? <div className="ex-cover-list">{ROLES.map(([k, [l]]) => <span key={k}><b>{active.filter((e) => (e.roles || []).includes(k)).length}</b>{l}</span>)}</div> : <Missing state="loading" />}</div>
+      </div>
+      {/* لجنتا المحتوى والقياس من سجل الخبراء نفسه (committees.js): العدد والاكتمال وما ينقص */}
+      <Committees list={d?.committees} canWrite={canWrite} onShow={(k) => toNetwork({ committee: k })}
+        onAdd={(k) => { setAdding({ committees: [k] }); setF({ tab: 'network' }); }} />
+
+      <div className="la-subtabs ex-tabs" role="tablist" aria-label="أقسام الخبراء" aria-busy={!tab} onKeyDown={tabKey}>
+        {EXPERT_TABS.map((t) => (
+          <button key={t} id={`ex-tab-${t}`} type="button" role="tab" aria-selected={tab === t} aria-controls={`ex-panel-${t}`} tabIndex={tab === t ? 0 : -1}
+            className={tab === t ? 'on' : ''} onClick={() => pickTab(t)}>{TAB_TEXT[t]}</button>
         ))}
       </div>
-      <RequestsBoard canWrite={canWrite} onPerson={onPerson} view={reqView} />
-      {adding && <ExpertForm isNew canWrite={canWrite} onCancel={() => setAdding(false)} onSaved={(e) => { setAdding(false); onOpen(e.id); }} />}
-      <section className="la-card">
-        <div className="la-row between"><h3>شبكة الخبراء</h3>{canWrite && !adding && <button className="btn-sm primary" onClick={() => setAdding(true)}>+ خبير</button>}</div>
-        <><p className="la-muted">ينضم الخبير بدعوة أو بطلب، ولا يُسند إليه شيء قبل اعتماده.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>ينضم الخبير بدعوة منك أو بطلب من صفحة «انضم كخبير» بمساريها: خبير الرحلة، وخبير المحتوى (طلب عضوية لجنة). لا يُسند إليه شيء ولا يُفتح له الكتاب قبل اعتماده.</p></details></>
-        {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
-          <FilterBar scope="experts" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
-            shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع"
-            capped={d.capped ? { limit: d.limit } : null}
-            actions={<ExportButton scope="experts" meta={{ kind: 'EXP', title: 'شبكة الخبراء', sheet: 'الخبراء', file: 'Experts' }} columns={EXPERT_COLS} all={all} filtered={rows} noun="خبير" />} />
-          {!all.length ? <Empty title="لا خبراء بعد" hint="أضف أول خبير، أو شارك رابط «انضم كخبير»." /> : (
-            <div className="table-wrap"><table className="data-table la-cards ex-table t24">
-              <thead><tr><SortTh k="name" state={f} set={setF}>الخبير</SortTh><th>الأدوار</th><th>الأبعاد</th><SortTh k="hours" state={f} set={setF}>الطاقة</SortTh><SortTh k="given" state={f} set={setF}>ما قدّمه</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
-              <tbody>{rows.length ? rows.map((e) => (
-                <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>
-                  <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small>
-                    {e.status === 'applied' && committeeApplication(e) && <><br /><span className="la-chip warn" title={committeeApplicationAr(e)}>{CONTENT_TRACK_AR}</span> <small className="la-muted">{committeeApplicationAr(e)}</small></>}</td>
-                  <td data-label="الأدوار">{contentOnly(e) ? <span className="la-chip">عضو لجنة، لا يخدم في الرحلة</span> : <Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} />}
-                    {expertService(e).journey && expertService(e).content && <><br /><span className="la-chip ok">يخدم أيضًا في {(e.committees || []).map((k) => COMMITTEE_AR[k]).filter(Boolean).join(' و')}</span></>}
-                    {e.committees?.length > 0 && <><br /><Chips list={e.committees} labels={COMMITTEE_AR} /></>}</td>
-                  <td data-label="الأبعاد"><Chips list={e.dimensions} labels={DIM_AR} /></td>
-                  <td data-label="الطاقة">{e.weekly_hours != null ? `${e.weekly_hours} س/أسبوع` : '·'}</td>
-                  <td data-label="ما قدّمه">{e.stats?.attended ? `${e.stats.hours} ساعة · ${e.stats.participants} مشارك` : <span className="la-muted">·</span>}</td>
-                  <td data-label="الحالة"><span className={`la-chip ${TONE[e.status]}`}>{EXPERT_STATUS[e.status]}</span></td>
-                </tr>
-              )) : <tr><td colSpan={6}><NoMatch what="خبراء" /></td></tr>}</tbody>
-            </table></div>
-          )}
-        </>}
-      </section>
+      {!tab && <div role="status" aria-live="polite"><Spinner /></div>}
+      <div id="ex-panel-requests" role="tabpanel" aria-labelledby="ex-tab-requests" hidden={tab !== 'requests'}>
+        {tab === 'requests' && <RequestsBoard canWrite={canWrite} onPerson={onPerson} view={reqView} data={reqs} onReload={loadReqs} />}
+      </div>
+      <div id="ex-panel-network" role="tabpanel" aria-labelledby="ex-tab-network" hidden={tab !== 'network'}>
+        {tab === 'network' && (<>
+          {adding && <ExpertForm isNew initial={adding} canWrite={canWrite} onCancel={() => setAdding(null)} onSaved={(e) => { setAdding(null); onOpen(e.id); }} />}
+          <section className="la-card">
+            <div className="la-row between"><h3>شبكة الخبراء</h3>{canWrite && !adding && <button className="btn-sm primary" onClick={() => setAdding({})}>+ خبير</button>}</div>
+            <><p className="la-muted">ينضم الخبير بدعوة أو بطلب، ولا يُسند إليه شيء قبل اعتماده.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>ينضم الخبير بدعوة منك أو بطلب من صفحة «انضم كخبير» بمساريها: خبير الرحلة، وخبير المحتوى (طلب عضوية لجنة). لا يُسند إليه شيء ولا يُفتح له الكتاب قبل اعتماده.</p></details></>
+            {!d ? <Spinner /> : !d.success ? <LoadError message={d.message} onRetry={load} /> : <>
+              <FilterBar scope="experts" state={filt} set={setF} clear={clearNet} replace={(n) => replaceF(typeof n === 'function' ? (s) => ({ ...n(s), tab: s.tab }) : { ...n, tab: f.tab })} fields={fields} presets={PRESETS} counts={counts}
+                shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع"
+                capped={d.capped ? { limit: d.limit } : null}
+                actions={<ExportButton scope="experts" meta={{ kind: 'EXP', title: 'شبكة الخبراء', sheet: 'الخبراء', file: 'Experts' }} columns={EXPERT_COLS} all={all} filtered={rows} noun="خبير" />} />
+              {!all.length ? <Empty title="لا خبراء بعد" hint="أضف أول خبير، أو شارك رابط «انضم كخبير»." /> : (
+                <div className="table-wrap"><table className="data-table la-cards ex-table t24">
+                  <thead><tr><SortTh k="name" state={f} set={setF}>الخبير</SortTh><th>الأدوار</th><th>الأبعاد</th><SortTh k="hours" state={f} set={setF}>الطاقة</SortTh><SortTh k="given" state={f} set={setF}>ما قدّمه</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
+                  <tbody>{rows.length ? rows.map((e) => (
+                    <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>
+                      <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small>
+                        {e.status === 'applied' && committeeApplication(e) && <><br /><span className="la-chip warn" title={committeeApplicationAr(e)}>{CONTENT_TRACK_AR}</span> <small className="la-muted">{committeeApplicationAr(e)}</small></>}</td>
+                      <td data-label="الأدوار">{contentOnly(e) ? <span className="la-chip">عضو لجنة، لا يخدم في الرحلة</span> : <Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} />}
+                        {expertService(e).journey && expertService(e).content && <><br /><span className="la-chip ok">يخدم أيضًا في {(e.committees || []).map((k) => COMMITTEE_AR[k]).filter(Boolean).join(' و')}</span></>}
+                        {e.committees?.length > 0 && <><br /><Chips list={e.committees} labels={COMMITTEE_AR} /></>}</td>
+                      <td data-label="الأبعاد"><Chips list={e.dimensions} labels={DIM_AR} /></td>
+                      <td data-label="الطاقة">{!noCapacity(e) ? `${e.weekly_hours} س/أسبوع` : <Missing reason="لم تُحدد طاقته" />}</td>
+                      <td data-label="ما قدّمه">{e.stats?.attended ? `${e.stats.hours} ساعة · ${e.stats.participants} مشارك` : <Missing state="later" text="لم يقدّم بعد" />}</td>
+                      <td data-label="الحالة"><ExpertChip status={e.status} /></td>
+                    </tr>
+                  )) : <tr><td colSpan={6}><NoMatch what="خبراء" /></td></tr>}</tbody>
+                </table></div>
+              )}
+            </>}
+          </section>
+        </>)}
+      </div>
     </div>
   );
 }
