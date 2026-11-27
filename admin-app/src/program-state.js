@@ -34,3 +34,15 @@ export function readHow() {
 export function writeHow(open) {
   try { window.localStorage.setItem(HOW_KEY, open ? '1' : '0'); } catch { /* التفضيل اختياري */ }
 }
+// تكميل سطر الحالة (المرحلة 23، 4.5 في تصور الرحلة والمسار): جملة النشر من versionState نفسه ومن admin.programs، بلا مصدر جديد.
+// المسودة: «لا تصل أحدًا حتى تحفظها نسخة وترقّي الدفعة»؛ المحفوظ: «منشورة، النسخة بتاريخ …»؛ ومعهما عدد الدفعات غير
+// المغلقة المثبتة على نسخة غير الأخيرة. fmt يصوغ التاريخ (dates.js) فتبقى الدالة خالصة
+export const PUBLISH_DRAFT_AR = 'مسودة: لا تصل أحدًا حتى تحفظها نسخة وترقّي الدفعة';
+export const olderCohortsAr = (n) => countAr(n, 'دفعة واحدة على نسخة أقدم', 'دفعتان على نسخة أقدم', 'دفعات على نسخة أقدم', 'دفعة على نسخة أقدم');
+export function publishLine(p, cohorts = [], fmt = (d) => String(d || '').slice(0, 10)) {
+  const st = versionState(p);
+  const latest = p?.versions?.[0] || null;
+  const older = latest ? (cohorts || []).filter((c) => c.program_id === p.id && c.status !== 'closed' && c.program_version_id && c.program_version_id !== latest.id).length : 0;
+  const text = st === 'draft' ? PUBLISH_DRAFT_AR : st === 'saved' && latest ? `منشورة، النسخة بتاريخ ${fmt(latest.created_at)}` : '';
+  return { state: st, text, older, older_ar: older ? olderCohortsAr(older) : '' };
+}

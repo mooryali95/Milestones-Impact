@@ -147,12 +147,37 @@ test.describe('ما يُحرَّر على أنه للمشارك يقول من ي
   });
   test('صفحة المسار تسمي ما يحل ملف التعريف محله، ونموذج الهوية يوسم الحقول الداخلية', async ({ page }) => {
     await open(page, '#/leaders/tracks/M1I1L2', { 'admin.catalog': catalog, 'admin.track': track });
+    // المرحلة 23: نص الملف مرة واحدة في «ما يراه المشارك»، والحقول الداخلية في «إعدادات الإدارة» بسطرها
     const box = page.locator('.la-track-profile');
-    await expect(box).toContainText('مكان الاسم و«لمن صُمّم» و«توجيه الرحلة» أعلاه، فتلك داخلية للإدارة');
-    await expect(box).toContainText('أما أولويات التطوير فتصل المشارك كما تحررها هنا');
     await expect(box.getByRole('listitem')).toHaveCount(2);
+    await expect(page.getByRole('note').filter({ hasText: 'هذه الحقول داخلية؛ المشارك يرى نص الملف «من الخطة إلى نقاط القرار»' })).toBeVisible();
+    await expect(page.getByText('أولويتك الآن إدارة المشروعات')).toHaveCount(1);
     await page.getByRole('button', { name: 'تحرير هوية المسار' }).click();
     const form = page.getByRole('dialog', { name: 'مسار M1I1L2' });
     await expect(form.getByText('داخلي للإدارة: يرى المشارك نص ملف التعريف مكانه')).toHaveCount(3);
   });
+  for (const width of [375, 1280]) {
+    test(`صفحة المسار بعرض ${width}: تبويبان دون 900 ولوحة الإدارة مخفية حتى يُختار تبويبها`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await open(page, '#/leaders/tracks/M1I1L2', { 'admin.catalog': catalog, 'admin.track': track });
+      await expect(page.locator('#tr-pane-participant')).toBeVisible();
+      if (width < 900) {
+        await expect(page.locator('#tr-pane-admin')).toBeHidden();
+        await page.getByRole('tab', { name: 'إعدادات الإدارة' }).click();
+        await expect(page.locator('#tr-pane-admin')).toBeVisible();
+        await expect(page.locator('#tr-pane-participant')).toBeHidden();
+        await page.getByRole('tab', { name: 'إعدادات الإدارة' }).press('Home');
+        await expect(page.getByRole('tab', { name: 'ما يراه المشارك' })).toBeFocused();
+        await expect(page.locator('#tr-pane-participant')).toBeVisible();
+      } else {
+        await expect(page.getByRole('tablist', { name: 'صفحة المسار' })).toHaveCount(0);
+        await expect(page.locator('#tr-pane-admin')).toBeVisible();
+      }
+      // رحلة المسار بعارض البطاقة: ثلاثة صفوف للأطر، وفي كل صف أبوابه في الكتاب
+      const fw = page.getByTestId('track-frameworks');
+      await expect(fw.locator('.tr-fw-row')).toHaveCount(3);
+      await expect(fw.getByRole('heading', { name: 'أبوابه في الكتاب' })).toHaveCount(3);
+      await page.screenshot({ path: `test-results/j23-track-${width}.png`, fullPage: true });
+    });
+  }
 });
