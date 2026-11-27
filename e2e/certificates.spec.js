@@ -4,18 +4,24 @@ import { test, expect } from '@playwright/test';
 const snap = { serial: 'MI-LDR-2026-7K3QX9', name_ar: 'سارة الأحمد', name_en: 'Sarah Alahmad', program_ar: 'برنامج القادة', program_en: 'Leaders Program',
   track_ar: 'مسار التوازن', issued_at: '2026-10-23T09:00:00Z', org: { name: 'هيئة التطوير' }, signatories: [], verify_url: 'https://leaders.sunkvalue.com/v/MI-LDR-2026-7K3QX9' };
 
+// ما يرده cert.verify بعد تقييد الخصوصية: الحقول العامة وحدها، بلا لقطة ولا توقيع ولا قرار
+const pub = { serial: snap.serial, name_ar: snap.name_ar, name_en: snap.name_en, program_ar: snap.program_ar, program_en: snap.program_en,
+  track_ar: snap.track_ar, cohort_ar: null, org: { name: 'هيئة التطوير' }, issued_at: snap.issued_at };
+
 test('التحقق العام: سارية، ثم رقم غير موجود', async ({ page }) => {
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     expect(b.action).toBe('cert.verify');
     await route.fulfill({ json: b.serial === snap.serial
-      ? { success: true, found: true, authentic: true, status: 'valid', certificate: snap }
+      ? { success: true, found: true, authentic: true, status: 'valid', certificate: pub }
       : { success: true, found: false } });
   });
   await page.goto('http://localhost:4304/v/mi-ldr-2026-7k3qx9');
   await expect(page.getByText('شهادة صحيحة وسارية')).toBeVisible();
   await expect(page.getByText('سارة الأحمد')).toBeVisible();
   await expect(page.getByText('هيئة التطوير')).toBeVisible();
+  // الصفحة العامة لا تعرض الشهادة كاملة ولا نوعها: النسخة الرسمية عند صاحبها
+  await expect(page.getByRole('button', { name: 'اعرض الشهادة' })).toHaveCount(0);
   await page.getByLabel('رقم الشهادة').fill('MI-LDR-2026-AAAAAA');
   await page.getByRole('button', { name: 'تحقّق' }).click();
   await expect(page.getByText('لا توجد شهادة بهذا الرقم')).toBeVisible();
