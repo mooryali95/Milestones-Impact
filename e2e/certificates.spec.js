@@ -132,7 +132,7 @@ test('شهادة الجهة: يُحفظ التخصيص وحده، والفارغ
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.locator('.la-tabs').getByRole('button', { name: 'الجهات' }).click();
-  await page.locator('.la-org').getByRole('button', { name: /^إجراءات أخرى لجهة/ }).first().click();  // أفعال الجهة الثانوية في ⋯ (المرحلة 2)
+  await page.locator('.la-org').getByRole('button', { name: /^إجراءات: جهة/ }).first().click();  // أفعال الجهة الثانوية في «إجراءات ▾» (المرحلة 10)
   await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const f = page.getByRole('dialog', { name: /هيئة التطوير/ });
   await expect(f.getByLabel('الساعات التدريبية')).toHaveValue('30');

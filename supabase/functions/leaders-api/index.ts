@@ -14,7 +14,7 @@
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin (بالرمز أو الإيصال أو الأرقام الستة) · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه؛ الدعوة والإلغاء مع مفتاح 360)
 //             f360.mine · f360.start · f360.self · f360.nominate · f360.remove · f360.submit · f360.report · f360.plan (تقييم 360 للتطوير)
-//             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
+//             capstone.get · capstone.summary · capstone.submit · capstone.doc · capstone.options (مشروع التخرج، وقرار رمز التحقق)
 //             capstone.shares · capstone.share-create · capstone.share-update · capstone.share-revoke · capstone.note-mark (المشاركة برابط وملاحظات القراء)
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
@@ -208,7 +208,7 @@ const DEMO_OPEN = new Set(['track.seen', 'guide.state', 'guide.clear', 'guide.co
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.preview',
   'handbook.export', 'models.list', 'models.get', 'models.save', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft', 'lab.hint', 'lab.check', 'achievements', 'certificate',
   'handbook.ping', 'video.ping', 'content.ping', 'content.open', 'workshop.checkin', 'impact.mine', 'impact.no-manager', 'rater.revoke', 'f360.mine', 'f360.self', 'f360.remove', 'f360.report',
-  'f360.plan', 'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
+  'f360.plan', 'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'capstone.options', 'tracking.get', 'tracking.save',
   'capstone.shares', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark',
   'commitment.mine', 'commitment.save', 'commitment.review', 'commitment.to-initiative']);
 
@@ -235,15 +235,15 @@ const GATE_PROGRAM = new Set(['track.seen', 'guide.state', 'guide.ask', 'guide.c
   'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
   'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
-  'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
+  'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'capstone.options', 'tracking.get', 'tracking.save',
   'capstone.shares', 'capstone.share-create', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark',
   // نقرة الالتزام المنجز إلى وثيقة المبادرة تحفظ فصلها بحراس models.save نفسها
   'commitment.to-initiative']);
 // وما يبقى للمنسحب من الفئتين: الاطلاع على مخرجاته (تقرير 360 المسلَّم، ووثيقة مبادرته، ونسخة كتابه، وتقدير أثره) وتقييم
 // خدمة خبير انعقدت. قراءة لما أنجزه أو تقييم لخدمة اكتملت، لا عمل جديد في البرنامج. وتبقى لكل منها بوابتها بعدها: ما في
 // GATE_PROGRAM بالاعتماد، والدفع كما هو. وما سواها من الفئتين مغلق على المنسحب (program_gate_test.ts)
-// ومشاركة الوثيقة: يرى روابطه وملاحظاتها ويلغي ما شاء، ولا ينشئ رابطًا جديدًا
-const GATE_KEPT = new Set(['f360.report', 'capstone.get', 'capstone.doc', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit',
+// ومشاركة الوثيقة: يرى روابطه وملاحظاتها ويلغي ما شاء، ولا ينشئ رابطًا جديدًا. وقرار رمز التحقق في وثيقته المعتمدة يبقى له (capstone.options)
+const GATE_KEPT = new Set(['f360.report', 'capstone.get', 'capstone.doc', 'capstone.options', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit',
   'capstone.shares', 'capstone.share-revoke', 'capstone.note-mark']);
 const OUT_OF_PROGRAM_AR = `أنت خارج البرنامج الآن، فهذا لم يعد متاحًا لك. تبقى لك بياناتك وشهادتك ومخرجاتك للاطلاع والتنزيل، وللاستفسار: ${CONTACT_EMAIL}`;
 const approvedSeen = new Set<string>();
@@ -416,6 +416,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'capstone.summary': (p, b) => X.saveSummary(p, b),
   'capstone.submit': (p) => X.submit(p),
   'capstone.doc': (p) => X.doc(p),
+  // قرار القائد في رمز التحقق بوثيقته المعتمدة (المرحلة 33): owner.qr لصاحب الوثيقة وحده
+  'capstone.options': (p, b) => X.ownerOptions(p, b),
   'capstone.shares': (p) => SH.list(p),
   'capstone.share-create': (p, b) => SH.create(p, b),
   'capstone.share-update': (p, b) => SH.update(p, b),
@@ -830,6 +832,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.capstone-quality': () => X.adminQualityReport(),
   'admin.capstone-review': (a, b) => A.writer(a, X.adminReview, b),
   'admin.capstone-sponsor': (a, b) => A.writer(a, X.adminSponsor, b),
+  // قرار الأدمن في رمز التحقق (المرحلة 33): يتبع صاحبها أو إظهار أو منع، بصلاحية الكتابة
+  'admin.capstone-options': (a, b) => A.writer(a, X.adminOptions, b),
   'admin.outcomes': (_a, b) => T.adminOutcomes(b),
   // المساعد الآلي (agent-admin.ts): القراءة للمدير الأعلى أو المالك، والكتابة superWriter، والمفتاح بتحقق إضافي من admin-api
   // «التوجيه والإرشاد» G3: أعداد وإنفاق بلا نص، للمدير الأعلى والمالك كشاشة المساعد

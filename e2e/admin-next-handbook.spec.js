@@ -89,7 +89,7 @@ test('الأبواب الجديدة وحذفها من المستودع: لا ز�
 
 test('النماذج: إضافة حقل جدول ومعاينته، ثم الحفظ', async ({ page }) => {
   const calls = await setup(page);
-  await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: 'النماذج التعليمية' }).click();
+  await page.getByRole('tablist', { name: 'أقسام الكتاب' }).getByRole('tab', { name: 'النماذج التعليمية' }).click();
   await expect(page.getByText('متوسط 3.5 من 4', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'تحرير', exact: true }).click();
   const ed = page.getByRole('dialog', { name: 'تحرير النموذج: سجل المنافع' });
@@ -103,11 +103,11 @@ test('النماذج: إضافة حقل جدول ومعاينته، ثم الح�
 
 test('المعاينة كمشارك، والتقييم بالسلّم الرباعي والملاحظات', async ({ page }) => {
   const calls = await setup(page);
-  const views = page.getByRole('navigation', { name: 'أقسام الكتاب' });
-  await views.getByRole('button', { name: /الكتاب الأم والكتب/ }).click();
+  const views = page.getByRole('tablist', { name: 'أقسام الكتاب' });
+  await views.getByRole('tab', { name: /الكتاب الأم والكتب/ }).click();
   await expect(page.getByText('الإجابة الصحيحة')).toBeVisible();
   await expect(page.getByText('أقصى نقاط هذا الباب: 28')).toBeVisible();
-  await views.getByRole('button', { name: /التقييم/ }).click();
+  await views.getByRole('tab', { name: /التقييم/ }).click();
   await page.getByRole('button', { name: 'قيّم' }).click();
   const ed = page.getByRole('dialog', { name: 'تقييم عمل سارة الأحمد' });
   await expect(ed.getByText('منصة التعلم')).toBeVisible();
@@ -126,9 +126,30 @@ test('المعاينة كمشارك، والتقييم بالسلّم الربا
 
 test('«للقراءة»: ما سُلّم مجمّعًا بالمشارك، و«قرأتها كلها» يعلّمه مقروءًا بأمر واحد', async ({ page }) => {
   const calls = await setup(page);
-  await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: /التقييم/ }).click();
+  await page.getByRole('tablist', { name: 'أقسام الكتاب' }).getByRole('tab', { name: /التقييم/ }).click();
   const list = page.getByRole('region', { name: 'للقراءة' });
   await expect(list).toContainText('سارة الأحمد');
   await list.getByRole('button', { name: 'قرأتها كلها' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.review-bulk')).toMatchObject({ participant_id: 'p1' });
+});
+
+test('المرحلة 18: الترويسة الموحدة، وشارة الجاهزية، ونقل الباب بالزر وبـAlt مع السهم', async ({ page }) => {
+  const calls = await setup(page);
+  await expect(page.getByRole('heading', { name: 'كتاب القائد', level: 2 })).toBeVisible();
+  await expect(page.locator('.tx-hero')).toHaveCount(0);
+  const rows = page.locator('.hb-list').first().locator('.hb-ch');
+  await expect(rows.nth(0).locator('.st-chip')).toHaveText('جاهز');
+  await expect(rows.nth(1).locator('.st-chip')).toHaveText('بلا اختبار');
+  const down = rows.nth(0).getByRole('button', { name: 'انقل الباب المعلم لأسفل' });
+  await expect(down).toHaveAttribute('title', 'انقل الباب المعلم لأسفل');
+  await down.click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'handbook_modules', ids: ['h2', 'h1'] });
+  await expect(rows.nth(0).locator('[aria-live="polite"]')).toHaveText('الباب المعلم صار في الموضع 2 من 2');
+  calls.length = 0;
+  await rows.nth(1).getByRole('button', { name: /^الأنواع/ }).focus();
+  await page.keyboard.press('Alt+ArrowUp');
+  await expect.poll(() => calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ ids: ['h2', 'h1'] });
+  await page.screenshot({ path: '/tmp/claude-0/-home-user-Milestones-Impact/12f93216-ad9b-5931-8b46-7212b8ad3743/scratchpad/shots/p18-handbook-1280.png', fullPage: false }).catch(() => {});
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.screenshot({ path: '/tmp/claude-0/-home-user-Milestones-Impact/12f93216-ad9b-5931-8b46-7212b8ad3743/scratchpad/shots/p18-handbook-375.png', fullPage: false }).catch(() => {});
 });

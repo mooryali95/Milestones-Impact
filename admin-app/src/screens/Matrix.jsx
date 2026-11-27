@@ -9,7 +9,7 @@ import { call } from '../api.js';
 import { date } from '../dates.js';
 import { Empty, LoadError, NoMatch, Spinner, useUI } from '../ui.jsx';
 import { Icon } from '../icons.jsx';
-import { apptsAr, attention, attentionSummary, booked, counted, excludedLine, IDLE_DAYS, isTest, testCount, idleSince, idleTone, MATRIX_PRESETS, regHref, regsHref, regTracks, trackCounts } from '../matrix.js';
+import { apptsAr, attention, attentionSummary, booked, counted, excludedLine, IDLE_DAYS, isTest, testCount, idleSince, idleTone, MATRIX_PRESETS, regHref, regsHref, regTracks, rememberIdle, trackCounts } from '../matrix.js';
 import { navigate } from '../route.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
@@ -39,6 +39,7 @@ function useMatrix() {
     setError('');
     const r = await call('list-regs');
     if (!r.success) { setRegs([]); setError(r.message); return; }
+    rememberIdle(r.registrations || []);
     setRegs((r.registrations || []).sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt)));
   }, []);
   // فشل نصوص العمليات يُعلن ولا يُبتلع: تبقى العمليات بأسمائها من المصدر، ويظهر الخطأ مع إعادة المحاولة

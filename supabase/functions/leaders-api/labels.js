@@ -22,6 +22,15 @@ export const LEVELS = [
 ];
 export const LEVEL_AR = Object.fromEntries(LEVELS.map((l) => [l.key, l.title]));
 
+// المرحلة 15: صياغة واحدة للمستوى الأدنى لمحتوى أو شرط («للمستوى المتوسط فأعلى»)، بدل «(من X)» و«X فأعلى» و«مطلوب من المستوى»
+export function levelFrom(level) {
+  const i = LEVELS.findIndex((l) => l.key === level);
+  if (i <= 0) return 'للمستويات كلها';
+  return `للمستوى ال${LEVELS[i].title}${i < LEVELS.length - 1 ? ' فأعلى' : ''}`;
+}
+// المرحلة 15: مبادرة لم يُكتب اسمها بعد (يُكتب خافتًا ومعه اسم المشارك)
+export const NO_TITLE = 'لم تُسمَّ بعد';
+
 export const TIER_AR = { knowledge: 'المعرفة', skill: 'المواقف', behavior: 'الممارسة' };
 
 export const PARTICIPANT_STATUS = {
@@ -34,6 +43,9 @@ export const PARTICIPANT_STATUS_TONE = {
   registered: '', profiled: '', assessing: '', pending_approval: 'warn',
   placed: '', enrolled: '', completed: 'ok', withdrawn: '', suspended: 'bad',
 };
+// حالة نسخة البرنامج (المرحلة 11): شارة واحدة من versionState في admin-app/src/program-state.js، بتسميتها ونبرتها هنا
+export const PROGRAM_VERSION_STATE = { archived: 'مؤرشف', no_reqs: 'بلا متطلبات', no_version: 'بلا نسخة', draft: 'مسودة معدلة', saved: 'محفوظ' };
+export const PROGRAM_VERSION_STATE_TONE = { archived: '', no_reqs: 'warn', no_version: 'warn', draft: 'warn', saved: 'ok' };
 export const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الملف'], ['assessed', 'أنهى القياس'], ['approved', 'اعتُمد مساره'], ['completed', 'أنهى البرنامج']];
 
 export const REQ_STATUS = { pending: 'لم يُنجز', submitted: 'بانتظار المراجعة', done: 'منجز', returned: 'أُعيد للتعديل' };
@@ -79,6 +91,18 @@ export const MARK_REASONS_AR = Object.freeze(['تعطل الرمز', 'بلا ه�
 export const MARK_REASON_MAX = 300;
 // عدد المسارات مشتق: كل تركيبة من مستوى لكل بُعد
 export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
+
+// اسم المسار من رمزه (المرحلة 9 من تصور تطبيق القادة): دالة واحدة للخلية والمرشح والتصدير ولوحة الجهة.
+// titles: أسماء المسارات المعروضة من الخادم (displayTitles) إن وصلت، وإلا اسم مشتق من مستويات الأطر الثلاثة بترتيبها.
+// الرمز لا يُعرض نصًا ظاهرًا بعدها، بل في title وsr-only وعمود ثانٍ في التصدير. رمز غير صالح يعود كما هو.
+export function trackName(code, titles = null) {
+  if (!code) return '';
+  const t = titles?.[code];
+  if (t) return t;
+  const m = /^M([1-9])I([1-9])L([1-9])$/.exec(String(code));
+  const lv = m && [m[1], m[2], m[3]].map((n) => LEVELS[Number(n) - 1]?.title);
+  return lv && lv.every(Boolean) ? lv.join(' · ') : String(code);
+}
 
 // حالات العمل المسلَّم (نموذج تعليمي أو فصل): بصوت المشارك، وما تقوله الإدارة يختلف في المخاطَب فقط
 // «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): التسليم يُحتسب فورًا، والمراجع يقرأ ويكتب ملاحظة أو يطلب تعديلًا.
@@ -287,6 +311,21 @@ export const EXPERT_STATUS = {
 export const EXPERT_REQUEST_STATUS = {
   open: 'يبحث عن خبير', offered: 'معروض على خبير', accepted: 'قبِله الخبير', unmatched: 'لا خبير مطابق', cancelled: 'أُلغي', completed: 'اكتمل',
 };
+// نبرة شارتي حالة الخبير وطلب الإسناد (المرحلة 16): تُقرأ عبر StatusChip وحده، فلا تحدد الشاشة النبرة في سطرها
+export const EXPERT_STATUS_TONE = { applied: 'warn', invited: '', active: 'ok', paused: '', suspended: 'bad', rejected: '' };
+export const EXPERT_REQUEST_STATUS_TONE = { open: 'warn', offered: 'warn', accepted: 'ok', unmatched: 'bad', cancelled: '', completed: 'ok' };
+// اكتمال لجنة الحوكمة في شريط اللجان (committees.js يعطي ready وgaps)
+export const COMMITTEE_STATE = { ready: 'مكتملة', gaps: 'ناقصة' };
+export const COMMITTEE_STATE_TONE = { ready: 'ok', gaps: 'warn' };
+// نبرة شارات المبادرات (المرحلة 17): حالة الوثيقة (مفاتيح STATUS_TITLES في capstone.js) وحالة راعيها (SPONSOR_STATE_AR)
+export const CAPSTONE_STATUS_TONE = { draft: '', submitted: 'warn', returned: '', accepted: 'warn', approved: 'ok' };
+export const SPONSOR_STATE_TONE = { pending: '', expired: 'bad', endorsed: 'ok', declined: 'warn' };
+// موقع الفصل من مستوى الوثيقة (CHAPTER_STANDING_AR): الباقي بقاعدة «لا فقد» ينبَّه عليه
+export const CHAPTER_STANDING_TONE = { kept: 'warn' };
+// جاهزية باب كتاب القائد في صفه (المرحلة 18): شارة واحدة بدل «بلا محتوى بعد» و«بلا اختبار» متفرقتين
+export const CHAPTER_READY = { ready: 'جاهز', no_quiz: 'بلا اختبار', no_body: 'بلا محتوى' };
+export const CHAPTER_READY_TONE = { ready: 'ok', no_quiz: 'warn', no_body: 'bad' };
+export const chapterReady = (words, quiz) => (!words ? 'no_body' : !quiz ? 'no_quiz' : 'ready');
 // ما تعنيه كل حالة للمشارك وما يحدث بعدها، كما يجري فعلًا على الخادم (experts.ts): الاعتذار ينقل الطلب للتالي،
 // والمقبول يغلقه فريق البرنامج بعد الخدمة، و«لا خبير مطابق» يراه الفريق في قائمة الطلبات (p-capstone-4)
 export const EXPERT_REQUEST_HINT = {
@@ -384,6 +423,24 @@ export const DOC_VERIFY_AR = Object.freeze({
   scan: 'للتحقق من أصالة هذه الوثيقة امسح الرمز',
   unavailable: 'التحقق غير متاح لهذه النسخة',
   draft: 'تُبنى هذه المسودة من فصول المبادرة لحظة طلبها، فتعكس آخر ما كُتب، ولا تصلح للتحقق قبل الاعتماد.',
+  // المرحلة 33: رد التحقق حين يُمنع الرمز، محايد بلا اسم المبادرة ولا الجهة (capstone.ts verifyDoc، Verify.jsx)
+  withheld: 'وثيقة صحيحة صادرة عن Milestone Impact، وتفاصيلها محجوبة بقرار صاحبها',
+});
+// قرار رمز التحقق (المرحلة 33): مفتاح القائد في شاشة وثيقته (Capstone.jsx)، وخيارات الأدمن الثلاث (Capstones.jsx)
+export const DOC_QR_AR = Object.freeze({
+  owner_label: 'إظهار رمز التحقق في وثيقتي المعتمدة',
+  owner_on: 'من يمسح الرمز يرى أن الوثيقة أصلية، ومعها اسم المبادرة والجهة والبرنامج وتاريخ الاعتماد، بلا اسمك ولا بريدك ولا محتواها.',
+  owner_off: 'لا يُطبع الرمز ولا الرابط، وتبقى البصمة والرقم المرجعي. ومن يتحقق بالبصمة يعرف أن الوثيقة صحيحة دون تفاصيلها.',
+  forced: 'قرار فريق البرنامج',
+  unavailable: 'يتاح هذا الخيار حين تُجمَّد بصمة وثيقتك المعتمدة.',
+  saved: 'حُفظ اختيارك',
+  admin_title: 'رمز التحقق في الوثيقة',
+  admin_choices: Object.freeze({ follow: 'يتبع صاحبها', show: 'إظهار', withhold: 'منع' }),
+  admin_reason: 'السبب (اختياري)',
+  admin_now: (on) => (on ? 'الرمز يُطبع الآن' : 'الرمز محجوب الآن'),
+  admin_by: (by, at) => `قرره ${by || 'فريق البرنامج'}${at ? ` في ${at}` : ''}`,
+  owner_pref: (v) => (v === null ? 'لم يختر صاحبها، فالافتراض الإظهار' : v ? 'صاحبها اختار الإظهار' : 'صاحبها اختار المنع'),
+  admin_unavailable: 'يتاح بعد اعتماد الوثيقة وتجميد بصمتها.',
 });
 export const docClosingLiveAr = (date) => `بُنيت هذه النسخة في ${date} من فصول المبادرة كما كانت لحظتها، وتتغير بتغيّرها.`;
 export const docClosingApprovedAr = (date, fp) => `صدرت هذه النسخة المعتمدة في ${date}، ولا يغيّرها تعديل لاحق.${fp ? ` بصمتها ${fp}.` : ''}`;

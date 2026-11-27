@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // المشاركون: القائمة بفلاترها وتصديرها والنقل الجماعي، وملف المشارك
 // ════════════════════════════════════════════════════════════════
+import { IN_PROGRAM, PROGRAM_VIEW } from '../today.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { deleteFollowUp } from '../erase-follow.js';
 import { ErasureBanner, ErasureCard, ErasureLogLine, ErasureSheet, takeOpen } from './Erasure.jsx';
@@ -10,7 +11,8 @@ import Form from '../Form.jsx';
 import {
   date, DIM, DIMS, isSuperAdmin, L, LVL, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
-import { Empty, NoMatch, Spinner, StatusChip, useUI } from '../ui.jsx';
+import { Empty, Meter, NoMatch, Spinner, StatusChip, useUI, useWide } from '../ui.jsx';
+import { trackName } from '../../../supabase/functions/leaders-api/labels.js';
 import { assignOrgGuarded, enrollCohort } from '../cohort-guard.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
@@ -43,7 +45,25 @@ import { ONBOARDING_AR, ONBOARDING_STEPS, STUCK_STEPS as STUCK } from '../../../
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 
 const DAY = 864e5;
-const ACTIVE = ['placed', 'enrolled'];
+export const TEST_VIEW = 'test';
+// القائمة الظاهرة: حسابات الاختبار خارجها إلا في عرضها (المرحلة 9)
+export const visibleBase = (list, view) => (view === TEST_VIEW ? list : list.filter((p) => p.is_test !== true));
+// الكثافة (مريح أو مضغوط) تفضيل لهذا المتصفح وحده، داخل try/catch (التخزين قد يكون محجوبًا)
+export const DENSITY_KEY = 'mi_admin_pt_density';
+export function readDensity() { try { return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfy'; } catch { return 'comfy'; } }
+export function writeDensity(v) { try { localStorage.setItem(DENSITY_KEY, v); } catch { /* محجوب: للجلسة وحدها */ } }
+// المحددون خارج القائمة الظاهرة بعد تغيير المرشح
+export const pickedOutside = (picked, shown) => { const on = new Set(shown.map((p) => p.id)); return [...picked].filter((id) => !on.has(id)).length; };
+// roving tabindex: الصف التالي بالأسهم وHome وEnd (null لمفتاح آخر)
+export function rovingNext(key, i, n) {
+  if (!n) return null;
+  if (key === 'ArrowDown') return Math.min(n - 1, i + 1);
+  if (key === 'ArrowUp') return Math.max(0, i - 1);
+  if (key === 'Home') return 0;
+  if (key === 'End') return n - 1;
+  return null;
+}
+const ACTIVE = IN_PROGRAM;
 // عروض سريعة: الحالات التي يتدخل فيها المدير عادة، وعدد كل منها ظاهر على رقاقتها
 const PRESETS = [
   { key: 'approval', label: 'بانتظار الاعتماد', test: (p) => p.status === 'pending_approval' },
@@ -56,7 +76,11 @@ const PRESETS = [
   { key: 'idle', label: 'متوقف 14 يومًا', test: (p, now) => ACTIVE.includes(p.status) && (!seenAt(p) || now - Date.parse(seenAt(p)) > 14 * DAY) },
   { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
+  // «في البرنامج»: الحالتان اللتان يعدّهما رقم «المشاركون في البرنامج» في النظرة العامة (البطاقة تفتح هذا المرشح)
+  { key: PROGRAM_VIEW, label: 'في البرنامج', test: (p) => IN_PROGRAM.includes(p.status) },
   { key: 'out', label: 'موقوف أو منسحب', test: (p) => p.status === 'suspended' || p.status === 'withdrawn' },
+  // حسابات الاختبار (is_test القائم): مخفية من القائمة والتصدير افتراضيًا، وتظهر بهذا العرض وحده (المرحلة 9)
+  { key: TEST_VIEW, label: 'حسابات اختبار', test: (p) => p.is_test === true },
 ];
 // كيف وصل المشارك إلى دفعته (pickCohort): تلقائيًا بجهته، أو بنقل يدوي، أو الدفعة المفتوحة لمن لا جهة له
 const VIA_COHORT = { organization: 'تلقائيًا برابط جهته', enrollment: 'بنقل يدوي', default: 'تلقائيًا: بلا جهة' };
@@ -84,7 +108,7 @@ export function Where({ o }) {
   return (
     <>
       <span className="la-chip warn">{o.label}</span>
-      {o.step === 'assessment_doing' && o.total > 0 && <progress className="la-mini" max={o.total} value={o.answered} aria-label={`أجاب ${o.answered} من ${o.total}`} />}
+      {o.step === 'assessment_doing' && o.total > 0 && <> <Meter value={o.answered} max={o.total} label="أجاب" /></>}
       <br /><small className="la-muted">{o.remaining}</small>
     </>
   );
@@ -132,17 +156,23 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   const [moveTo, setMoveTo] = useState('');
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [density, setDensityState] = useState(readDensity);
+  const setDensity = (v) => { setDensityState(v); writeDensity(v); };
+  // الكثافة للشاشة العريضة وحدها؛ على الضيق بطاقات (la-cards) كما هي
+  const wide = useWide();
+  const compact = wide && density === 'compact';
 
   // القائمة كاملة مرة واحدة (حتى 500)، والفلترة كلها في المتصفح فتستجيب فورًا
   // capped: القائمة بلغت حد الخادم، فما بعده لا يُرى إلا ببحث على الخادم (search)
   const [cap, setCap] = useState(null);
   const [listCohorts, setListCohorts] = useState([]);
   const [serverQ, setServerQ] = useState('');
+  const [titles, setTitles] = useState({});
   const load = useCallback(async (search = '') => {
     setList(null); setError('');
     const r = await L('admin.participants', search ? { search } : {});
     if (!r.success) { setList([]); return setError(r.message); }
-    setList(r.participants || []); setListCohorts(r.cohorts || []); setCap(r.capped ? r.limit : null); setServerQ(search);
+    setList(r.participants || []); setListCohorts(r.cohorts || []); setTitles(r.track_titles || {}); setCap(r.capped ? r.limit : null); setServerQ(search);
   }, []);
   useEffect(() => { load(); }, [load]);
   // طلبات حذف البيانات القائمة من المشاركين أنفسهم: تُنفَّذ من صفحة المشارك بمسار الحذف القائم
@@ -150,13 +180,17 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   // بعد كل تحميل للقائمة مرة واحدة: list تبدأ null ثم تُملأ، فكان يُطلب مرتين عند الفتح
   useEffect(() => { if (list) L('admin.erasures', {}).then((r) => setErasures(r.success ? r : null)); }, [list]);
 
-  const all = list || [];
+  const everyone = list || [];
+  // all: القائمة الظاهرة (بلا حسابات الاختبار إلا في عرضها)، وكل العدادات والتحديد والتصدير منها
+  const all = useMemo(() => visibleBase(everyone, f.view), [everyone, f.view]);
+  const tk = (p) => trackOfPlacements(p.placements) || p.track || '';
+  const tn = (code) => trackName(code, titles);
   const tracks = useMemo(() => [...new Set(all.map((p) => trackOfPlacements(p.placements)).filter(Boolean))].sort(), [all]);
   const orgOf = (p) => orgs.find((o) => o.id === p.organization_id);
   const fields = useMemo(() => [
     { key: 'status', label: 'الحالات', get: (p) => p.status, options: Object.entries(STATUS) },
     { key: 'org', label: 'الجهات', get: (p) => p.organization_id || 'none', options: [...orgs.map((o) => [o.id, o.name]), ['none', 'بدون جهة']] },
-    { key: 'track', label: 'المسارات', get: (p) => trackOfPlacements(p.placements) || p.track, options: tracks.map((k) => [k, k]) },
+    { key: 'track', label: 'المسارات', get: (p) => trackOfPlacements(p.placements) || p.track, options: tracks.map((k) => [k, tn(k)]) },
     // بعد الثلاثة الظاهرة (الباقي خلف «+ فلاتر»)، والعرض السريع «لم يكمل التسجيل» يغني عنه في الغالب
     { key: 'step', label: 'أين توقف', get: (p) => p.onboarding?.step, options: Object.entries(ONBOARDING_AR) },
     { key: 'effort', label: 'جدية الإجابة', get: (p) => p.effort?.level, options: Object.entries(EFFORT_AR) },
@@ -164,17 +198,38 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     { key: 'cohort', label: 'الدفعات', get: (p) => p.cohort_id || 'none', options: [...listCohorts.map((c) => [c.id, c.name]), ['none', 'بلا دفعة']] },
     { key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (p) => p.created_at },
     { key: 'seen', label: 'آخر نشاط', all: 'أي آخر نشاط', type: 'period', get: seenAt },
-  ], [orgs, tracks, listCohorts]);
+  ], [orgs, tracks, listCohorts, titles]); // eslint-disable-line
   // phone: الجوال يُطابَق بأي صيغة يُكتب بها (filters.js)، وهو في النص أيضًا كما كان
-  const spec = { fields, presets: PRESETS, phone: (p) => p.phone, text: (p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name, trackOfPlacements(p.placements)].join(' ') };
+  const spec = { fields, presets: PRESETS, phone: (p) => p.phone, text: (p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name, tk(p), tn(tk(p))].join(' ') };
   const SORTS = useMemo(() => ({
-    name: (p) => p.full_name, org: (p) => orgOf(p)?.name || p.organization_name, track: (p) => trackOfPlacements(p.placements),
+    name: (p) => p.full_name, org: (p) => orgOf(p)?.name || p.organization_name, track: (p) => tn(tk(p)),
     status: (p) => STATUS[p.status] || p.status, step: (p) => ONBOARDING_STEPS.indexOf(p.onboarding?.step), joined: (p) => p.created_at,
     // ما ينتظر قرار الإدارة أولًا، ثم ما أُعيد للمشارك (waiting من whereNow في الخادم، now.js)
     waiting: (p) => (p.waiting?.who === 'admin' ? 2000 : p.waiting?.who === 'participant' ? 1000 : 0) + (p.waiting?.n || 0),
-  }), [orgs]); // eslint-disable-line
+  }), [orgs, titles]); // eslint-disable-line
   const shown = useMemo(() => sortRows(applyFilters(all, spec, f), SORTS, f.sort), [all, f, fields, SORTS]);
-  const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
+  // العدادات من القائمة بلا اختبار، وعدد «حسابات اختبار» من الكل
+  const counts = useMemo(() => {
+    const real = visibleBase(everyone, '');
+    return { ...presetCounts(real, PRESETS), [TEST_VIEW]: everyone.length - real.length };
+  }, [everyone]);
+  // «بانتظار» يُخفى إن لم ينتظر أحد من الظاهرين شيئًا (البيانات صحيحة، والعمود الفارغ ضجيج)؛ الفرز به يبقى
+  const showWaiting = shown.some((p) => p.waiting?.who);
+  const nCols = (canWrite ? 1 : 0) + 1 + 1 + DIMS.length + 1 + 1 + 1 + (showWaiting ? 1 : 0) + 1;
+  const outside = pickedOutside(picked, shown);
+  const narrow = () => setPicked((s) => new Set(shown.filter((p) => s.has(p.id)).map((p) => p.id)));
+  // roving tabindex: صف واحد في التبويب، والأسهم تنقل بين الصفوف، وEnter يفتح
+  const [rove, setRove] = useState(0);
+  const roveAt = Math.min(rove, Math.max(0, shown.length - 1));
+  const rowKey = (e, i, id) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter') return open(id);
+    const j = rovingNext(e.key, i, shown.length);
+    if (j == null) return;
+    e.preventDefault();
+    setRove(j);
+    e.currentTarget.parentElement?.children[j]?.focus();
+  };
   // فتح مشارك يحفظ ترتيب ما يظهر الآن، فيتنقل المدير في الملفات بالسابق والتالي (review-queue.js)
   const open = (id) => { saveQueue(shown.map((p) => p.id), queueLabel(PRESETS, f.view)); keepSpot(window.scrollY, id); onOpen(id); };
   // الرجوع من الملف: التمرير نفسه والتركيز على صف آخر ملف فُتح (review-queue.js)، بعد أن تُرسم القائمة
@@ -187,7 +242,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     requestAnimationFrame(() => {
       window.scrollTo({ top: s.y });
       const row = s.id && document.querySelector(`tr[data-pid="${CSS.escape(s.id)}"]`);
-      if (row) row.focus({ preventScroll: true });
+      if (row) { const i = Number(row.dataset.i); if (Number.isFinite(i)) setRove(i); row.tabIndex = 0; row.focus({ preventScroll: true }); }
     });
   }, [list]);
 
@@ -199,7 +254,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     if (!moveTo) return toast('اختر الجهة');
     // الهدف باسمه في التأكيد، فلا يُنقل أحد إلى جهة غير المقصودة
     const target = moveTo === 'none' ? 'فكّ ارتباطهم بأي جهة' : `«${orgs.find((o) => o.id === moveTo)?.name || 'الجهة المختارة'}»`;
-    if (!(await confirm(moveTo === 'none' ? `${target} لـ${picked.size} مشارك؟` : `نقل ${picked.size} مشارك إلى ${target}؟`))) return;
+    const off = outside ? ` (منهم ${outside} خارج القائمة الظاهرة)` : '';
+    if (!(await confirm(moveTo === 'none' ? `${target} لـ${picked.size} مشارك${off}؟` : `نقل ${picked.size} مشارك${off} إلى ${target}؟`))) return;
     const r = await assignOrgGuarded({ participant_ids: [...picked], organization_id: moveTo === 'none' ? null : moveTo }, confirm);
     toast(r.success ? `نُقل ${r.moved ?? picked.size} مشارك` : r.message);
     if (r.success) { setPicked(new Set()); setMoveTo(''); load(); }
@@ -226,13 +282,14 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   const cohorts = useBulkCohorts(canWrite);
   const bulkDone = () => { setPicked(new Set()); load(serverQ); };
   const exportCols = [
-    { key: 'name', label: 'الاسم', width: 26, get: (p) => p.full_name }, { key: 'email', label: 'البريد', width: 30, get: (p) => p.email },
-    { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.phone }, { key: 'title', label: 'المسمى', width: 22, get: (p) => p.job_title },
+    // البريد والجوال sensitive: غير مختارين افتراضيًا (chosenColumns)، ويُصدَّران باختيار صريح مع تنبيه (المرحلة 9)
+    { key: 'name', label: 'الاسم', width: 26, get: (p) => p.full_name }, { key: 'email', label: 'البريد', width: 30, sensitive: true, get: (p) => p.email },
+    { key: 'phone', label: 'الجوال', width: 16, sensitive: true, get: (p) => p.phone }, { key: 'title', label: 'المسمى', width: 22, get: (p) => p.job_title },
     { key: 'org', label: 'الجهة', width: 24, get: (p) => orgOf(p)?.name || p.organization_name },
     { key: 'years', label: 'سنوات الخبرة', width: 12, get: (p) => p.years_experience },
     ...DIMS.map((d) => ({ key: `lvl_${d}`, label: DIM[d], width: 12, get: (p) => lv(p, d) })),
     { key: 'cohort', label: 'الدفعة', width: 22, get: (p) => listCohorts.find((c) => c.id === p.cohort_id)?.name },
-    { key: 'track', label: 'المسار', width: 10, get: (p) => trackOfPlacements(p.placements) },
+    { key: 'track', label: 'المسار', width: 28, get: (p) => tn(tk(p)) }, { key: 'track_code', label: 'رمز المسار', width: 10, get: (p) => tk(p) },
     { key: 'status', label: 'الحالة', width: 18, get: (p) => STATUS[p.status] || p.status },
     { key: 'step', label: 'أين توقف', width: 18, get: (p) => p.onboarding?.label }, { key: 'remaining', label: 'المتبقي', width: 40, get: (p) => p.onboarding?.remaining },
     { key: 'effort', label: 'جدية الإجابة', width: 16, get: (p) => EFFORT_AR[p.effort?.level] },
@@ -247,7 +304,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
         capped={cap ? { limit: cap, onSearch: (q) => load(q) } : null}
         actions={<>
           <ExportButton scope="participants" meta={{ kind: 'PPL', title: 'مشاركو برنامج القادة', sheet: 'المشاركون', file: 'Participants' }} columns={exportCols}
-            all={all} filtered={shown} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
+            all={f.view === TEST_VIEW ? everyone : all} filtered={shown} selected={everyone.filter((p) => picked.has(p.id))} noun="مشارك" isTest={(p) => p.is_test === true} withTest={f.view === TEST_VIEW} />
+          {wide && <button type="button" className="refresh-btn pt-density" aria-pressed={compact} title="كثافة الجدول على الشاشة العريضة" onClick={() => setDensity(compact ? 'comfy' : 'compact')}>{compact ? 'عرض مريح' : 'عرض مضغوط'}</button>}
           <ColumnPicker cols={cols} onChange={setCols} />
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
           {/* فعل أساسي واحد ظاهر (+ مشارك) والثانوية في «المزيد» (تدقيق 2026-11-23، المرحلة 2) */}
@@ -269,7 +327,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
       {bulkApprove && <BulkApprove ids={bulkApprove} onPerson={onOpen} onClose={(changed) => { setBulkApprove(null); if (changed) { setPicked(new Set()); load(serverQ); } }} />}
       {canWrite && picked.size > 0 && (
         <div className="la-bulk">
-          <span><b>{picked.size}</b> محدد</span>
+          <span aria-live="polite"><b>{picked.size}</b> محدد{outside > 0 && <>، منهم <b>{outside}</b> خارج القائمة</>}</span>
+          {outside > 0 && <button className="btn-sm ghost" type="button" onClick={narrow}>اقصر على الظاهر</button>}
           {pickedPending.length > 0 && <button className="btn-sm primary" onClick={() => setBulkApprove(pickedPending.slice(0, 50))} title="يُعتمد المتسق بمستواه المحسوب، ويُستبقى من عليه إشارة">اعتماد جماعي ({pickedPending.length})…</button>}
           <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
           <button className="btn-sm primary" onClick={move}>نقل</button>
@@ -281,33 +340,34 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}
-      <div className="table-wrap"><table className={`data-table la-cards t24 pt-table${canWrite ? ' has-pick' : ''} ${colsClass(cols)}`}>
+      <div className="table-wrap"><table className={`data-table la-cards t24 pt-table${canWrite ? ' has-pick' : ''}${compact ? ' pt-compact' : ''} ${colsClass(cols)}`}>
         <thead><tr>
           {canWrite && <th className="col-pick"><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
-          <SortTh k="name" state={f} set={setF} className="col-name">الاسم</SortTh><SortTh k="org" state={f} set={setF} className="col-wide col-org">الجهة</SortTh>{DIMS.map((d) => <th key={d} className="col-levels">{DIM[d]}</th>)}<SortTh k="track" state={f} set={setF} className="col-wide col-track">المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="waiting" state={f} set={setF}>بانتظار</SortTh><SortTh k="joined" state={f} set={setF} className="col-joined">التسجيل</SortTh>
+          <SortTh k="name" state={f} set={setF} className="col-name">الاسم</SortTh><SortTh k="org" state={f} set={setF} className="col-wide col-org">الجهة</SortTh>{DIMS.map((d) => <th key={d} className="col-levels">{DIM[d]}</th>)}<SortTh k="track" state={f} set={setF} className="col-wide col-track">المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>التقدم</SortTh>{showWaiting && <SortTh k="waiting" state={f} set={setF}>بانتظار</SortTh>}<SortTh k="joined" state={f} set={setF} className="col-joined">التسجيل</SortTh>
         </tr></thead>
         <tbody>
-          {!list ? <tr className="loading-row"><td colSpan={11}><Spinner /></td></tr>
-            : error ? <tr><td colSpan={11}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
-              : !shown.length ? <tr><td colSpan={11}>{all.length ? <NoMatch what="مشاركين" /> : <Empty title="لا مشاركين بعد" hint="يظهر هنا كل من يسجل من رابط جهته، ومن تضيفه أنت.">{canWrite && <><button className="btn-sm primary" type="button" onClick={() => setImporting(true)}>أضف مشاركين من قائمة</button><button className="btn-sm ghost" type="button" onClick={() => setAdding(true)}>أضف مشاركًا واحدًا</button></>}</Empty>}</td></tr>
-                : shown.map((p) => {
+          {!list ? <tr className="loading-row"><td colSpan={nCols}><Spinner /></td></tr>
+            : error ? <tr><td colSpan={nCols}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
+              : !shown.length ? <tr><td colSpan={nCols}>{all.length ? <NoMatch what="مشاركين" /> : <Empty title="لا مشاركين بعد" hint="يظهر هنا كل من يسجل من رابط جهته، ومن تضيفه أنت.">{canWrite && <><button className="btn-sm primary" type="button" onClick={() => setImporting(true)}>أضف مشاركين من قائمة</button><button className="btn-sm ghost" type="button" onClick={() => setAdding(true)}>أضف مشاركًا واحدًا</button></>}</Empty>}</td></tr>
+                : shown.map((p, i) => {
                   const og = orgOf(p);
-                  const tk = trackOfPlacements(p.placements);
+                  const code = trackOfPlacements(p.placements);
+                  const extra = [p.effort?.level === 'low' && ['bad', 'مستعجل', p.effort.note], p.effort?.level === 'watch' && ['warn', 'يُراجع', p.effort.note],
+                    p.retake && ['', 'طُلبت الإعادة', `طُلبت الإعادة ${date(p.retake.requested_at)}، ولم يسلّم قياسًا جديدًا بعد`]].filter(Boolean);
                   return (
-                    <tr key={p.id} data-pid={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => open(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(p.id); }}>
+                    <tr key={p.id} data-pid={p.id} data-i={i} tabIndex={i === roveAt ? 0 : -1} style={{ cursor: 'pointer' }} onClick={() => open(p.id)} onFocus={(e) => { if (e.target === e.currentTarget) setRove(i); }} onKeyDown={(e) => rowKey(e, i, p.id)}>
                       {canWrite && <td className="col-pick" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
-                      <td data-label="الاسم" className="col-name"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small>
+                      <td data-label="الاسم" className="col-name"><b title={compact ? p.email : undefined}>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}{compact && <span className="sr-only" dir="ltr"> {p.email}</span>}{!compact && <><br /><small className="la-muted" dir="ltr">{p.email}</small></>}
                         {/* وُجد برقمه: الرقم ظاهر تحت البريد، فيُعرف لماذا ظهر الصف */}
                         {phoneMatches(f.q, p.phone) && <><br /><small className="la-muted pt-phone" dir="ltr">{p.phone}</small></>}</td>
                       <td data-label="الجهة" className="col-wide col-org">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
                       {DIMS.map((d) => <td key={d} data-label={DIM[d]} className="col-levels"><Lvl p={p} d={d} /></td>)}
-                      <td data-label="المسار" className="col-wide col-track">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
+                      <td data-label="المسار" className="col-wide col-track">{code ? <span className="pt-track" title={code}>{tn(code)}<span className="sr-only"> ({code})</span></span> : <span className="la-muted">·</span>}</td>
                       <td data-label="الحالة"><StatusChip status={p.status} />
-                        {p.effort?.level === 'low' && <> <span className="la-chip bad" title={p.effort.note}>مستعجل</span></>}
-                        {p.effort?.level === 'watch' && <> <span className="la-chip warn" title={p.effort.note}>يُراجع</span></>}
-                        {p.retake && <> <span className="la-chip" title={`طُلبت الإعادة ${date(p.retake.requested_at)}، ولم يسلّم قياسًا جديدًا بعد`}>طُلبت الإعادة</span></>}</td>
-                      <td data-label="أين توقف"><Where o={p.onboarding} /></td>
-                      <td data-label="بانتظار"><Waiting w={p.waiting} /></td>
+                        {compact ? extra.length > 0 && <> <span className="la-chip" title={extra.map(([, l, t]) => (t ? `${l}: ${t}` : l)).join('، ')}>+{extra.length}<span className="sr-only">: {extra.map((x) => x[1]).join('، ')}</span></span></>
+                          : extra.map(([tone, l, t]) => <React.Fragment key={l}> <span className={`la-chip${tone ? ` ${tone}` : ''}`} title={t}>{l}</span></React.Fragment>)}</td>
+                      <td data-label="التقدم"><Where o={p.onboarding} /></td>
+                      {showWaiting && <td data-label="بانتظار"><Waiting w={p.waiting} /></td>}
                       <td data-label="التسجيل" className="col-joined">{date(p.created_at)}</td>
                     </tr>
                   );
@@ -687,9 +747,10 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
 }
 
 // عمود «بانتظار»: من whereNow على الخادم (now.js) نفسه الذي يبني شريط «أين هو الآن» في الملف
-function Waiting({ w }) {
+export function Waiting({ w }) {
   if (!w) return <span className="la-muted">—</span>;
-  if (!w.who) return <span className="la-muted">لا شيء</span>;
+  // لا شيء ينتظر: شرطة خافتة، ونص لقارئ الشاشة (المرحلة 9)
+  if (!w.who) return <><span className="la-muted" aria-hidden="true">—</span><span className="sr-only">لا شيء</span></>;
   return <span className={`la-chip ${w.who === 'admin' ? 'warn' : ''}`} title={w.text}>{w.who === 'admin' ? `الإدارة · ${w.n}` : `المشارك · ${w.n}`}</span>;
 }
 

@@ -565,6 +565,7 @@ a { text-decoration: none; color: inherit; }
 .stat-card.s-total::before  { background: linear-gradient(90deg, var(--petrol-s), var(--petrol-soft)); }
 .stat-card.s-new::before    { background: linear-gradient(90deg, var(--c-new), var(--st-info-dark)); }
 .stat-card.s-replied::before { background: linear-gradient(90deg, var(--c-replied), var(--brand-copper)); }
+.stat-card.s-warn::before    { background: var(--st-warn); }
 .stat-card.s-archived::before{ background: linear-gradient(90deg, var(--c-archived), var(--brand-clay)); }
 
 .stat-label {
@@ -1340,7 +1341,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .flt { display: grid; gap: 10px; margin: 0 0 16px; }
 .flt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .flt-search { flex: 1 1 260px; min-width: 200px; }
-.filter-select.on { border-color: var(--brand-copper); background: var(--brand-cream-light); }
+.filter-select.on { border-color: var(--brand-copper); background-color: var(--brand-cream-light); }
+/* الأسلوب الموحد لحقول FilterBar (المرحلة 15): البحث والحقول والترتيب والعروض المحفوظة بارتفاع وحد وإطار واحد،
+   والحقل المطبَّق يغيّر لون الخلفية وحده (background-color) فلا يسقط سهم القائمة، والقيمة المطبقة رقاقة قابلة للإزالة تحته */
+.flt .search-input, .flt .filter-select { box-sizing: border-box; min-block-size: 40px; border: 1.5px solid var(--ink-faint); border-radius: 9px; font: inherit; font-size: .82rem; line-height: 1.4; }
+.flt .filter-select { padding-block: 8px; max-inline-size: 100%; }
+.flt .filter-select.on { border-color: var(--brand-copper); background-color: var(--brand-cream-light); color: var(--ink); }
+.flt .search-input:focus-visible, .flt .filter-select:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 1px; }
 .flt-more, .flt-link { background: none; border: 0; padding: 6px 4px; font: inherit; font-size: .82rem; color: var(--brand-gold-deep); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .flt-presets { gap: 6px; }
 .flt-preset { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--brand-line); border-radius: 999px;
@@ -1618,3 +1625,6 @@ a.mx-stat:focus-visible, .mx-track:focus-visible, .mx-row-link:focus-visible { o
 
 /* شارة حساب الاختبار: نغمة محايدة متقطعة تميزها عن شارات الحالة */
 .la-chip.mx-test-chip { background: transparent; border: 1px dashed currentColor; opacity: .85; }
+.flt-auto { margin: 0; font-size: .82rem; }
+.flt-auto:empty { display: none; }
+[aria-disabled="true"].refresh-btn, button[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }

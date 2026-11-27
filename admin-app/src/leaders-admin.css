@@ -282,7 +282,6 @@
 .la-org { --org: var(--gold); position: relative; border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; padding: 16px; display: grid; gap: 12px; overflow: hidden; }
 .la-org::before { content: ""; position: absolute; inset-inline: 0; top: 0; height: 4px; background: var(--org); }
 .la-org.off { opacity: .6; }
-.la-org.none { background: var(--brand-cream-faint); border-style: dashed; }
 .la-org header { display: flex; gap: 12px; align-items: center; cursor: pointer; }
 .la-org header b { display: block; font-size: 1rem; }
 .la-org header small { color: var(--ink-mid); font-size: .74rem; }
@@ -294,11 +293,11 @@
 .la-fn-bar { display: block; height: 7px; border-radius: 6px; background: var(--sand-light); overflow: hidden; }
 .la-fn-bar i { display: block; height: 100%; background: var(--org, var(--gold)); border-radius: 6px; }
 .la-funnel { display: grid; gap: 6px; }
-.la-fn { display: grid; grid-template-columns: 92px 1fr 34px; gap: 8px; align-items: center; font-size: .76rem; }
+.la-fn { display: grid; grid-template-columns: 92px 1fr auto; gap: 8px; align-items: center; font-size: .76rem; }
 .la-fn b { text-align: end; }
 .la-fn-l { color: var(--ink-mid); }
-.la-funnel.big .la-fn { grid-template-columns: 120px 1fr 40px; font-size: .86rem; }
-.la-funnel.big .la-fn-bar { height: 10px; }
+.la-funnel.big .la-fn { grid-template-columns: 120px 1fr auto; font-size: .86rem; }
+.la-funnel.big .la-fn-bar, .la-funnel.big .la-meter-bar { height: 10px; }
 .la-org-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .76rem; }
 .la-org-acts { flex-wrap: wrap; gap: 6px; }
 .la-typed { display: grid; gap: 6px; font-size: .82rem; }
@@ -1026,7 +1025,7 @@
 .pf-o.commendation { border-inline-start-color: var(--st-ok); }
 .pf-o p { margin: 6px 0; white-space: pre-wrap; }
 .pf-mini li { margin-bottom: 4px; font-size: .9rem; }
-.pf-time li { display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.pf-time li { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
 .pf-time li.warn b { color: var(--st-warn-text); }
 .pf-time li.ok b { color: var(--st-ok); }
 .pf-when { color: var(--ink-soft); }
@@ -1681,3 +1680,83 @@ tr.ct-on > td { background: var(--gold-pale); }
 .xsp-unit-t { display: block; font-size: .8rem; color: var(--ink-mid); margin: 6px 0 2px; }
 .xsp-note { display: block; border-inline-start: 3px solid var(--st-warn); padding-inline-start: 6px; margin-top: 2px; }
 .xsp-edit { display: grid; gap: 6px; margin-top: 6px; }
+
+/* المرحلة 8: النظرة العامة. الإجراءات السريعة في الرأس بجانب التحية، وسهم البطاقة، والعرض النشط، وسطر المصفوفة */
+.today-head .today-links { margin: 0; gap: 6px; }
+.today-n-go { margin-inline-start: 6px; color: var(--petrol, currentColor); opacity: .7; }
+.today-n:hover .today-n-go, .today-n:focus-visible .today-n-go { opacity: 1; }
+.today-n[aria-pressed="true"] { border-color: var(--petrol, var(--line-strong)); box-shadow: inset 0 0 0 1px var(--petrol, var(--line-strong)); }
+.today-exc-sk .sk { display: block; flex: 1; block-size: 14px; }
+.today-mx { margin: 0 0 14px; font-size: .9rem; }
+
+/* المرحلة 9: كثافة جدول المشاركين (مضغوط للعريض وحده)، والصف 32 بكسل على الأقل */
+.pt-table.pt-compact td { padding-block: 4px; line-height: 1.3; }
+.pt-table.pt-compact tbody tr { height: 32px; }
+.pt-table .pt-track { white-space: nowrap; }
+.pt-table tbody tr:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: -2px; }
+
+/* المرحلة 10: شريط مهمة «بلا جهة» أعلى شبكة الجهات بدل البطاقة الوهمية */
+.org-unassigned { margin-block: 12px; border-inline-start: 4px solid var(--st-warn); }
+.org-unassigned .la-typed { margin-top: 8px; }
+.la-fn .la-meter, .la-seats .la-meter { display: flex; min-width: 0; white-space: normal; }
+.la-fn .la-meter-bar, .la-seats .la-meter-bar { flex: 1; width: auto; min-width: 40px; height: 7px; }
+.la-funnel.big .la-fn .la-meter-bar { height: 10px; }
+.la-org .la-meter:not(.ok):not(.warn):not(.bad) .la-meter-bar > i, .la-fn .la-meter:not(.ok):not(.warn):not(.bad) .la-meter-bar > i { background: var(--org, var(--gold)); }
+
+/* البرامج والدفعات (المرحلة 11): البيانات الوصفية في dl بسطر ثانٍ، وقسم المؤرشفة، وشرح الخطوات المطوي */
+.prog-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 0; font-size: .84rem; color: var(--ink-mid); }
+.prog-meta > div { display: flex; gap: 6px; }
+.prog-meta dt { color: var(--ink-light); }
+.prog-meta dt::after { content: ':'; }
+.prog-meta dd { margin: 0; }
+.prog-drafts { margin: 0 0 8px; }
+.prog-archived { margin-top: 20px; }
+.prog-archived > summary, details.how-it-works > summary { cursor: pointer; font-weight: 700; }
+details.how-it-works[open] > summary { margin-bottom: 12px; }
+
+/* المرحلة 15: الخانة الغائبة (Missing) ونقل الصف (Move) */
+.la-missing { color: var(--ink-light); }
+.la-missing.loading .sk { display: inline-block; inline-size: 3em; block-size: .8em; vertical-align: middle; }
+.la-missing.later { font-size: .8rem; }
+.la-move { display: inline-flex; gap: 2px; }
+.la-move-btn { min-inline-size: 32px; min-block-size: 32px; display: inline-grid; place-items: center; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--ink-light); cursor: pointer; font-size: .75rem; }
+.la-move-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sand-light); color: var(--ink); }
+.la-move-btn:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 1px; }
+.la-move-btn:disabled, .la-move-btn[aria-disabled="true"] { opacity: .35; cursor: default; }
+.la-missing-mark { display: inline-block; inline-size: .9em; block-size: 1.5px; background: currentColor; opacity: .55; vertical-align: middle; border-radius: 1px; }
+
+/* الخبراء (المرحلة 16): شريط اللجان تحت صف الأرقام، وتبويبا الطلبات والشبكة */
+.ex-committees { margin: 4px 0 18px; }
+.ex-committees-h { font-size: .9rem; margin: 0 0 8px; color: var(--brand-ink-mid); }
+.ex-committees-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.ex-committee { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; margin: 0; }
+.ex-committee .la-blank.compact { padding: 8px 0; margin: 0; }
+.ex-gaps { line-height: 1.6; }
+.ex-tabs button:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+.ex-stats .la-meter { max-width: 100%; }
+
+/* المرحلة 17: الصف كله قابل للنقر، والاسم بوزن 600 بلا تسطير إلا عند hover وfocus-visible (على مستوى .la-table .la-link) */
+.la-table .la-link { font-weight: 600; text-decoration: none; }
+.la-table .la-link:hover, .la-table .la-link:focus-visible,
+.la-table tr.la-click:hover .la-link, .la-table tr.la-click:focus-visible .la-link, .la-table tr.la-click:focus-within .la-link { text-decoration: underline; text-underline-offset: 3px; }
+.la-table tr.la-click:focus-visible { outline: 2px solid var(--petrol-soft); outline-offset: -2px; }
+.la-table tr.la-click:focus-visible td, .la-table tr.la-click:focus-within td { background: var(--sand-light); }
+
+/* ══ ترويسة الشاشة الموحدة داخل القسم (المرحلة 18): سطح فاتح بلا بطل، وسطر حالة ══ */
+.screen-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.screen-head-main { flex: 1 1 320px; min-width: 0; }
+.screen-head-title { margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--ink); line-height: 1.4; }
+.screen-head-desc { margin: 2px 0 0; color: var(--ink-light); font-size: .86rem; line-height: 1.7; }
+.screen-head-acts { display: flex; gap: 6px; align-items: center; }
+.screen-head-status { flex-basis: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* كتاب القائد: الأرقام بالبطاقة الموحدة، والتبويبات ملتصقة تحت الترويسة العامة */
+.hb-stats { margin-bottom: 12px; }
+.hb-tabs { position: sticky; top: calc(var(--la-head-h) + 8px); z-index: 5; background: var(--paper, #fff); padding: 6px 0; margin-bottom: 14px; }
+.hb-tabs button:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+/* صف الباب: العنوان وشارة الجاهزية، ثم رقمان بارزان، ثم سطر خافت */
+.hb-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hb-tiered { color: var(--ink-light); font-size: .9rem; }
+.hb-nums { display: flex; gap: 16px; font-size: .78rem; color: var(--ink-light); }
+.hb-nums b { font-family: var(--font-en); font-size: 1.05rem; color: var(--ink); margin-inline-end: 3px; }
+.hb-ch .hb-meta { color: var(--ink-faint, var(--ink-light)); }
+.hb-ch.empty .hb-meta > span:nth-child(2) { color: inherit; font-weight: inherit; }

@@ -92,7 +92,7 @@ test('إغلاق النموذج بتعديلات غير محفوظة يطلب ا
 
 test('الحذف محمي: يعرض الأثر ويرفض جهة لها مشاركون، ويقترح الإيقاف', async ({ page }) => {
   await admin(page, { 'admin.coordinator': { success: true, coordinator: coord, sessions: [], activity: [] } });
-  await page.locator('.la-org').getByRole('button', { name: /^إجراءات أخرى لجهة/ }).click();  // أفعال الجهة الثانوية في ⋯ (المرحلة 2)
+  await page.locator('.la-org').getByRole('button', { name: /^إجراءات: جهة/ }).click();  // أفعال الجهة الثانوية في «إجراءات ▾» (المرحلة 10)
   await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const f = page.getByRole('dialog', { name: /وزارة التجربة/ });
   await f.getByRole('button', { name: 'حذف الجهة…' }).click();
@@ -103,7 +103,7 @@ test('الحذف محمي: يعرض الأثر ويرفض جهة لها مشار
 
 test('الحذف يتطلب كتابة اسم الجهة حين لا ارتباطات', async ({ page }) => {
   const calls = await admin(page, { 'admin.coordinator': { success: true, coordinator: null }, 'admin.org-impact': { success: true, participants: 0, reports: 0, coordinator: false }, 'admin.delete': { success: true } });
-  await page.locator('.la-org').getByRole('button', { name: /^إجراءات أخرى لجهة/ }).click();  // أفعال الجهة الثانوية في ⋯ (المرحلة 2)
+  await page.locator('.la-org').getByRole('button', { name: /^إجراءات: جهة/ }).click();  // أفعال الجهة الثانوية في «إجراءات ▾» (المرحلة 10)
   await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const f = page.getByRole('dialog', { name: /وزارة التجربة/ });
   await f.getByRole('button', { name: 'حذف الجهة…' }).click();
@@ -117,7 +117,7 @@ test('الحذف يتطلب كتابة اسم الجهة حين لا ارتبا�
 // admin-core-3: إطفاء المفتاح كان يُعلن «أُلغي حساب المنسق» ولو رفض الخادم الإلغاء، فيبقى المنسق مطّلعًا على بيانات المشاركين
 test('مدير النظام لا يُطفئ حساب منسق قائم: الإلغاء للمدير العام، ويُدَل على الإيقاف', async ({ page }) => {
   const calls = await admin(page, { 'admin.coordinator': { success: true, coordinator: coord, sessions: [], activity: [] }, 'admin.coordinator-save': { success: true } });
-  await page.locator('.la-org').getByRole('button', { name: /^إجراءات أخرى لجهة/ }).click();  // أفعال الجهة الثانوية في ⋯ (المرحلة 2)
+  await page.locator('.la-org').getByRole('button', { name: /^إجراءات: جهة/ }).click();  // أفعال الجهة الثانوية في «إجراءات ▾» (المرحلة 10)
   await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const f = page.getByRole('dialog', { name: /وزارة التجربة/ });
   await expect(f.locator('.of-switch', { hasText: 'يرى لوحة الجهة' }).getByRole('checkbox')).toBeDisabled();
@@ -137,7 +137,7 @@ test('إلغاء حساب المنسق لا يُعلن إلا بعد أن يؤك
     calls.push(b);
     await route.fulfill({ json: removed });
   });
-  await page.locator('.la-org').getByRole('button', { name: /^إجراءات أخرى لجهة/ }).click();  // أفعال الجهة الثانوية في ⋯ (المرحلة 2)
+  await page.locator('.la-org').getByRole('button', { name: /^إجراءات: جهة/ }).click();  // أفعال الجهة الثانوية في «إجراءات ▾» (المرحلة 10)
   await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const f = page.getByRole('dialog', { name: /وزارة التجربة/ });
   const account = f.locator('.of-switch', { hasText: 'يرى لوحة الجهة' }).getByRole('checkbox');

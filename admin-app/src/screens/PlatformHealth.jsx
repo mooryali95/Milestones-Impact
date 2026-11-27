@@ -12,7 +12,8 @@ import { Spinner, useUI } from '../ui.jsx';
 import { DemoLinks, resetConfirmAr, useDemoLinks } from '../DemoLinks.jsx';
 import { readinessSummary } from '../org-hub.js';
 import { dateTime } from '../dates.js';
-import { exceptionRows, orgsReadinessRows, systemNotes } from '../today.js';
+import { exceptionRows, orgsReadinessRows, phAnchor, systemNotes } from '../today.js';
+import { anchorOf } from '../route.js';
 
 // وجهة بند الجاهزية الناقص: اسم الجهة أو الدفعة يفتح ملفها، والبرنامج قائمة البرامج (لا ملف لكل برنامج)
 const refHref = (r) => (r.kind === 'org' ? `#/leaders/orgs/${encodeURIComponent(r.id)}` : r.kind === 'program' ? '#/leaders/programs' : `#/leaders/programs/${encodeURIComponent(r.id)}`);
@@ -20,14 +21,14 @@ const refHref = (r) => (r.kind === 'org' ? `#/leaders/orgs/${encodeURIComponent(
 // حالة النظام: ترحيلات لم تُطبَّق بوسم بوابة النشر، وأسرار ناقصة، واقتراب البريد من سقفه اليومي، وما تعذّرت قراءته منها.
 // الوسم من الخادم (pending_migrations، المصدر نفسه لبوابات المراحل): المؤجل بقرار لا يُطلب تطبيقه. خادم قبل الحقل يُقرأ كما كان
 function SystemState({ h }) {
-  if (!h?.success) return <p className="la-note" role="status">تعذّرت قراءة حالة النظام الآن، فلا يُعرف إن كانت سليمة. أعد الفحص بعد قليل.</p>;
-  if (!systemNotes(h)) return <section className="la-card ph-sys" aria-label="حالة النظام"><b>حالة النظام</b> <span className="la-muted">· سليمة: الترحيلات مطبقة والأسرار مضبوطة.</span></section>;
+  if (!h?.success) return <p id="ph-system" tabIndex={-1} className="la-note" role="status">تعذّرت قراءة حالة النظام الآن، فلا يُعرف إن كانت سليمة. أعد الفحص بعد قليل.</p>;
+  if (!systemNotes(h)) return <section id="ph-system" tabIndex={-1} className="la-card ph-sys" aria-label="حالة النظام"><b>حالة النظام</b> <span className="la-muted">· سليمة: الترحيلات مطبقة والأسرار مضبوطة.</span></section>;
   const near = h.mail.today >= h.mail.cap * 0.8;
   const pending = h.pending_migrations || (h.missing_migrations || []).map((name) => ({ name, gate: 'blocking' }));
   const gate = (g) => pending.filter((m) => m.gate === g);
   const files = (list) => list.map((m) => <code key={m.name}>{m.name}.sql</code>);
   return (
-    <div className="la-note la-health" role="status" aria-label="حالة النظام">
+    <div id="ph-system" tabIndex={-1} className="la-note la-health" role="status" aria-label="حالة النظام">
       <b>حالة النظام</b>
       {h.migrations_ledger === false && <p>تعذّرت قراءة سجل الترحيلات، فلا يُعرف ما لم يُطبَّق.</p>}
       {h.mail.today == null && <p>تعذّرت قراءة عداد البريد: لا يخرج الآن إلا الرموز والتنبيه، والتذكيرات في الطابور.</p>}
@@ -47,7 +48,7 @@ function Readiness({ items }) {
   const todo = all.filter((x) => !x.ok);
   const done = all.filter((x) => x.ok);
   return (
-    <section className="la-card la-ready" aria-label="جاهزية الإطلاق" data-missing={todo.length}>
+    <section id="ph-launch" tabIndex={-1} className="la-card la-ready" aria-label="جاهزية الإطلاق" data-missing={todo.length}>
       <div className="la-row between"><h3>جاهزية الإطلاق</h3><span className="la-muted">{done.length} من {all.length}</span></div>
       {todo.length > 0 && (
         <ul>
@@ -78,7 +79,7 @@ function OrgsReadiness({ orgs }) {
   if (!rows.length) return null;
   const ready = rows.filter((x) => !x.r.missing).length;
   return (
-    <section className="la-card la-ready" aria-label="جاهزية الجهات">
+    <section id="ph-orgs" tabIndex={-1} className="la-card la-ready" aria-label="جاهزية الجهات">
       <div className="la-row between"><h3>جاهزية الجهات</h3><span className="la-muted">{ready} من {rows.length} جاهزة</span></div>
       <ul>
         {rows.map(({ o, r }) => (
@@ -99,14 +100,14 @@ const PH_DOT = { ok: '✓', warn: '!', bad: '✕', unknown: '?' };
 const PH_LEVEL_AR = { ok: 'سليم', warn: 'يحتاج انتباهًا', bad: 'خلل', unknown: 'غير معروف' };
 function PlatformChecks({ r }) {
   if (!r) return null;
-  if (!r.success) return <p className="la-muted small ph-err">تعذّرت قراءة فحوص المنصة الآن.</p>;
+  if (!r.success) return <p id="ph-checks" tabIndex={-1} className="la-muted small ph-err">تعذّرت قراءة فحوص المنصة الآن.</p>;
   if (!Array.isArray(r.checks) || !r.checks.length) return null;
   return (
-    <section className="la-card ph-card" aria-label="الفحوص التشغيلية" data-level={r.level}>
+    <section id="ph-checks" tabIndex={-1} className="la-card ph-card" aria-label="الفحوص التشغيلية" data-level={r.level}>
       <div className="ph-title"><b>الفحوص التشغيلية</b> <small className="la-muted">· {PH_LEVEL_AR[r.level] || ''}</small></div>
       <ul className="ph-rows">
         {r.checks.map((c) => (
-          <li key={c.key} className={`ph-row ph-${c.level}`} data-level={c.level}>
+          <li key={c.key} id={phAnchor(`ph-${c.key}`)} tabIndex={-1} className={`ph-row ph-${c.level}`} data-level={c.level}>
             <span className="ph-dot" aria-hidden="true">{PH_DOT[c.level] || '?'}</span>
             <span className="ph-main"><b>{c.label}</b> <span className="ph-line">{c.line}</span>
               {c.remedy && <span className="ph-remedy">{c.remedy}</span>}</span>
@@ -186,6 +187,20 @@ export default function PlatformHealth({ orgs = [], orgsLoaded = true, canWrite,
     ]).then(([h, ph]) => live && setD({ h, ph, at: new Date().toISOString() }));
     return () => { live = false; };
   }, [n]);
+  // الرابط العميق من «ما يحتاج انتباهك» (‎#/leaders/health#ph-launch‎): بعد وصول الفحوص يُنقل إلى البند ويُركَّز عليه.
+  // المرساة غير الموجودة (بند سلم منذ فتح الرابط) تُبقي الصفحة في أعلاها، فلا تنقل إلى غير ما سُمّي
+  useEffect(() => {
+    if (!d) return undefined;
+    const go = () => {
+      const a = anchorOf(window.location.hash);
+      const el = a && document.getElementById(a);
+      if (el) { el.scrollIntoView?.({ block: 'start' }); el.focus?.({ preventScroll: true }); }
+    };
+    go();
+    // تغيّر المرساة وحدها لا يعيد تركيب الشاشة: يُتابع hashchange
+    window.addEventListener('hashchange', go);
+    return () => window.removeEventListener('hashchange', go);
+  }, [d]);
   // «أعد الفحص» يسأل كل مصادر الحكم: الحالة والفحوص، وصحة البريد، والجهات
   const recheck = () => { setN((x) => x + 1); if (writer) refreshOps(); reloadOrgs?.(); };
   if (!d) return <Spinner />;

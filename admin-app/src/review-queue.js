@@ -50,14 +50,16 @@ export function navKey(e, doc = globalThis.document) {
 
 // موضع القائمة عند فتح ملف منها (المرحلة 3 من تدقيق اللوحة): الرجوع إليها يعيد التمرير نفسه ويضع التركيز على
 // صف آخر ملف فُتح، فلا يبدأ المدير من أعلى القائمة. لقطة في الجلسة فقط، تُستهلك مرة واحدة
+// scope يميز القائمة (المشاركون افتراضيًا، 'orgs' للجهات منذ المرحلة 10): لا تستهلك قائمةٌ موضعَ أخرى
 const SPOT = 'mi_admin_list_spot';
-export function keepSpot(y, id) {
-  try { sessionStorage.setItem(SPOT, JSON.stringify({ y: Math.max(0, Math.round(Number(y) || 0)), id: String(id || '') })); } catch { /* محجوب */ }
+export function keepSpot(y, id, scope = '') {
+  try { sessionStorage.setItem(SPOT, JSON.stringify({ y: Math.max(0, Math.round(Number(y) || 0)), id: String(id || ''), scope: String(scope || '') })); } catch { /* محجوب */ }
 }
-export function takeSpot() {
+export function takeSpot(scope = '') {
   try {
     const s = JSON.parse(sessionStorage.getItem(SPOT));
+    if (!s || String(s.scope || '') !== String(scope || '')) return null;
     sessionStorage.removeItem(SPOT);
-    return s && typeof s.y === 'number' ? { y: s.y, id: typeof s.id === 'string' ? s.id : '' } : null;
+    return typeof s.y === 'number' ? { y: s.y, id: typeof s.id === 'string' ? s.id : '' } : null;
   } catch { return null; }
 }

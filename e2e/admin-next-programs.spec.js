@@ -78,7 +78,7 @@ async function setup(page) {
 test('البرامج: حفظ نسخة، المقارنة، الاسترجاع، والتكرار', async ({ page }) => {
   const calls = await setup(page);
   await expect(page.getByText('برنامج سفراء')).toBeVisible();
-  await expect(page.getByText(/آخر نسخة محفوظة: 2، بعد مراجعة أكتوبر/)).toBeVisible();
+  await expect(page.locator('section.la-card', { hasText: 'برنامج القادة' }).locator('.prog-meta')).toContainText('2، بعد مراجعة أكتوبر');
 
   await page.getByRole('button', { name: /^إجراءات أخرى لبرنامج/ }).first().click();
   await page.getByRole('menuitem', { name: 'احفظ نسخة' }).click();
@@ -86,7 +86,7 @@ test('البرامج: حفظ نسخة، المقارنة، الاسترجاع، 
   await page.getByRole('dialog').getByRole('button', { name: /موافق|تأكيد|حفظ/ }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.program-version')).toMatchObject({ id: 'pa', label: 'قبل دفعة سفراء' });
 
-  await page.getByRole('button', { name: 'النسخ (2)' }).click();
+  await page.getByRole('button', { name: /^سجل النسخ \(2\)/ }).click();
   await page.getByRole('button', { name: 'قارن بالحالي' }).last().click();
   await expect(page.getByText(/أُضيف: فيديو التمهيد/)).toBeVisible();
   // الرمز الداخلي لا يظهر للمدير في الفروق

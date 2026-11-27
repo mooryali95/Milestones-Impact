@@ -5,17 +5,17 @@
 // والحالة من expert_requests وحدها. لا منطق ترشيح في الواجهة.
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, StatusChip, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, decodeState, isFiltered, presetCounts, sortRows } from '../filters.js';
-import { countAr, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_REQUEST_STATUS_TONE, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MATCH_WEIGHTS, OFFER_HOURS } from '../../../supabase/functions/leaders-api/logic.js';
 
 const PART_AR = { fit: 'التخصص والمستوى', capacity: 'السعة المتاحة', quality: 'التقييم', context: 'القطاع', continuity: 'خدمه من قبل' };
-const REQ_TONE = { open: 'warn', offered: 'warn', accepted: 'ok', unmatched: 'bad', cancelled: '', completed: 'ok' };
 const LIVE = ['open', 'offered', 'accepted'];
 const roleAr = (r) => EXPERT_ROLE_AR[r]?.[0] || r;
+const ReqChip = ({ status }) => <StatusChip status={status} labels={EXPERT_REQUEST_STATUS} tones={EXPERT_REQUEST_STATUS_TONE} />;
 
 function Breakdown({ parts }) {
   return (
@@ -62,7 +62,7 @@ export function ExpertAssign({ participantId, canWrite }) {
       <div className="la-row between"><h3>الخبراء المسندون</h3>{reqs && <small className="la-muted">{live.length} قائم · {reqs.length} إجمالًا</small>}</div>
       {!reqs ? <Spinner /> : reqs.length ? (
         <ul className="la-reqs">{reqs.map((x) => (
-          <li key={x.id}><span><b>{roleAr(x.role)}</b>{x.dimension ? ` · ${DIM_AR[x.dimension]}` : ''} {x.experts?.full_name && <>· {x.experts.full_name}</>} <span className={`la-chip ${REQ_TONE[x.status]}`}>{EXPERT_REQUEST_STATUS[x.status]}</span></span>
+          <li key={x.id}><span><b>{roleAr(x.role)}</b>{x.dimension ? ` · ${DIM_AR[x.dimension]}` : ''} {x.experts?.full_name && <>· {x.experts.full_name}</>} <ReqChip status={x.status} /></span>
             <small className="la-muted">{x.status === 'offered' && x.expires_at ? `حتى ${date(x.expires_at)} · ` : ''}{(x.tried || []).length ? `اعتذر أو فات ${x.tried.length} · ` : ''}{date(x.created_at)}</small></li>
         ))}</ul>
       ) : <p className="la-muted">لم يُسند إليه خبير بعد.</p>}
@@ -156,14 +156,23 @@ export const requestView = (qs) => {
   const v = decodeState(qs, ['view']).view;
   return REQ_PRESETS.some((p) => p.key === v) ? v : '';
 };
-export function RequestsBoard({ canWrite, onPerson, view = '' }) {
+// عدد ما يحتاج تدخلًا (لعنوان تبويب الطلبات في شاشة الخبراء)
+export const attentionCount = (list, now = Date.now()) => (list || []).filter((x) => needsAttention(x, now)).length;
+// data/onReload: حين تحمّل شاشة الخبراء الطلبات نفسها (لعنوان التبويب وافتراضه)، فلا تُطلب مرتين. وبدونهما تحمّلها اللوحة
+export function RequestsBoard({ canWrite, onPerson, view = '', data = undefined, onReload = null }) {
   const { toast, prompt } = useUI();
-  const [d, setD] = useState(null);
+  const [own, setOwn] = useState(null);
+  const lifted = data !== undefined;
+  const d = lifted ? data : own;
   // داخل شاشة الخبراء ولها شريطها وعنوانها، فحالة هذا الشريط لا تُكتب في العنوان (url: false).
-  // الافتراضي «يحتاج تدخلًا»، والعرض الوارد من رابط يغلب ما تُرك آخر مرة
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'sort'], view ? { view } : {}, { scope: 'expert-requests', defaults: { view: 'attention' }, url: false });
-  const load = useCallback(async () => setD(await L('admin.expert-requests')), []);
-  useEffect(() => { load(); }, [load]);
+  // الافتراضي «يحتاج تدخلًا»، والعرض الوارد من رابط يغلب ما تُرك آخر مرة ويُحترم ولو كان فارغًا.
+  // وإن لم يأت العرض من رابط ولا مما تُرك ولا من اختيار صريح وكان «يحتاج تدخلًا» فارغًا، تختار firstNonEmpty
+  // أول عرض فيه طلبات (المرحلة 16)، ولا يُكتب ذلك في شيء
+  const nowRef = Date.now();
+  const autoCounts = d?.success ? presetCounts(d.requests, REQ_PRESETS, nowRef) : {};
+  const [f, setF, clearF, replaceF, picked] = useFilters(['q', 'view', 'role', 'sort'], view ? { view } : {}, { scope: 'expert-requests', defaults: { view: 'attention' }, url: false, autoView: { presets: REQ_PRESETS, counts: autoCounts } });
+  const load = useCallback(async () => { if (lifted) { if (onReload) await onReload(); } else setOwn(await L('admin.expert-requests')); }, [lifted, onReload]);
+  useEffect(() => { if (!lifted) load(); }, [load, lifted]);
   if (!d) return <section className="la-card"><h3>طلبات الإسناد</h3><Spinner /></section>;
   if (!d.success) return <section className="la-card"><h3>طلبات الإسناد</h3><div className="la-err">{d.message}</div></section>;
   const all = d.requests;
@@ -185,6 +194,7 @@ export function RequestsBoard({ canWrite, onPerson, view = '' }) {
       <h3>طلبات الإسناد</h3>
       <FilterBar scope="expert-requests" state={f} set={setF} clear={clearF} replace={replaceF} fields={REQ_FIELDS} presets={REQ_PRESETS} counts={presetCounts(all, REQ_PRESETS, now)}
         shown={rows.length} total={all.length} noun="طلب" placeholder="ابحث بالمشارك أو الخبير" capped={d.capped ? { limit: d.limit } : null}
+        auto={picked} autoNote={picked?.from === 'attention' ? 'لا شيء يحتاج تدخلك الآن' : ''}
         actions={<ExportButton scope="expert-requests" meta={{ kind: 'REQ', title: 'طلبات إسناد الخبراء', sheet: 'الطلبات', file: 'Expert-Requests' }} columns={REQ_COLS} all={all} filtered={rows} noun="طلب" />} />
       {!rows.length ? (all.length ? (calm ? <Empty compact title="لا طلب يحتاج تدخلًا الآن" hint="كل طلب قائم معروض على خبير بمهلة ممتدة أو جارٍ في وقته. اختر «قائمة» لترى الطلبات الجارية." /> : <NoMatch what="طلبات" />) : <Empty compact title="لا طلبات إسناد بعد" hint="أسند خبيرًا من ملف أي مشارك، ويظهر طلبه هنا بحالته." />) : (
         <div className="table-wrap"><table className="data-table la-cards">
@@ -194,7 +204,7 @@ export function RequestsBoard({ canWrite, onPerson, view = '' }) {
               <td data-label="المشارك"><button className="link" onClick={() => onPerson(x.participant_id)}>{x.participants?.full_name}</button></td>
               <td data-label="الخدمة">{roleAr(x.role)}{x.dimension ? <small className="la-muted"> · {DIM_AR[x.dimension]}</small> : null}</td>
               <td data-label="الخبير">{x.experts?.full_name || <span className="la-muted">·</span>}{x.score != null && <small className="la-muted"> · {x.score}</small>}{x.manual_reason && <small className="la-muted" title={x.manual_reason}> · يدوي</small>}</td>
-              <td data-label="الحالة"><span className={`la-chip ${REQ_TONE[x.status]}`}>{EXPERT_REQUEST_STATUS[x.status]}</span>{x.status === 'offered' && <small className="la-muted"> حتى {date(x.expires_at)}</small>}{f.view === 'attention' && attentionReason(x, now) && <small className="xm-why">{attentionReason(x, now)}</small>}</td>
+              <td data-label="الحالة"><ReqChip status={x.status} />{x.status === 'offered' && <small className="la-muted"> حتى {date(x.expires_at)}</small>}{f.view === 'attention' && attentionReason(x, now) && <small className="xm-why">{attentionReason(x, now)}</small>}</td>
               <td className="ce-act">{canWrite && <>
                 {x.status === 'accepted' && <button className="btn-sm ghost" onClick={() => act('admin.expert-request-complete', x, 'أُغلق الطلب')}>اكتملت الخدمة</button>}
                 {x.status === 'unmatched' && <button className="btn-sm primary" onClick={() => act('admin.expert-request-retry', x, 'أُعيدت المحاولة')}>أعد المحاولة</button>}

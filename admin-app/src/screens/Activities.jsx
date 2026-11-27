@@ -11,7 +11,8 @@ import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
 import AttendanceSheet from '../../../shared/ui/AttendanceSheet.jsx';
 import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
-import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { Empty, Spinner, useEscape, useUI } from '../ui.jsx';
+import { attendanceButton } from '../attendance-button.js';
 import { readQuery } from '../route.js';
 import { GroupSessions } from './GroupSession.jsx';
 import { groupWorkshopReqs, journeyHref } from '../attendance-groups.js';
@@ -148,12 +149,14 @@ function Workshops({ data, reload, canWrite }) {
         const list = data.workshops.filter((s) => s.requirement_id === r.id);
         const cohorts = cohortsOfProgram(data.cohorts, r.program_id);
         const cohortName = (id) => cohortNameOf(cohorts, id);
+        const edit = (s, focusField = null) => setForm({ title: 'تحرير موعد', focusField, fields: withCounting(sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), !!s.cohort_id), values: { ...s, notify_change: true, counting: countingValue(s) }, onSave: save({ id: s.id }), confirmSave: confirmFor({ id: s.id }, r, s), confirmDelete: () => deleteConfirm(L, s.id, s.title_ar, { noun: NOUN }), onDelete: s.attended ? undefined : remove(s) });
+        const addSession = () => setForm({ title: 'موعد جديد', fields: withCounting(sessionFields(cohorts, null, { capacity, trainersOf, mail: {} })), values: { active: true, mode: 'in_person', invite: true, counting: '', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }), confirmSave: confirmFor({ requirement_id: r.id }, r) });
         return (
           <section key={r.id} id={`ws-${r.id}`} className="la-card" tabIndex={-1}>
             <div className="la-row between">
               <div><b title={r.code}>{reqTitle(r)}</b> {r.active === false && <small className="la-chip">موقوف في الرحلة</small>} {r.required === false && <small className="la-chip ws-counting optional" title="نشاط اختياري في البرنامج: لا يُحسب هو ولا جلساته في شيء">نشاط اختياري</small>} <small className="la-muted">{r.config?.each ? 'كل ورشة إلزامية مطلوبة بعينها' : `المطلوب حضور ${r.config?.sessions_required || SESSION_DEFAULTS.sessions_required}`} · {VERIFY_AR[r.config?.verify || 'qr']}</small>
                 <div><small className="la-muted">من رحلة «{g.name}»</small> {canWrite && !g.archived && <a className="la-link" href={journeyHref(r.program_id, `req=${encodeURIComponent(r.id)}`)}>عدّل المتطلب</a>}</div></div>
-              {canWrite && <button className="btn-sm primary ws-add" onClick={() => setForm({ title: 'موعد جديد', fields: withCounting(sessionFields(cohorts, null, { capacity, trainersOf, mail: {} })), values: { active: true, mode: 'in_person', invite: true, counting: '', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }), confirmSave: confirmFor({ requirement_id: r.id }, r) })}>+ موعد</button>}
+              {canWrite && <button className="btn-sm primary ws-add" onClick={addSession}>+ موعد</button>}
             </div>
             {list.length ? (
               <table className="la-table" style={{ marginTop: 10 }}>
@@ -161,11 +164,11 @@ function Workshops({ data, reload, canWrite }) {
                 <tbody>{list.map((s) => (
                   <tr key={s.id} className={s.active ? '' : 'off'}>
                     <td>{s.title_ar}{s.cohort_id && <small className="la-chip">{cohortName(s.cohort_id)}</small>}<small className={`la-chip ws-counting${countingChip(s, r).optional ? ' optional' : ''}`} title={countingChip(s, r).title} data-testid="ws-counting">{countingChip(s, r).text}</small>{s.trainer && <small className="la-muted"> · مع {s.trainer}</small>}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
-                    <td>{isUndated(s) ? <span className="la-chip warn">{SESSION_TBD_AR}</span> : when(s.starts_at)}
+                    <td>{isUndated(s) ? <><span className="la-chip warn ws-undated">بلا موعد</span> <small id={`ws-undated-why-${s.id}`} className="la-muted ws-undated-why">يرى المشارك «{SESSION_TBD_AR}». الدعوة وملف التقويم والتذكير تحتاج موعدًا</small>{canWrite && <button className="la-link ws-set-date" aria-describedby={`ws-undated-why-${s.id}`} onClick={() => edit(s, 'starts_at')}>حدد الموعد</button>}</> : when(s.starts_at)}
                       {/* خارج نافذة مرحلته في دفعة مؤرخة (4.2 د): من علامة الخط نفسه على الخادم، تنبيه لا منع */}
                       {(s.outside || []).map((x) => <small key={x.cohort_id} className="ws-out" role="note">{outsideAr(x, !s.cohort_id || s.outside.length > 1)}</small>)}</td>
                     <td>{MODE_AR[s.mode || 'in_person']}{s.mode === 'online' ? (s.join_url ? '' : ' · الرابط لاحقًا') : s.location_ar ? ` · ${s.location_ar}` : ''}{capacity && s.capacity ? <small className="la-muted"> · السعة {s.capacity}</small> : null}</td>
-                    <td><button className="la-link" onClick={() => setAtt(s.id)}>{s.attended} حاضر</button></td>
+                    <td>{(() => { const b = attendanceButton(s, { canWrite }); return <><button className="la-link ws-att" aria-haspopup="dialog" aria-disabled={b.disabled || undefined} aria-describedby={b.reason ? `ws-att-why-${s.id}` : undefined} onClick={() => { if (!b.disabled) setAtt(s.id); }}>{b.label}</button>{b.reason && <small id={`ws-att-why-${s.id}`} className="la-muted ws-att-why">{b.reason}</small>}</>; })()}</td>
                     <td className="la-row">
                       {/* بطريقة الجلسة الفعلية (تخصيص دفعتها يغلب البرنامج، overview في activities.ts) */}
                       {(s.verify || r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
@@ -174,12 +177,12 @@ function Workshops({ data, reload, canWrite }) {
                       {canWrite && s.active && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
                       )}
-                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: withCounting(sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), !!s.cohort_id), values: { ...s, notify_change: true, counting: countingValue(s) }, onSave: save({ id: s.id }), confirmSave: confirmFor({ id: s.id }, r, s), confirmDelete: () => deleteConfirm(L, s.id, s.title_ar, { noun: NOUN }), onDelete: s.attended ? undefined : remove(s) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => edit(s)}>تحرير</button>}
                     </td>
                   </tr>
                 ))}</tbody>
               </table>
-            ) : <p className="la-muted" style={{ marginTop: 8 }}>لا مواعيد بعد. أضف المواعيد بطريقتها (حضوري أو عن بعد) لتظهر للمشاركين.</p>}
+            ) : <Empty compact title="لا مواعيد بعد" hint={canWrite ? 'أضف المواعيد بطريقتها (حضوري أو عن بعد) لتظهر للمشاركين.' : 'لم تُضف مواعيد لهذا المتطلب بعد.'}>{canWrite && <button className="btn-sm primary" onClick={addSession}>أضف موعدًا</button>}</Empty>}
           </section>
         );
       })}

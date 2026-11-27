@@ -221,7 +221,8 @@ Deno.test('المنسحب: مخرجاته وتقييم خدمة انعقدت ت�
   const { pre, program, kept } = ACTION_GATES;
   try {
     // ومشاركة الوثيقة: يرى روابطه وملاحظاتها ويلغي ما شاء، ولا ينشئ رابطًا جديدًا (share.ts)
-    assertEquals([...kept].sort(), ['capstone.doc', 'capstone.get', 'capstone.note-mark', 'capstone.share-revoke', 'capstone.shares', 'f360.report', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit']);
+    // ورمز التحقق: يبقى له حجب تفاصيل وثيقته عمن يمسحها، كإلغاء الرابط، فهو حق خصوصية لا عمل في البرنامج (المرحلة 33)
+    assertEquals([...kept].sort(), ['capstone.doc', 'capstone.get', 'capstone.note-mark', 'capstone.options', 'capstone.share-revoke', 'capstone.shares', 'f360.report', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit']);
     for (const a of kept) assert(pre.has(a) || program.has(a), a);
     for (const a of kept) {
       const r = await w.call('withdrawn', a, { kind: 'session', id: U(1), scores: {} });

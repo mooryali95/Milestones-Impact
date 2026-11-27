@@ -63,7 +63,15 @@ async function adminCreates(page, width) {
   expect(row).toMatchObject({ requirement_id: 'r1', cohort_id: COHORT, mode: 'online', join_url: null, starts_at: null, ends_at: null });
   // في الجدول: «يُحدد لاحقًا» و«الرابط لاحقًا»، ولا دعوة قبل الموعد، ولا رمز QR لنشاط تحققه بالانضمام
   const table = page.locator('.la-table');
-  await expect(table.getByText('يُحدد لاحقًا')).toBeVisible();
+  await expect(table.getByText('بلا موعد', { exact: true })).toBeVisible();
+  await expect(table.getByRole('button', { name: 'حدد الموعد' })).toBeVisible();
+  // «حدد الموعد» يفتح المحرر على حقل البدء (المرحلة 12)
+  await table.getByRole('button', { name: 'حدد الموعد' }).click();
+  const editor = page.getByRole('dialog', { name: 'تحرير موعد' });
+  await expect(editor.locator('#f-starts_at')).toBeFocused();
+  if (process.env.P12_SHOTS) await page.screenshot({ path: `${process.env.P12_SHOTS}/p12-set-date-${width}.png` });
+  await editor.getByRole('button', { name: 'إلغاء' }).click();
+  await expect(editor).toHaveCount(0);
   await expect(table.getByText('عن بعد · الرابط لاحقًا')).toBeVisible();
   await expect(table.getByText('الدعوة بعد تحديد الموعد')).toBeVisible();
   await expect(page.getByRole('button', { name: 'أرسل الدعوة' })).toHaveCount(0);

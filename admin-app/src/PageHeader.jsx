@@ -43,3 +43,18 @@ export function PageHeader({ title, eyebrow, desc, actions, status, domain }) {
     </header>
   );
 }
+
+// ترويسة الشاشة داخل القسم (المرحلة 18، الترويسة الموحدة للكتاب الأم وكتاب القائد والرحلة): بلا بطل داكن.
+// h2 لأن h1 في PageHeader للقسم كله، وسطر وصف خاص بها اختياري، وسطر حالة (status) وإجراءات اختيارية.
+export function ScreenHead({ title, desc, status, actions }) {
+  return (
+    <header className="screen-head">
+      <div className="screen-head-main">
+        <h2 className="screen-head-title">{title}</h2>
+        {desc && <p className="screen-head-desc">{desc}</p>}
+      </div>
+      {actions && <div className="screen-head-acts">{actions}</div>}
+      {status && <div className="screen-head-status">{status}</div>}
+    </header>
+  );
+}

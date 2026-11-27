@@ -10,6 +10,9 @@ import { formatRoute } from './route.js';
 // ── الأرقام الأربعة ──
 // المنتظر طويلًا: أكثر من سبعة أيام بعمر البند نفسه في الصندوق (days من inbox.js)
 export const STALE_DAYS = 7;
+// «المشاركون في البرنامج»: الحالتان اللتان يعدّهما الرقم الرابع، وهما مرشح «في البرنامج» في المشاركين (البطاقة تفتحه)
+export const IN_PROGRAM = ['placed', 'enrolled'];
+export const PROGRAM_VIEW = 'inprogram';
 
 /**
  * الأرقام الأربعة من الصندوق والنظرة العامة. الرقم المجهول null (لا صفر كاذب): صندوق متعذر، أو بنود بلا عمر.
@@ -31,7 +34,7 @@ export function todayNumbers(inbox, o) {
     waiting: ok ? { n: inbox.total ?? items.length, oldest: ages.length ? Math.max(...ages) : null } : null,
     late: ok ? (inbox.late ?? (listed ? items.filter((i) => i.late).length : null)) : null,
     stale: listed && aged ? items.filter((i) => (i.days ?? -1) > STALE_DAYS).length : null,
-    program: o?.success ? { n: st('placed') + st('enrolled'), of: o.total ?? 0 } : null,
+    program: o?.success ? { n: IN_PROGRAM.reduce((a, k) => a + st(k), 0), of: o.total ?? 0 } : null,
   };
 }
 
@@ -100,6 +103,16 @@ export function healthProblems({ ops = null, h = null, orgs = [], canWrite = tru
 export const HEALTH_HREF = '#/leaders/health';
 export const STRIP_MAX = 5;
 const tabHref = (k) => `#/leaders/${k}`;
+// مرساة موضع الإصلاح في «صحة المنصة» من مفتاح البند نفسه (المرحلة 8): PlatformHealth.jsx يضع هذه المعرّفات على أقسامه وفحوصه
+export function phAnchor(key) {
+  if (key === 'system' || key === 'system-unread') return 'ph-system';
+  if (key === 'launch') return 'ph-launch';
+  if (key === 'orgs') return 'ph-orgs';
+  if (key === 'ph-unread') return 'ph-checks';
+  if (String(key).startsWith('ph-')) return `ph-check-${String(key).slice(3)}`;
+  return null;
+}
+const healthAt = (key) => `${HEALTH_HREF}#${phAnchor(key)}`;
 /**
  * أسطر الاستثناءات: ما المشكلة · أين تُصلح. قائمة فارغة حين يسلم كل شيء (والشريط يختفي كله).
  * @param {{ ops?: any, h?: any, orgs?: any[], canWrite?: boolean, withOrgs?: boolean, ph?: any }} d
@@ -112,22 +125,22 @@ export function exceptionRows({ ops = null, h = null, orgs = [], canWrite = true
       const red = p.key === 'ops-red';
       out.push({ key: p.key, level: red ? 'bad' : 'warn', where: 'مركز البريد', href: tabHref('mailcenter'),
         text: p.key === 'ops-unread' ? 'تعذّرت قراءة صحة البريد والتنبيه' : ops.verdict.title || p.label });
-    } else if (p.key === 'system-unread') out.push({ key: p.key, level: 'warn', where: 'صحة المنصة', href: HEALTH_HREF, text: 'تعذّرت قراءة حالة النظام، فلا يُعرف إن كانت سليمة' });
+    } else if (p.key === 'system-unread') out.push({ key: p.key, level: 'warn', where: 'حالة النظام', href: healthAt(p.key), text: 'تعذّرت قراءة حالة النظام، فلا يُعرف إن كانت سليمة' });
     else if (p.key === 'system') {
       const blocking = pendingOf(h).filter((m) => m.gate === 'blocking').length;
-      out.push({ key: p.key, level: blocking ? 'bad' : 'warn', where: 'صحة المنصة', href: HEALTH_HREF,
+      out.push({ key: p.key, level: blocking ? 'bad' : 'warn', where: 'حالة النظام', href: healthAt(p.key),
         text: blocking ? `حالة النظام: ${blocking === 1 ? 'ترحيل لم يُطبَّق' : `${blocking} ترحيلات لم تُطبَّق`} على الإنتاج` : 'حالة النظام تحتاج انتباهًا' });
     } else if (p.key === 'launch') {
       const all = h.readiness || [];
-      out.push({ key: p.key, level: 'warn', where: 'صحة المنصة', href: HEALTH_HREF, text: `جاهزية الإطلاق ${all.filter((x) => x.ok).length} من ${all.length}` });
+      out.push({ key: p.key, level: 'warn', where: 'جاهزية الإطلاق', href: healthAt(p.key), text: `جاهزية الإطلاق ${all.filter((x) => x.ok).length} من ${all.length}` });
     } else if (p.key === 'orgs') {
       const n = orgsReadinessRows(orgs).filter((x) => x.r.missing > 0).length;
-      out.push({ key: p.key, level: 'warn', where: 'صحة المنصة', href: HEALTH_HREF, text: n === 1 ? 'جهة واحدة غير جاهزة' : `${n} جهات غير جاهزة` });
+      out.push({ key: p.key, level: 'warn', where: 'جاهزية الجهات', href: healthAt(p.key), text: n === 1 ? 'جهة واحدة غير جاهزة' : `${n} جهات غير جاهزة` });
     }
   }
-  if (ph && !ph.success) out.push({ key: 'ph-unread', level: 'warn', where: 'صحة المنصة', href: HEALTH_HREF, text: 'تعذّرت قراءة فحوص المنصة' });
+  if (ph && !ph.success) out.push({ key: 'ph-unread', level: 'warn', where: 'الفحوص التشغيلية', href: healthAt('ph-unread'), text: 'تعذّرت قراءة فحوص المنصة' });
   for (const c of ph?.success && Array.isArray(ph.checks) ? ph.checks : []) {
-    if (c.level === 'warn' || c.level === 'bad') out.push({ key: `ph-${c.key}`, level: c.level, where: 'صحة المنصة', href: HEALTH_HREF, text: `${c.label}: ${c.line}` });
+    if (c.level === 'warn' || c.level === 'bad') out.push({ key: `ph-${c.key}`, level: c.level, where: c.label || 'الفحوص التشغيلية', href: healthAt(`ph-${c.key}`), text: `${c.label}: ${c.line}` });
   }
   // الأشد أولًا، والترتيب داخل الدرجة كما جاء
   return out.filter((x) => x.level === 'bad').concat(out.filter((x) => x.level !== 'bad'));
@@ -157,4 +170,26 @@ export function deskNote(t) {
   if (!src.length) return null;
   const kinds = (t.unchecked || []).map((k) => ALERT_KINDS[k]?.label).filter(Boolean);
   return `تعذّرت قراءة: ${src.join('، ')}.${kinds.length ? ` لم يُفحص: ${kinds.join('، ')}.` : ''} ما يظهر هنا ناقص.`;
+}
+
+// ── «ما يحتاج انتباهك» (المرحلة 8، النظرة العامة البند 1): قسم عرض واحد من مصدرين كما هما ──
+// exceptionRows (أحكام الصحة وموضع إصلاحها) وتنبيهات admin.today (deskOf في الخادم). لا يحسب حكمًا جديدًا: يوحّد الشكل
+// {key, level, text, where, href}، ويرتب bad ثم warn (والترتيب داخل الدرجة كما جاء من كل مصدر، الاستثناءات أولًا)،
+// ويزيل المكرر بالمفتاح الثابت (البند الواحد لا يظهر مرتين ولو جاء من المصدرين أو تكرر في أحدهما).
+// الصندوق (قرارات اليوم) ليس مصدرًا هنا: القرارات أفعال، وهذا تنقل.
+const ALERT_WHERE = { orgs: 'ملف الجهة', programs: 'ملف الدفعة', experts: 'ملف الخبير' };
+export const alertKey = (a) => `alert:${a.id}`;
+/**
+ * @param {ReturnType<typeof exceptionRows>} exc
+ * @param {any} t رد admin.today
+ * @returns {{key: string, kind: string, level: 'bad'|'warn', text: string, where: string, href: string, source: 'health'|'alert'}[]}
+ */
+export function attentionRows(exc = [], t = null) {
+  const alerts = (t?.success ? t.alerts || [] : []).map((a) => ({
+    key: alertKey(a), kind: a.kind, level: a.severity === 'bad' ? 'bad' : 'warn', text: a.text, where: ALERT_WHERE[a.target?.tab] || 'افتحه', href: alertHref(a), source: 'alert',
+  }));
+  const all = [...(exc || []).map((x) => ({ ...x, kind: x.key, source: 'health' })), ...alerts];
+  const seen = new Set();
+  const uniq = all.filter((x) => (seen.has(x.key) ? false : (seen.add(x.key), true)));
+  return uniq.filter((x) => x.level === 'bad').concat(uniq.filter((x) => x.level !== 'bad'));
 }
