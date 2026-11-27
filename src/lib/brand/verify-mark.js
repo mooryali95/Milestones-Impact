@@ -30,7 +30,7 @@ export const verifyUrl = (fp, base = SITES.leaders) => `${String(base || SITES.l
 export const shortVerifyUrl = (url) => String(url).replace(/^https?:\/\//, '');
 
 export const VERIFY_STYLE = `<style>
-.vm { display: flex; align-items: center; gap: 5mm; margin-top: 6mm; padding-top: 4mm; border-top: 1px solid #DCE2E1; break-inside: avoid; }
+.vm { display: flex; align-items: center; gap: 5mm; margin-top: 6mm; padding: 4mm 5mm; border: 0.3mm solid #DCE2E1; break-inside: avoid; }
 .vm .qr { width: 22mm; height: 22mm; flex: none; background: #fff; }
 .vm .vm-l { display: flex; flex-direction: column; gap: 1.2mm; min-width: 0; }
 .vm .vm-l > span { font-size: 9.5pt; line-height: 1.6; color: #2C4148; }

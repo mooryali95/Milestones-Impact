@@ -13,6 +13,7 @@ import type { Actor } from './admin.ts';
 import { advisorCohorts, myParticipantIds } from './advisor.ts';
 import * as F from './final.ts';
 import { expertDoc } from './capstone.ts';
+import { docTicket } from './pdf-ticket.ts';
 import * as H from './hall.ts';
 import { participantMilestone } from './programs.ts';
 import { mePayload } from './participant.ts';
@@ -266,7 +267,8 @@ export async function capstoneDoc(e: any, b: Body) {
   if (!scope.advisor.has(pid) && !scope.assigned.has(pid)) throw new Fail('هذا المشارك ليس من مشاركيك', 403);
   if (!scope.advisor.has(pid)) requireVisible(await visibilityOfParticipant(pid), 'asg_models');
   await audit('system', e.email, 'expert.capstone-view', 'participants', pid, null, {});
-  return { success: true, doc: await expertDoc(pid) };
+  const doc = await expertDoc(pid);
+  return { success: true, doc, pdf: await docTicket(`expert-${e.id}`, doc) };
 }
 
 // ── إجابات القياس من البوابة: لمستشار الدفعة فيمن يشرف عليهم (قرار المالك 2026-11-11) ──

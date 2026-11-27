@@ -201,7 +201,7 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();
   await expect(page).toHaveURL(/#\/leaders\/programs$/);
-  await expect(page.getByRole('heading', { name: 'الدفعات' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'الدفعات', exact: true })).toBeVisible();
 });
 
 test('ملف الدفعة: خريطة الرحلة نفسها التي في صفحة الجهة، بنوافذ الدفعة ومن تجاوز موعده (R0، وفي تبويب «الرحلة» منذ R1)', async ({ page }) => {

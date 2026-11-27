@@ -296,6 +296,16 @@ async function setStatus(id: string, status: 'valid' | 'suspended' | 'revoked' |
 // ── التحقق العام ──
 const PUBLIC_LIMIT = 40; // طلبًا لكل عنوان في 10 دقائق
 
+// التحقق العام يرد ما يُثبت الشهادة وحده: الاسم والبرنامج والدفعة والجهة وتاريخ الإصدار والرقم (والحالة خارجها)،
+// بلا صورة توقيع ولا قرار تقييم ولا معادلة ولا لقطة كاملة
+export function publicCertificate(s: any) {
+  return {
+    serial: s.serial, name_ar: s.name_ar, name_en: s.name_en || null,
+    program_ar: s.program_ar, program_en: s.program_en || null, track_ar: s.track_ar || null,
+    cohort_ar: s.cohort_ar || null, org: s.org?.name ? { name: s.org.name } : null, issued_at: s.issued_at,
+  };
+}
+
 export async function verify(b: Body, ctx: { ip: string | null; ua: string | null }) {
   const serial = String(b.serial || '').trim().toUpperCase();
   if (ctx.ip) {
@@ -320,7 +330,7 @@ export async function verify(b: Body, ctx: { ip: string | null; ua: string | nul
     success: true, found: true, authentic,
     status: authentic ? c.status : 'invalid',
     revoked_at: c.revoked_at, replacement,
-    certificate: shown ? c.snapshot : null,
+    certificate: shown ? publicCertificate(c.snapshot) : null,
   };
 }
 

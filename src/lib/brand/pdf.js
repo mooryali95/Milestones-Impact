@@ -17,7 +17,8 @@ export const PAGE = Object.freeze({ w: mmPx(PAGE_MM.w), h: mmPx(PAGE_MM.h), top:
 // pt إلى بكسل بدقة 96
 const ptPx = (pt) => (pt * 96) / 72;
 const CONTENT_H = PAGE.h - PAGE.top - PAGE.bottom;
-const FIRST_H = PAGE.h - PAGE.bottom;
+// المرحلة 5: الغلاف بلا تذييل، فيمتد إلى حافة الورقة
+const FIRST_H = PAGE.h;
 const KEEP_NEXT = 110;
 const BLOCKISH = new Set(['block', 'flex', 'grid', 'table', 'table-row', 'list-item', 'table-row-group', 'flow-root']);
 
@@ -27,7 +28,15 @@ const BLOCKISH = new Set(['block', 'flex', 'grid', 'table', 'table-row', 'list-i
  * cands مواضع كسر مسموحة (أعلى عنصر يبدأ عنده الكسر)، وhead رأس جدول يتكرر في الصفحة التالية إن كان الكسر بين صفوفه.
  * يعيد [{ start, end, head }]: head رأس الجدول الذي يُرسم أعلى الصفحة قبل محتواها
  */
-export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH = FIRST_H }) {
+export function planPages(input) {
+  // المرحلة 6: الصلب الممتلئ مقدَّم على اللين، إلا إن زاد ذلك الوثيقة صفحة؛ فحينها يُقبل أبعد كسر لين يملأ الصفحة أكثر من الصلب
+  // (عقد مدى صفحات الشكل document-forms.js يسري على البديل المصور كما على المتجهي)
+  const strict = planWith(input, false);
+  const loose = planWith(input, true);
+  return loose.length < strict.length ? loose : strict;
+}
+
+function planWith({ total, cands, forced = [], pageH = CONTENT_H, firstH = FIRST_H }, preferFill) {
   const ys = [...cands].sort((a, b) => a.y - b.y);
   const fs = [...new Set(forced)].sort((a, b) => a - b);
   const pages = [];
@@ -41,9 +50,13 @@ export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH
     if (f != null) end = f;
     else {
       // أبعد كسر مسموح يملأ الصفحة، بشرط ألا تبقى الصفحة شبه فارغة؛ فإن لم يوجد فأي كسر مسموح، ثم القطع عند الحد
+      // المرحلة 5: الكسر اللين (soft) داخل كتلة break-inside: avoid يُقبل حين لا كسر صلب يملأ الصفحة، فلا تبقى صفحة تحت 25%
       const ok = ys.filter((c) => c.y > s + 2 && c.y <= limit);
-      const full = ok.filter((c) => c.y >= s + room * 0.3);
-      const pick = (full.length ? full : ok).at(-1);
+      const hard = ok.filter((c) => !c.soft);
+      const full = hard.filter((c) => c.y >= s + room * 0.3);
+      const softFull = ok.filter((c) => c.soft && c.y >= s + room * 0.3);
+      const sparse = preferFill && full.length && softFull.at(-1)?.y > full.at(-1).y;
+      const pick = (sparse ? softFull : full.length ? full : softFull.length ? softFull : hard.length ? hard : ok).at(-1);
       end = pick ? pick.y : limit;
       next = pick?.head || null;
     }
@@ -68,6 +81,17 @@ export function chapterAt(heads, start, end) {
   return cur;
 }
 
+/** الفهرس الجانبي (outline) من عناوين الأبواب: [{ title, page }] بترقيم يبدأ من 1، بلا فارغ ولا تكرار متتال. منطق خالص */
+export function outlineItems(heads, pageOf) {
+  const out = [];
+  for (const h of [...heads].sort((a, b) => a.y - b.y)) {
+    const title = String(h.text || '').replace(/\s+/g, ' ').trim();
+    if (!title || out.at(-1)?.title === title) continue;
+    out.push({ title, page: Math.max(0, pageOf(h.y)) + 1 });
+  }
+  return out;
+}
+
 /** يثبّت الرقم المرجعي مرة واحدة: الغلاف والتذييل وترويسة الطباعة من المصدر نفسه. منطق خالص. */
 export const withDocId = (meta = {}) => (meta.id ? meta : { ...meta, id: docId(meta.kind || 'DOC') });
 
@@ -88,6 +112,8 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
     if (r.bottom - r.top < 1 && cs.breakBefore !== 'page') continue;
     if (cs.breakBefore === 'page' && r.top > 4) forced.push(Math.floor(r.top));
     if ((cs.breakInside === 'avoid' || cs.breakInside === 'avoid-page') && r.bottom - r.top < pageH * 0.9) avoid.push(r);
+    // المرحلة 6: break-after: page كسر إجباري عند نهايته، والغلاف (أول الوثيقة) ما داخله لين لا يُختار ولو جاوز طوله 90% من الصفحة
+    if (cs.breakAfter === 'page' && r.bottom > 4) { forced.push(Math.floor(r.bottom)); if (r.top < 4) avoid.push(r); }
     if (cs.breakAfter === 'avoid' || cs.breakAfter === 'avoid-page') after.push(r);
     // break-before: avoid (خاتمة الوثيقة): لا كسر قبله ولا بين أوله وما قبله، فلا تبقى الخاتمة وحدها في صفحة أخيرة
     if (cs.breakBefore === 'avoid' || cs.breakBefore === 'avoid-page') after.push({ top: r.top - 140, bottom: r.top - 140 + 0.5, before: r.top });
@@ -106,14 +132,24 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
       lines.slice(2, -2).forEach((y) => raw.push({ y, head, line: true }));
     }
   }
+  // ما بعد عنوان لا ينفصل عنه (break-after: avoid): يبقى معه نحو أربعة أسطر من محتواه، لا رأس جدول وحده ولا سطر واحد
+  // وما داخل كتلة لا تنقسم يبقى كسرًا لينًا (soft) لا يُختار إلا لتجنب صفحة شبه فارغة (planPages)
   const cands = raw.filter((c) => c.y > 0
-    && !avoid.some((a) => c.y > a.top + 1 && c.y < a.bottom - 1)
-    // ما بعد عنوان لا ينفصل عنه (break-after: avoid): يبقى معه نحو أربعة أسطر من محتواه، لا رأس جدول وحده ولا سطر واحد
-    && !after.some((a) => (a.before != null ? c.y > a.top && c.y <= a.before + 1 : c.y >= a.bottom - 1 && c.y - a.bottom < KEEP_NEXT)));
+    && !after.some((a) => (a.before != null ? c.y > a.top && c.y <= a.before + 1 : c.y >= a.bottom - 1 && c.y - a.bottom < KEEP_NEXT)))
+    .map((c) => (avoid.some((a) => c.y > a.top + 1 && c.y < a.bottom - 1) ? { ...c, soft: true } : c));
   return { total, cands, forced };
 }
 
 // ── الرسم ──
+// البديل المصور (تصور الفخامة، المرحلة 1، الخيار ب): المسار المتجهي على الخادم هو الأصل، وهذا الملف بديل حين يتعذر.
+// مقياس 3 (نحو 288 نقطة في البوصة) بدل 2، ولا طبقة نص خفية: jsPDF لا يشكّل الحروف العربية بلا خط مضمّن، وطبقة بحروف
+// منفصلة تضلل البحث والنسخ. فيُعلَّم الملف صراحة: «نسخة مصورة» في تذييل كل صفحة، وscanned-copy في كلماته المفتاحية
+// (scripts/pdf-path.mjs يقرؤها). المقاطع تقصر بالمقياس فتبقى اللوحة دون حد مساحتها في Safari
+export const RASTER_SCALE = 3;
+export const SCANNED_NOTE_AR = 'نسخة مصورة';
+// حد Safari مساحة لا ارتفاع: 16777216 بكسل للوحة، فعرض الصفحة 794 بمقياس 3 يحتمل نحو 2340 بكسل CSS (صفحتان إلا قليلًا)، لا 3000
+const CANVAS_AREA = 16 * 1024 * 1024;
+export const CHUNK_PX = (scale) => Math.min(Math.floor(9000 / scale), Math.floor(CANVAS_AREA / (Math.ceil(PAGE.w * scale) * scale)) - 1);
 const sanitize = (s) => String(s || 'وثيقة').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 
 // المرحلة 30: الترويسة والتذييل يُرسمان على لوحات من مستند الإطار (حيث حُمّلت خطوط الوثيقة) بعد انتظار الخطين بوزنهما وحجمهما،
@@ -134,7 +170,7 @@ function footer(ctx, n, of, scale, line) {
   ctx.direction = 'rtl';
   ctx.textAlign = 'left';
   ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px ${CHROME_FONTS.ar}`;
-  ctx.fillText(`صفحة ${n} من ${of}`, PAGE.side * scale, y);
+  ctx.fillText(`صفحة ${n} من ${of} · ${SCANNED_NOTE_AR}`, PAGE.side * scale, y);
   ctx.direction = 'ltr';
   ctx.textAlign = 'right';
   ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px ${CHROME_FONTS.latin}`;
@@ -188,7 +224,7 @@ export function stampWatermark(pdf, png) {
  * يبني ملف PDF ويعيده Blob. meta وbody كما يبنيهما قالب الوثيقة (capstoneReport)
  * @param {{ onProgress?: (t: string) => void, scale?: number }} [opts]
  */
-export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 } = {}) {
+export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RASTER_SCALE } = {}) {
   // الرقم المرجعي يُولَّد مرة واحدة فيطابق الغلافُ التذييلَ
   const meta = withDocId(meta0);
   onProgress('يُجهَّز الملف…');
@@ -205,7 +241,8 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
     await doc.fonts.ready;
     await Promise.all([...doc.images].map((im) => (im.complete ? null : new Promise((ok) => { im.onload = ok; im.onerror = ok; }))));
     const root = doc.querySelector('.sheet');
-    const plan = planPages(collectBreaks(doc));
+    // الغلاف المؤسسي (بجهة) صفحة كاملة إلى الحافة؛ والوثيقة بلا جهة تبقي هامشها السفلي في الصفحة الأولى
+    const plan = planPages({ ...collectBreaks(doc), firstH: meta.brand ? FIRST_H : PAGE.h - PAGE.bottom });
     const pageOf = (y) => Math.max(0, plan.findIndex((p) => y >= p.start && y < p.end));
 
     // أرقام صفحات الفهرس تُكتب في مواضعها المحجوزة قبل الرسم (لا يتغير بها التخطيط)
@@ -225,23 +262,23 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
     // ترويسة الصفحات بعد الغلاف (doc.js runningHead): تُرسم مرة وتتكرر
     const headEl = doc.getElementById('pdf-head');
     const runHead = headEl ? await toCanvas(headEl, { width: PAGE.w, height: PAGE.top, pixelRatio: scale, fontEmbedCSS, backgroundColor: '#ffffff', cacheBust: false }) : null;
-    // المقاطع: صفحات متتالية حتى نحو 4500 بكسل في كل رسم، لحد ارتفاع اللوحة في المتصفحات
+    // المقاطع: صفحات متتالية حتى CHUNK_PX في كل رسم (نحو 2340 بكسل بمقياس 3)، لحد مساحة اللوحة في المتصفحات
     const chunks = [];
     for (let i = 0; i < plan.length;) {
       let j = i;
-      while (j + 1 < plan.length && plan[j + 1].end - plan[i].start <= 4500) j++;
+      while (j + 1 < plan.length && plan[j + 1].end - plan[i].start <= CHUNK_PX(scale)) j++;
       chunks.push({ from: i, to: j, start: plan[i].start, end: plan[j].end });
       i = j + 1;
     }
     const theads = new Map();
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
-    pdf.setProperties({ title: meta.title || 'وثيقة', subject: meta.subtitle || '', creator: 'Milestone Impact', author: 'Milestone Impact' });
+    pdf.setProperties({ title: meta.title || 'وثيقة', subject: [meta.subtitle, SCANNED_NOTE_AR].filter(Boolean).join(' · '), keywords: 'scanned-copy', creator: 'Milestone Impact', author: 'Milestone Impact' });
     // التذييل بالرقم المرجعي للوثيقة، ومعه عنوان الباب لكل صفحة
     // والبصمة المجمّدة معه للمعتمدة (meta.footer، المرحلة 32)
     const line = meta.footer || meta.id;
     const heads = [...doc.querySelectorAll('.sec > header h2, .in-open h2')].map((h) => ({ y: h.getBoundingClientRect().top - base, text: h.textContent.trim() }));
     const PT = 595.28 / PAGE.w;
-    await loadChromeFonts(doc, scale, `${heads.map((h) => h.text).join(' ')} ${DOC_LIVE_HEAD_AR} صفحة ١ من ٢`);
+    await loadChromeFonts(doc, scale, `${heads.map((h) => h.text).join(' ')} ${DOC_LIVE_HEAD_AR} صفحة ١ من ٢ ${SCANNED_NOTE_AR}`);
     for (const ch of chunks) {
       onProgress(`صفحة ${ch.to + 1} من ${plan.length}…`);
       const canvas = await toCanvas(root, {
@@ -271,9 +308,9 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
         if (hc) { ctx.drawImage(hc, 0, y); y += hc.height; }
         const h = (p.end - p.start) * scale;
         ctx.drawImage(canvas, 0, (p.start - ch.start) * scale, page.width, h, 0, y, page.width, h);
-        footer(ctx, k + 1, plan.length, scale, line);
+        if (k > 0) footer(ctx, k + 1, plan.length, scale, line);
         if (k > 0) pdf.addPage('a4');
-        // JPEG بجودة 0.8: نص حاد بدقة مضاعفة، والملف بحجم يُرسل بالبريد
+        // JPEG بجودة 0.8: نص حاد بمقياس 3، والملف بحجم يُرسل بالبريد
         pdf.addImage(page.toDataURL('image/jpeg', 0.8), 'JPEG', 0, 0, 595.28, 841.89, undefined, 'FAST');
       }
     }
@@ -286,6 +323,8 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
       pdf.setPage(k + 1);
       pdf.link(l.left * PT, top * PT, l.w * PT, l.h * PT, { pageNumber: l.to + 1 });
     }
+    // الفهرس الجانبي (المرحلة 5): باب لكل عنوان، كما يولّده المسار المتجهي (outline: true في workers/pdf-render)
+    for (const it of outlineItems(heads, pageOf)) pdf.outline.add(null, it.title, { pageNumber: it.page });
     onProgress('اكتمل الملف');
     return { blob: pdf.output('blob'), pages: plan.length, plan };
   } finally {
@@ -322,7 +361,7 @@ export async function embedAssets(html, get) {
 }
 
 /** جالب المتصفح لـ embedAssets: من أصل الصفحة نفسها، نصًا أو data URI */
-async function fetchAsset(path, as) {
+export async function fetchAsset(path, as) {
   const r = await fetch(new URL(path, location.origin), { cache: 'force-cache' });
   if (!r.ok) throw new Error(`asset ${r.status}`);
   if (as === 'text') return r.text();
@@ -352,7 +391,7 @@ export async function downloadBest(meta, body, { server = null, onProgress = () 
   return 'browser';
 }
 
-function saveBlob(blob, meta) {
+export function saveBlob(blob, meta) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

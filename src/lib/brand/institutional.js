@@ -9,7 +9,7 @@
 // المصدر واحد: وثيقة الخادم (capstone.doc أو لقطة الاعتماد)؛ ملف العمل الكامل من المصدر نفسه في capstone.js capstoneReport.
 // المسودة الحية تُعلَّم بتاريخ بنائها وبصمتها، والمعتمدة بتاريخ اعتمادها وبصمتها المجمّدة ورابط تحققها.
 import { footerLine, qrSvg, verifyMark, verifyUrl, VERIFY_STYLE } from './verify-mark.js';
-import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, LIVE_RING, structuralAccent } from './doc.js';
+import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, LIVE_RING, structuralAccent, TYPE_SCALE as TS } from './doc.js';
 // تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
@@ -31,7 +31,7 @@ const money = (n) => `${Math.round(n).toLocaleString('en-US')} ريال`;
 
 // ── النظام الطباعي (قرار المالك 2026-11-25): متن 10.5pt بوزن 400، والجداول 9pt على الأقل، ولا وزن 200 أو 300 في الطباعة،
 // وبطاقات بدل الجداول العريضة (المنافع والمخاطر). لون البنية (--acc) لون الجهة أو الدفعة بعد فحص التباين، وإلا الذهبي ──
-const IN_STYLE = `<style>
+export const IN_STYLE = `<style>
 body { font-weight: 400; }
 .mast.co h1, .mast.co .sub { font-weight: 400; }
 .in-sec { margin-top: 12mm; padding-top: 0; }
@@ -40,84 +40,84 @@ body { font-weight: 400; }
 .in-sec.np { break-before: page; }
 .in-open { display: grid; grid-template-columns: 20mm 1fr; align-items: end; gap: 4mm; padding-bottom: 4mm; margin: 0 0 6mm; border-top: 0.6mm solid #0B272F; padding-top: 5mm; border-bottom: 1px solid var(--acc); break-after: avoid; break-inside: avoid; }
 .in-open + * { break-before: avoid; }
-.in-open .n { font: 400 28pt/0.9 "Noto Sans", sans-serif; color: var(--acc); letter-spacing: -.02em; padding-inline-end: 3mm; border-inline-end: 0.4mm solid var(--acc); }
-.in-open .eyebrow { margin-bottom: 1mm; letter-spacing: .18em; font-size: 7.5pt; color: #5F7176; text-transform: none; }
-.in-open h2 { margin: 0; font-weight: 600; font-size: 18pt; line-height: 1.3; color: #0B272F; }
-.in-open p { margin: 1.5mm 0 0; font-size: 9pt; color: #5F7176; line-height: 1.7; }
-.in-open p.ask { font-size: 11pt; color: #0B272F; padding-inline-start: 3mm; border-inline-start: 2pt solid var(--acc); }
+.in-open .n { font: 400 ${TS.display}pt/0.9 "Noto Sans", sans-serif; color: var(--acc); letter-spacing: -.02em; padding-inline-end: 3mm; border-inline-end: 0.4mm solid var(--acc); }
+.in-open .eyebrow { margin-bottom: 1mm; letter-spacing: .12em; font-size: ${TS.footer}pt; color: #5F7176; text-transform: none; opacity: .7; }
+.in-open h2 { margin: 0; font-weight: 600; font-size: ${TS.chapter}pt; line-height: 1.3; color: #0B272F; }
+.in-open p { margin: 1.5mm 0 0; font-size: ${TS.small}pt; color: #5F7176; line-height: 1.7; }
+.in-open p.ask { font-size: ${TS.h3}pt; color: #0B272F; padding-inline-start: 3mm; border-inline-start: 2pt solid var(--acc); }
 /* المرحلة 29: حالة العمل كل باب في صفحة؛ الميثاق انسياب متصل، وحاجز 60 مم غير مرئي قبل الفاتحة يمنع بدء باب في أسفل صفحة */
 .in-keep { display: block; height: 60mm; margin-bottom: -60mm; break-inside: avoid; visibility: hidden; }
 .in-toc { margin-top: 6mm; padding-top: 2.5mm; border-top: 1px solid #DCE2E1; break-inside: avoid; }
-.in-toc span { font-size: 8pt; font-weight: 600; color: #8A6424; margin-inline-end: 2mm; }
+.in-toc span { font-size: ${TS.caption}pt; font-weight: 600; color: #8A6424; margin-inline-end: 2mm; }
 .in-toc ol { display: inline; list-style: none; margin: 0; padding: 0; }
-.in-toc li { display: inline; font-size: 8pt; color: #2C4148; }
+.in-toc li { display: inline; font-size: ${TS.caption}pt; color: #2C4148; }
 .in-toc li + li::before { content: ' · '; color: #8A979A; }
 .in-toc a { color: inherit; text-decoration: none; }
 .in-toc .cp-pgno { min-width: 0 !important; margin-inline-start: 1mm; }
 .in-toc .cp-pgno:empty { display: none !important; }
 .in-sec h3, .in-sec .cp-f > b { break-after: avoid; }
-.in-sec .cp-p { font-size: 10.5pt; line-height: 1.85; color: #22383F; }
+.in-sec .cp-p { font-size: ${TS.body}pt; line-height: 1.85; color: #22383F; }
 .in-sec .cp-f { margin: 0 0 6mm; break-inside: auto; }
-.in-sec .cp-f > b { display: block; font-weight: 500; font-size: 10pt; color: #0B272F; margin-bottom: 2mm; padding-inline-start: 3mm; border-inline-start: 0.6mm solid var(--acc); }
-.in-sec .tbl { font-size: 9pt; }
-.in-sec .tbl th { color: #0B272F; font-weight: 500; font-size: 9pt; background: #F7F8F6; border-bottom: 1px solid #0B272F; padding: 2.4mm 2mm; white-space: normal; }
+.in-sec .cp-f > b { display: block; font-weight: 500; font-size: ${TS.body}pt; color: #0B272F; margin-bottom: 2mm; padding-inline-start: 3mm; border-inline-start: 0.6mm solid var(--acc); }
+.in-sec .tbl { font-size: ${TS.small}pt; }
+.in-sec .tbl th { color: #0B272F; font-weight: 500; font-size: ${TS.small}pt; background: #F7F8F6; border-bottom: 1px solid #0B272F; padding: 2.4mm 2mm; white-space: normal; }
 .in-sec .tbl td { padding: 2.4mm 2mm; }
 .in-sec .tbl tr, .in-sec .tbl td { break-inside: avoid; }
 .in-sec .kpis { background: #F7F8F6; border-top: 0; border-bottom: 0; margin: 0 0 6mm; break-inside: avoid; }
 .in-sec .kpi { padding: 4mm 5mm 4mm 0; padding-inline-start: 5mm; }
-.in-sec .kpi b { font: 400 20pt/1.15 "Noto Sans", sans-serif; color: #0B272F; overflow-wrap: anywhere; }
-.in-sec .kpi span { margin-top: 1mm; font-size: 9pt; color: #5F7176; }
-.in-lead { font-size: 11pt; line-height: 1.9; color: #0B272F; font-weight: 400; margin: 0 0 6mm; padding: 1mm 0; border-inline-start: 0.6mm solid var(--acc); padding-inline-start: 6mm; break-inside: avoid; }
+.in-sec .kpi b { font: 400 ${TS.chapter}pt/1.15 "Noto Sans", sans-serif; color: #0B272F; overflow-wrap: anywhere; }
+.in-sec .kpi span { margin-top: 1mm; font-size: ${TS.small}pt; color: #5F7176; }
+.in-lead { font-size: ${TS.h3}pt; line-height: 1.9; color: #0B272F; font-weight: 400; margin: 0 0 6mm; padding: 1mm 0; border-inline-start: 0.6mm solid var(--acc); padding-inline-start: 6mm; break-inside: avoid; }
 .in-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm 9mm; margin: 0 0 6mm; }
 .in-grid > div { border-top: 1px solid #DCE2E1; padding-top: 2.5mm; break-inside: avoid; }
-.in-grid > div span { display: block; font-size: 8.5pt; font-weight: 600; color: #8A6424; }
-.in-grid > div p { margin: .8mm 0 0; font-size: 10.5pt; line-height: 1.75; color: #22383F; }
+.in-grid > div span { display: block; font-size: ${TS.caption}pt; font-weight: 600; color: #8A6424; }
+.in-grid > div p { margin: .8mm 0 0; font-size: ${TS.body}pt; line-height: 1.75; color: #22383F; }
 .in-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin: 0 0 6mm; }
 .in-card { border: 1px solid #DCE2E1; border-top: 0.6mm solid var(--acc); padding: 3.5mm 4mm; break-inside: avoid; }
-.in-card b { display: block; font-weight: 500; font-size: 10.5pt; color: #0B272F; line-height: 1.5; }
-.in-card p { margin: 1.5mm 0 0; font-size: 9.5pt; line-height: 1.7; color: #2C4148; }
-.in-card small { display: block; margin-top: 1.5mm; font-size: 9pt; color: #5F7176; }
-.in-card .sc { float: left; font: 500 9pt "Noto Sans", sans-serif; border: 1px solid #DCE2E1; padding: 0 2mm; color: #2C4148; }
+.in-card b { display: block; font-weight: 500; font-size: ${TS.body}pt; color: #0B272F; line-height: 1.5; }
+.in-card p { margin: 1.5mm 0 0; font-size: ${TS.body}pt; line-height: 1.7; color: #2C4148; }
+.in-card small { display: block; margin-top: 1.5mm; font-size: ${TS.small}pt; color: #5F7176; }
+.in-card .sc { float: left; font: 500 ${TS.small}pt "Noto Sans", sans-serif; border: 1px solid #DCE2E1; padding: 0 2mm; color: #2C4148; }
 .in-card .sc.hi { background: #E1BE85; border-color: #E1BE85; color: #0B272F; } .in-card .sc.md { background: #F2E6D0; border-color: #F2E6D0; }
 /* صفحة القرار: تبدأ بعد الغلاف وتملأ صفحتها وحدها */
 .in-dec { break-after: page; }
 .in-dec .in-cards { grid-template-columns: repeat(3, 1fr); gap: 3mm; }
-.in-dec .in-card p { font-size: 9pt; }
+.in-dec .in-card p { font-size: ${TS.small}pt; }
 .in-dec .in-grid { margin-bottom: 4mm; }
 .in-dec .q { border: 1px solid #DCE2E1; border-inline-start: 1.2mm solid var(--acc); padding: 4mm 5mm; margin: 0 0 5mm; background: #F7F8F6; }
-.in-dec .q span { display: block; font-size: 9pt; font-weight: 500; color: #8A6424; letter-spacing: .02em; }
-.in-dec .q p { margin: 1.5mm 0 0; font-size: 12.5pt; line-height: 1.75; font-weight: 500; color: #0B272F; }
+.in-dec .q span { display: block; font-size: ${TS.small}pt; font-weight: 500; color: #8A6424; letter-spacing: .02em; }
+.in-dec .q p { margin: 1.5mm 0 0; font-size: ${TS.h3}pt; line-height: 1.75; font-weight: 500; color: #0B272F; }
 .in-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 4mm 0 0; }
 .in-strip > div { border-top: 0.6mm solid var(--acc); padding-top: 2mm; }
-.in-strip span { display: block; font-size: 9pt; color: #2C4148; font-weight: 400; }
-.in-strip b { display: block; font-size: 11pt; font-weight: 500; color: #0B272F; }
-.in-dec .q .in-choices { font-size: 10pt; font-weight: 500; margin: 4mm 0 0; color: #0B272F; }
-.in-dec .in-due { display: block; margin-top: 1.5mm; font-size: 9pt; color: #2C4148; }
+.in-strip span { display: block; font-size: ${TS.small}pt; color: #2C4148; font-weight: 400; }
+.in-strip b { display: block; font-size: ${TS.h3}pt; font-weight: 500; color: #0B272F; }
+.in-dec .q .in-choices { font-size: ${TS.body}pt; font-weight: 500; margin: 4mm 0 0; color: #0B272F; }
+.in-dec .in-due { display: block; margin-top: 1.5mm; font-size: ${TS.small}pt; color: #2C4148; }
 .in-dec .in-card i { font-style: normal; font-weight: 500; }
-.in-dec h3 { font-size: 10.5pt; font-weight: 500; margin: 6mm 0 2.5mm; color: #0B272F; }
+.in-dec h3 { font-size: ${TS.h3}pt; font-weight: 500; margin: 6mm 0 2.5mm; color: #0B272F; }
 .in-lean { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 0 0 6mm; }
 .in-lean > div { border: 1px solid #DCE2E1; padding: 3mm 3.5mm; break-inside: avoid; min-height: 30mm; }
 .in-lean > div.w2 { grid-column: span 2; }
-.in-lean span { display: block; font-size: 8.5pt; font-weight: 600; color: var(--acc-text, #8A6424); margin-bottom: 1mm; }
-.in-lean p { margin: 0; font-size: 9.5pt; line-height: 1.7; color: #22383F; white-space: pre-line; }
+.in-lean span { display: block; font-size: ${TS.caption}pt; font-weight: 600; color: var(--acc-text, #8A6424); margin-bottom: 1mm; }
+.in-lean p { margin: 0; font-size: ${TS.body}pt; line-height: 1.7; color: #22383F; white-space: pre-line; }
 .in-90 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 0 0 6mm; }
 .in-90 > div { border-top: 0.6mm solid var(--acc); padding-top: 3mm; break-inside: avoid; }
-.in-90 h3 { margin: 0; font-size: 10.5pt; font-weight: 500; } .in-90 small { color: #5F7176; font-size: 9pt; }
-.in-90 ul { margin: 2mm 0 0; padding-inline-start: 4mm; font-size: 9.5pt; line-height: 1.75; }
+.in-90 h3 { margin: 0; font-size: ${TS.h3}pt; font-weight: 500; } .in-90 small { color: #5F7176; font-size: ${TS.small}pt; }
+.in-90 ul { margin: 2mm 0 0; padding-inline-start: 4mm; font-size: ${TS.body}pt; line-height: 1.75; }
 .in-approve { border: 1px solid #DCE2E1; border-top: 0.6mm solid #0B272F; padding: 7mm 7mm 6mm; break-inside: avoid; }
-.in-approve .st { display: inline-block; border: 1px solid var(--acc); color: #0B272F; padding: 1.2mm 5mm; font-size: 10pt; font-weight: 500; margin-bottom: 6mm; }
+.in-approve .st { display: inline-block; border: 1px solid var(--acc); color: #0B272F; padding: 1.2mm 5mm; font-size: ${TS.body}pt; font-weight: 500; margin-bottom: 6mm; }
 .in-approve .st.live { border-style: dashed; color: #5F7176; }
 .in-sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
 .in-sign > div { padding-top: 14mm; border-bottom: 1px solid #0B272F; padding-bottom: 2mm; break-inside: avoid; }
-.in-sign span { display: block; font-size: 9pt; color: #8A6424; }
-.in-sign b { font-weight: 500; font-size: 10pt; color: #0B272F; }
-.in-sign small { display: block; font-size: 9pt; color: #2C4148; margin-top: 1mm; }
-.in-fp { display: flex; justify-content: space-between; gap: 6mm; margin-top: 7mm; padding-top: 3mm; border-top: 1px solid #DCE2E1; font: 400 8.5pt "Noto Sans", sans-serif; letter-spacing: .08em; color: #5F7176; direction: ltr; }
+.in-sign span { display: block; font-size: ${TS.small}pt; color: #8A6424; }
+.in-sign b { font-weight: 500; font-size: ${TS.body}pt; color: #0B272F; }
+.in-sign small { display: block; font-size: ${TS.small}pt; color: #2C4148; margin-top: 1mm; }
+.in-fp { display: flex; justify-content: space-between; gap: 6mm; margin-top: 7mm; padding-top: 3mm; border-top: 1px solid #DCE2E1; font: 400 ${TS.caption}pt "Noto Sans", sans-serif; letter-spacing: .08em; color: #5F7176; direction: ltr; }
 .in-fp b { font-weight: 500; color: #0B272F; }
-.in-verify { display: flex; align-items: center; gap: 6mm; margin-top: 6mm; break-inside: avoid; }
+.in-verify { display: flex; align-items: center; gap: 6mm; margin-top: 6mm; padding: 4mm 5mm; border: 0.3mm solid #DCE2E1; break-inside: avoid; }
 .in-verify .qr { width: 26mm; height: 26mm; flex: none; }
-.in-verify p { margin: 0; font-size: 9.5pt; line-height: 1.7; color: #2C4148; }
-.in-verify a { color: #0B272F; font: 400 8.5pt "Noto Sans", sans-serif; direction: ltr; unicode-bidi: isolate; word-break: break-all; }
+.in-verify p { margin: 0; font-size: ${TS.body}pt; line-height: 1.7; color: #2C4148; }
+.in-verify a { color: #0B272F; font: 400 ${TS.caption}pt "Noto Sans", sans-serif; direction: ltr; unicode-bidi: isolate; word-break: break-all; }
 .in-verify .ring { width: 18mm; height: 18mm; margin-inline-start: auto; flex: none; }
 .in-chart text { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; }
 </style>`;
@@ -138,7 +138,7 @@ export const LEAN_STYLE = `<style>
 .in-lean-doc .in-dec .in-grid { gap: 3mm 8mm; margin-bottom: 3mm; }
 .in-lean-doc .in-dec h3 { margin: 2mm 0 2mm; }
 .in-lean-doc .in-dec .in-cards { margin-bottom: 3mm; }
-.in-lean-doc .in-dec .q p { font-size: 11pt; line-height: 1.6; }
+.in-lean-doc .in-dec .q p { font-size: ${TS.h3}pt; line-height: 1.6; }
 .in-lean-doc .in-dec .in-strip { margin-top: 2.5mm; }
 .in-lean-doc .in-dec .q .in-choices { margin-top: 2.5mm; }
 .in-lean-doc .in-dec .in-grid p { line-height: 1.65; margin-top: .4mm; }
@@ -499,11 +499,12 @@ export function institutionalReport(input, options = {}) {
       eyebrow: brand.program || 'برنامج القادة', title, subtitle,
       // المرحلة 25: صف رسمي واحد (الجهة، الراعي، القائد)، والرمز والإصدار والتاريخ والحالة في شريط الضبط اللاتيني، والحالة في الختم
       rows: [['الجهة', org?.name || m.host], ['الراعي', m.sponsor], ['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
-      control: controlStrip([`${m.ref || 'MI-CP'}`, `V${m.version || 1}`, isoDay(approved ? m.approved_at : (m.generated_at || new Date())), approved ? 'APPROVED' : 'DRAFT']),
+      // المرحلة 5: لا تاريخ ISO في شريط الضبط؛ التاريخ البشري في الختم والختام، وISO في البصمة وحدها
+      control: controlStrip([`${m.ref || 'MI-CP'}`, `V${m.version || 1}`, approved ? 'APPROVED' : 'DRAFT']),
       stamp: approved ? DOC_APPROVED_AR : DOC_LIVE_AR,
       // المرحلة 28: الحية بعلامة مائية في كل صفحة وترويسة DOC_LIVE_HEAD_AR، والختم الذهبي في إغلاق المعتمدة وحدها
       live: !approved,
-      controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${isoDay(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : DOC_LIVE_AR}`,
+      controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${fmt(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : DOC_LIVE_AR}`,
       confidential: CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR,
       closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', shownFp) : docClosingLiveAr(built),
     },

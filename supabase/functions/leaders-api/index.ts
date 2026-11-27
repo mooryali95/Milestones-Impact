@@ -826,7 +826,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.cohort-upgrade': (a, b) => A.writer(a, G.cohortUpgrade, b),
   'admin.cohort-enroll': (a, b) => A.writer(a, G.cohortEnroll, b),
   'admin.capstones': (_a, b) => X.adminList(b),
-  'admin.capstone': (_a, b) => X.adminGet(b),
+  'admin.capstone': (a, b) => X.adminGet(b, a),
   // تحميل الوثيقة النهائية PDF (المرحلة 21): الوثيقة وتذكرة مربوطة ببصمتها، ويُسجَّل admin.docExport. قراءة، فلكل مدير
   'admin.doc-export': (a, b) => X.adminDocExport(a, b),
   'admin.capstone-quality': () => X.adminQualityReport(),
