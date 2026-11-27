@@ -244,8 +244,9 @@ function linkToc(out, starts, pageRefs) {
       const uri = act && act.lookup ? textOf(act.lookup(PDFName.of('URI'))) : '';
       if (!uri.startsWith(TOC_PREFIX)) continue;
       const at = starts[decodeURIComponent(uri.slice(TOC_PREFIX.length).replace(/\/$/, ''))];
-      if (!at || !pageRefs[at - 1]) continue;
       a.delete(PDFName.of('A'));
+      // مبادرة في جزء آخر أو تعذر توليدها: لا يبقى رابط خارجي ميت
+      if (!at || !pageRefs[at - 1]) continue;
       a.set(PDFName.of('Dest'), ctx.obj([pageRefs[at - 1], 'XYZ', null, null, null]));
     }
   }

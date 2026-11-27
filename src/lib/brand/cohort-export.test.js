@@ -188,6 +188,19 @@ describe('الفهرس المرتبط والإشارات بمستويين', () =
   });
 });
 
+describe('روابط الفهرس لمبادرات خارج الجزء', () => {
+  it('mergeBook لا يترك رابطًا خارجيًا ميتًا لمبادرة في جزء آخر', async () => {
+    const parts = [
+      { id: 'cover', label: 'الغلاف', bytes: await coverWithLinks(['p1', 'p9']) },
+      { id: 'p1', label: 'أحمد', bytes: await pdfWithOutline(2, [['الملخص', 0]]) },
+    ];
+    const out = await mergeBook(parts, { stamp: () => {}, title: 'ك' });
+    const doc = await PDFDocument.load(out.bytes);
+    const uris = doc.getPage(0).node.Annots().asArray().map((ref) => doc.context.lookup(ref).get(PDFName.of('A'))).filter(Boolean);
+    expect(uris).toEqual([]);
+  });
+});
+
 describe('التخزين المؤقت ببصمة الوثيقة (الاستئناف)', () => {
   it('docKey ثابت للوثيقة نفسها ويتغير بأي تغير في محتواها أو مسارها', async () => {
     const a = await docKey({ title: 'م' }, '<p>1</p>');
