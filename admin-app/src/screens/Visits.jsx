@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { L } from '../leaders.js';
 import { useFilters } from '../FilterBar.jsx';
 import { dateOnly, weekDay } from '../dates.js';
-import { Empty, LoadError, Spinner } from '../ui.jsx';
+import { Empty, LoadError } from '../ui.jsx';
 import { DIRECT, SITES, fillDays, mergePages, mergeRefs, pct, pickDays, pickSite, rangeLabel, siteName } from '../visits.js';
 
 const DEVICE = { mobile: 'جوال', tablet: 'لوحي', desktop: 'حاسب' };
@@ -49,11 +49,29 @@ export default function Visits() {
             </select>
           </div>
         </div>
-        {!d ? <Spinner />
+        {!d ? <VisitsSkeleton />
           : !d.success ? <LoadError message={d.message} onRetry={retry} />
             : <div className={busy ? 'vs-stale' : ''}><Report d={d} days={days} site={site} /></div>}
       </section>
       <p className="la-muted vs-trend-link">اتجاه البرنامج (التسجيل والقياس والاعتماد والنشاط أسبوعًا بأسبوع) في <a className="la-link" href={TREND_HREF}>النظرة العامة ←</a></p>
+    </div>
+  );
+}
+
+// هيكل التحميل الأول: بطاقات بارتفاع بطاقات التقرير نفسها (أربع إحصاءات ورسم ولوحتان) فلا تقفز الصفحة حين يصل الرد.
+// يعلن التحميل مرة واحدة نصًا مقروءًا، والباقي مخفي عن قارئ الشاشة.
+export function VisitsSkeleton() {
+  return (
+    <div className="vs-skel" data-testid="vs-skeleton" role="status" aria-busy="true">
+      <span className="sr-only">جارٍ التحميل</span>
+      <div className="stats-grid vs-stats" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => <div key={i} className="stat-card"><span className="sk" /><div className="stat-value"><span className="sk sk-lg" /></div><span className="sk" /></div>)}
+      </div>
+      <section className="la-card vs-chart-card" aria-hidden="true"><span className="sk" /></section>
+      <div className="la-grid2" aria-hidden="true">
+        <section className="la-card vs-skel-panel"><span className="sk" /><span className="sk" /><span className="sk" /></section>
+        <section className="la-card vs-skel-panel"><span className="sk" /><span className="sk" /><span className="sk" /></section>
+      </div>
     </div>
   );
 }

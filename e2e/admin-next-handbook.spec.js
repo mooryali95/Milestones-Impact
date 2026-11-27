@@ -135,7 +135,7 @@ test('«للقراءة»: ما سُلّم مجمّعًا بالمشارك، و«
 
 test('المرحلة 18: الترويسة الموحدة، وشارة الجاهزية، ونقل الباب بالزر وبـAlt مع السهم', async ({ page }) => {
   const calls = await setup(page);
-  await expect(page.getByRole('heading', { name: 'كتاب القائد', level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'كتاب القائد', level: 1 })).toBeVisible();
   await expect(page.locator('.tx-hero')).toHaveCount(0);
   const rows = page.locator('.hb-list').first().locator('.hb-ch');
   await expect(rows.nth(0).locator('.st-chip')).toHaveText('جاهز');

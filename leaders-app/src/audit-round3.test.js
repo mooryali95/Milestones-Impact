@@ -88,7 +88,7 @@ describe('لوحة الإدارة', () => {
   it('9.15 عنوان كل صفحة h1، و9.14 بلا Access-Control-Allow-Origin', () => {
     // h1 من الترويسة الموحدة PageHeader (المرحلة 4، 2026-11-26)
     expect(read('admin-app/src/PageHeader.jsx')).toMatch(/<h1 className="page-title"/);
-    for (const f of ['Leaders', 'Contacts', 'Matrix', 'Visits']) expect(read(`admin-app/src/screens/${f}.jsx`), f).toMatch(/<PageHeader [^>]*title="/);
+    for (const f of ['Leaders', 'Contacts', 'Matrix', 'Visits']) expect(read(`admin-app/src/screens/${f}.jsx`), f).toMatch(/<PageHeader [^>]*title=["{]/);
     const h = read('admin-app/public/_headers');
     expect(h).toMatch(/^\/\*\n(?: {2}.*\n)*? {2}! Access-Control-Allow-Origin$/m);
     expect(h).not.toMatch(/^ {2}#/m);
