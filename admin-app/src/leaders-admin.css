@@ -1734,3 +1734,10 @@ details.how-it-works[open] > summary { margin-bottom: 12px; }
 .ex-gaps { line-height: 1.6; }
 .ex-tabs button:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 2px; }
 .ex-stats .la-meter { max-width: 100%; }
+
+/* المرحلة 17: الصف كله قابل للنقر، والاسم بوزن 600 بلا تسطير إلا عند hover وfocus-visible (على مستوى .la-table .la-link) */
+.la-table .la-link { font-weight: 600; text-decoration: none; }
+.la-table .la-link:hover, .la-table .la-link:focus-visible,
+.la-table tr.la-click:hover .la-link, .la-table tr.la-click:focus-visible .la-link, .la-table tr.la-click:focus-within .la-link { text-decoration: underline; text-underline-offset: 3px; }
+.la-table tr.la-click:focus-visible { outline: 2px solid var(--petrol-soft); outline-offset: -2px; }
+.la-table tr.la-click:focus-visible td, .la-table tr.la-click:focus-within td { background: var(--sand-light); }
