@@ -79,6 +79,7 @@ import * as GA from './guide-admin.ts';
 import * as TD from './today-desk.ts';
 import * as CV from './cohort-visits.ts';
 import * as CU from './cohort-pulse.ts';
+import * as CX from './cohort-export.ts';
 import * as CM from './commitments.ts';
 import * as GT from './guide-transcripts.ts';
 import { bookAccess } from './master-book.js';
@@ -563,6 +564,8 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any)
   'coord.nudge-preview': (c, b) => NU.coordPreview(c, b),
   'coord.nudge': (c, b) => NU.coordSend(c, b),
   // مفتاح الرؤية coord_initiatives يحجب المبادرات عن لوحة الجهة، فيحجب وثيقتها بالمعرّف أيضًا (N6)
+  // تصدير مبادرات الدفعة (المرحلة 1): المعتمد من مشاركي جهة المنسق وحدها، والحصر في CX.coordExport
+  'coord.cohort-export': (c, b) => CX.coordExport(c, b),
   'coord.capstone': async (c, b) => { VS.requireVisible(await VS.visibilityOfOrg(c.organization_id), 'coord_initiatives'); return X.orgDoc(c.organization_id, b, c.permissions); },
   'coord.sus-state': (c) => SU.state('coordinator', c),
   'coord.sus-submit': (c, b) => SU.submit('coordinator', c, b),
@@ -829,6 +832,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.capstone': (a, b) => X.adminGet(b, a),
   // تحميل الوثيقة النهائية PDF (المرحلة 21): الوثيقة وتذكرة مربوطة ببصمتها، ويُسجَّل admin.docExport. قراءة، فلكل مدير
   'admin.doc-export': (a, b) => X.adminDocExport(a, b),
+  // تصدير مبادرات الدفعة (المرحلة 1): ملخص المعتمد بلا بيانات تواصل، وسطر cohort_export لكل طلب
+  'admin.cohort-export': (a, b) => CX.adminExport(a, b),
   'admin.capstone-quality': () => X.adminQualityReport(),
   'admin.capstone-review': (a, b) => A.writer(a, X.adminReview, b),
   'admin.capstone-sponsor': (a, b) => A.writer(a, X.adminSponsor, b),

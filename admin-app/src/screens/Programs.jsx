@@ -15,6 +15,7 @@ import { canSaveVersion, draftCount, draftSummaryAr, howOpen, readHow, splitArch
 import CohortTeam from './CohortTeam.jsx';
 import CohortVisibility from './CohortVisibility.jsx';
 import CohortIdentity from './CohortIdentity.jsx';
+import CohortExport from './CohortExport.jsx';
 import CohortWizard from './CohortWizard.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
@@ -214,6 +215,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
   const [groups, setGroups] = useState(null);
   const [vis, setVis] = useState(null);
   const [ident, setIdent] = useState(null);
+  const [exp, setExp] = useState(null);
   const [finalCfg, setFinalCfg] = useState(null);
   // تفضيل طي شرح الخطوات (localStorage داخل try/catch في program-state.js)
   const [howPref, setHowPref] = useState(() => readHow());
@@ -307,6 +309,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
       {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
       {vis && <CohortVisibility cohort={vis} canWrite={canWrite} onClose={() => setVis(null)} />}
       {ident && <CohortIdentity cohort={ident} canWrite={canWrite} onClose={() => setIdent(null)} />}
+      {exp && <CohortExport cohort={exp} onClose={() => setExp(null)} />}
       {/* الخطوة الرابعة من المعالج: بعد الإنشاء يفتح ملف الدفعة ومعه نافذة الفريق، والرابط ظاهر في رأس الملف */}
       {wizard && <CohortWizard preset={wizard} data={d} onClose={async (created) => { setWizard(null); if (created) { await load(); onCohort(created.id); setGroups(created); } }} />}
       {compare && (
@@ -464,13 +467,17 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
                   <td title="من يتبع الدفعة فعلًا: المسجّل فيها صراحة ومن انضم بجهتها. هو العدد نفسه في المجموعات والقاعة.">{c.members ?? c.enrolled ?? 0}{c.enrolled > 0 && c.enrolled !== c.members && <> <small className="la-muted">({c.enrolled} بتسجيل صريح)</small></>}</td>
                   <td>{(() => { const h = cohortHub({ cohort: c, cohorts: d.cohorts, orgs: d.organizations, programs }); return <span className={`la-chip ${h.missing ? 'warn' : 'ok'}`}>{hubSummary(h)}</span>; })()}</td>
                   {/* فعل أساسي واحد لكل صف (تدقيق 2026-11-23): «افتح ملف الدفعة»، والبقية في قائمة ⋯ */}
-                  <td className="la-row-acts"><button className="btn-sm primary" onClick={() => onCohort(c.id)}>افتح ملف الدفعة</button>{canWrite && <> <MoreMenu label={`إجراءات أخرى للدفعة «${c.name}»`} items={[
-                    { label: 'تحرير', run: () => editCohort(c) },
-                    { label: 'الرحلة والمدد', run: () => { window.location.hash = `#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`; } },
-                    { label: 'الفريق والمجموعات', run: () => setGroups(c) },
-                    { label: 'الرؤية', run: () => setVis(c) },
-                    { label: 'هويتها في الوثيقة', run: () => setIdent(c) },
-                  ]} /></>}</td>
+                  <td className="la-row-acts"><button className="btn-sm primary" onClick={() => onCohort(c.id)}>افتح ملف الدفعة</button> <MoreMenu label={`إجراءات أخرى للدفعة «${c.name}»`} items={[
+                    ...(canWrite ? [
+                      { label: 'تحرير', run: () => editCohort(c) },
+                      { label: 'الرحلة والمدد', run: () => { window.location.hash = `#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`; } },
+                      { label: 'الفريق والمجموعات', run: () => setGroups(c) },
+                      { label: 'الرؤية', run: () => setVis(c) },
+                      { label: 'هويتها في الوثيقة', run: () => setIdent(c) },
+                    ] : []),
+                    // تصدير مبادرات الدفعة لكل أدوار اللوحة (اطلاع مسجَّل، admin.cohort-export)
+                    { label: 'صدّر مبادراتها', run: () => setExp(c) },
+                  ]} /></td>
                 </tr>
               );
             })}
