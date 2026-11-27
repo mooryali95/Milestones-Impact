@@ -31,7 +31,7 @@ describe('planPages: حدود الصفحات من مواضع الكسر المس
   it('الصفحة الأولى للغلاف أطول (تبدأ من حافة الورقة) وما بعدها بهامشيها', () => {
     expect(PAGE.h - PAGE.bottom).toBeGreaterThan(PAGE.h - PAGE.top - PAGE.bottom);
     const p = planPages({ total: 5000, cands: [] });
-    expect(p[0].end).toBe(PAGE.h - PAGE.bottom);
+    expect(p[0].end).toBe(PAGE.h); // المرحلة 5: الغلاف بلا تذييل إلى حافة الورقة
     expect(p[1].end - p[1].start).toBe(PAGE.h - PAGE.top - PAGE.bottom);
   });
 });

@@ -41,7 +41,7 @@ body { font-weight: 400; }
 .in-open { display: grid; grid-template-columns: 20mm 1fr; align-items: end; gap: 4mm; padding-bottom: 4mm; margin: 0 0 6mm; border-top: 0.6mm solid #0B272F; padding-top: 5mm; border-bottom: 1px solid var(--acc); break-after: avoid; break-inside: avoid; }
 .in-open + * { break-before: avoid; }
 .in-open .n { font: 400 ${TS.display}pt/0.9 "Noto Sans", sans-serif; color: var(--acc); letter-spacing: -.02em; padding-inline-end: 3mm; border-inline-end: 0.4mm solid var(--acc); }
-.in-open .eyebrow { margin-bottom: 1mm; letter-spacing: .18em; font-size: ${TS.footer}pt; color: #5F7176; text-transform: none; }
+.in-open .eyebrow { margin-bottom: 1mm; letter-spacing: .12em; font-size: ${TS.footer}pt; color: #5F7176; text-transform: none; opacity: .7; }
 .in-open h2 { margin: 0; font-weight: 600; font-size: ${TS.chapter}pt; line-height: 1.3; color: #0B272F; }
 .in-open p { margin: 1.5mm 0 0; font-size: ${TS.small}pt; color: #5F7176; line-height: 1.7; }
 .in-open p.ask { font-size: ${TS.h3}pt; color: #0B272F; padding-inline-start: 3mm; border-inline-start: 2pt solid var(--acc); }
@@ -114,7 +114,7 @@ body { font-weight: 400; }
 .in-sign small { display: block; font-size: ${TS.small}pt; color: #2C4148; margin-top: 1mm; }
 .in-fp { display: flex; justify-content: space-between; gap: 6mm; margin-top: 7mm; padding-top: 3mm; border-top: 1px solid #DCE2E1; font: 400 ${TS.caption}pt "Noto Sans", sans-serif; letter-spacing: .08em; color: #5F7176; direction: ltr; }
 .in-fp b { font-weight: 500; color: #0B272F; }
-.in-verify { display: flex; align-items: center; gap: 6mm; margin-top: 6mm; break-inside: avoid; }
+.in-verify { display: flex; align-items: center; gap: 6mm; margin-top: 6mm; padding: 4mm 5mm; border: 0.3mm solid #DCE2E1; break-inside: avoid; }
 .in-verify .qr { width: 26mm; height: 26mm; flex: none; }
 .in-verify p { margin: 0; font-size: ${TS.body}pt; line-height: 1.7; color: #2C4148; }
 .in-verify a { color: #0B272F; font: 400 ${TS.caption}pt "Noto Sans", sans-serif; direction: ltr; unicode-bidi: isolate; word-break: break-all; }
@@ -499,11 +499,12 @@ export function institutionalReport(input, options = {}) {
       eyebrow: brand.program || 'برنامج القادة', title, subtitle,
       // المرحلة 25: صف رسمي واحد (الجهة، الراعي، القائد)، والرمز والإصدار والتاريخ والحالة في شريط الضبط اللاتيني، والحالة في الختم
       rows: [['الجهة', org?.name || m.host], ['الراعي', m.sponsor], ['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
-      control: controlStrip([`${m.ref || 'MI-CP'}`, `V${m.version || 1}`, isoDay(approved ? m.approved_at : (m.generated_at || new Date())), approved ? 'APPROVED' : 'DRAFT']),
+      // المرحلة 5: لا تاريخ ISO في شريط الضبط؛ التاريخ البشري في الختم والختام، وISO في البصمة وحدها
+      control: controlStrip([`${m.ref || 'MI-CP'}`, `V${m.version || 1}`, approved ? 'APPROVED' : 'DRAFT']),
       stamp: approved ? DOC_APPROVED_AR : DOC_LIVE_AR,
       // المرحلة 28: الحية بعلامة مائية في كل صفحة وترويسة DOC_LIVE_HEAD_AR، والختم الذهبي في إغلاق المعتمدة وحدها
       live: !approved,
-      controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${isoDay(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : DOC_LIVE_AR}`,
+      controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${fmt(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : DOC_LIVE_AR}`,
       confidential: CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR,
       closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', shownFp) : docClosingLiveAr(built),
     },

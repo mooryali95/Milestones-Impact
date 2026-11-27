@@ -17,7 +17,8 @@ export const PAGE = Object.freeze({ w: mmPx(PAGE_MM.w), h: mmPx(PAGE_MM.h), top:
 // pt إلى بكسل بدقة 96
 const ptPx = (pt) => (pt * 96) / 72;
 const CONTENT_H = PAGE.h - PAGE.top - PAGE.bottom;
-const FIRST_H = PAGE.h - PAGE.bottom;
+// المرحلة 5: الغلاف بلا تذييل، فيمتد إلى حافة الورقة
+const FIRST_H = PAGE.h;
 const KEEP_NEXT = 110;
 const BLOCKISH = new Set(['block', 'flex', 'grid', 'table', 'table-row', 'list-item', 'table-row-group', 'flow-root']);
 
@@ -41,9 +42,12 @@ export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH
     if (f != null) end = f;
     else {
       // أبعد كسر مسموح يملأ الصفحة، بشرط ألا تبقى الصفحة شبه فارغة؛ فإن لم يوجد فأي كسر مسموح، ثم القطع عند الحد
+      // المرحلة 5: الكسر اللين (soft) داخل كتلة break-inside: avoid يُقبل حين لا كسر صلب يملأ الصفحة، فلا تبقى صفحة تحت 25%
       const ok = ys.filter((c) => c.y > s + 2 && c.y <= limit);
-      const full = ok.filter((c) => c.y >= s + room * 0.3);
-      const pick = (full.length ? full : ok).at(-1);
+      const hard = ok.filter((c) => !c.soft);
+      const full = hard.filter((c) => c.y >= s + room * 0.3);
+      const softFull = ok.filter((c) => c.soft && c.y >= s + room * 0.3);
+      const pick = (full.length ? full : softFull.length ? softFull : hard.length ? hard : ok).at(-1);
       end = pick ? pick.y : limit;
       next = pick?.head || null;
     }
@@ -66,6 +70,17 @@ export function chapterAt(heads, start, end) {
     else break;
   }
   return cur;
+}
+
+/** الفهرس الجانبي (outline) من عناوين الأبواب: [{ title, page }] بترقيم يبدأ من 1، بلا فارغ ولا تكرار متتال. منطق خالص */
+export function outlineItems(heads, pageOf) {
+  const out = [];
+  for (const h of [...heads].sort((a, b) => a.y - b.y)) {
+    const title = String(h.text || '').replace(/\s+/g, ' ').trim();
+    if (!title || out.at(-1)?.title === title) continue;
+    out.push({ title, page: Math.max(0, pageOf(h.y)) + 1 });
+  }
+  return out;
 }
 
 /** يثبّت الرقم المرجعي مرة واحدة: الغلاف والتذييل وترويسة الطباعة من المصدر نفسه. منطق خالص. */
@@ -106,10 +121,11 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
       lines.slice(2, -2).forEach((y) => raw.push({ y, head, line: true }));
     }
   }
+  // ما بعد عنوان لا ينفصل عنه (break-after: avoid): يبقى معه نحو أربعة أسطر من محتواه، لا رأس جدول وحده ولا سطر واحد
+  // وما داخل كتلة لا تنقسم يبقى كسرًا لينًا (soft) لا يُختار إلا لتجنب صفحة شبه فارغة (planPages)
   const cands = raw.filter((c) => c.y > 0
-    && !avoid.some((a) => c.y > a.top + 1 && c.y < a.bottom - 1)
-    // ما بعد عنوان لا ينفصل عنه (break-after: avoid): يبقى معه نحو أربعة أسطر من محتواه، لا رأس جدول وحده ولا سطر واحد
-    && !after.some((a) => (a.before != null ? c.y > a.top && c.y <= a.before + 1 : c.y >= a.bottom - 1 && c.y - a.bottom < KEEP_NEXT)));
+    && !after.some((a) => (a.before != null ? c.y > a.top && c.y <= a.before + 1 : c.y >= a.bottom - 1 && c.y - a.bottom < KEEP_NEXT)))
+    .map((c) => (avoid.some((a) => c.y > a.top + 1 && c.y < a.bottom - 1) ? { ...c, soft: true } : c));
   return { total, cands, forced };
 }
 
@@ -214,7 +230,8 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RAS
     await doc.fonts.ready;
     await Promise.all([...doc.images].map((im) => (im.complete ? null : new Promise((ok) => { im.onload = ok; im.onerror = ok; }))));
     const root = doc.querySelector('.sheet');
-    const plan = planPages(collectBreaks(doc));
+    // الغلاف المؤسسي (بجهة) صفحة كاملة إلى الحافة؛ والوثيقة بلا جهة تبقي هامشها السفلي في الصفحة الأولى
+    const plan = planPages({ ...collectBreaks(doc), firstH: meta.brand ? FIRST_H : PAGE.h - PAGE.bottom });
     const pageOf = (y) => Math.max(0, plan.findIndex((p) => y >= p.start && y < p.end));
 
     // أرقام صفحات الفهرس تُكتب في مواضعها المحجوزة قبل الرسم (لا يتغير بها التخطيط)
@@ -280,7 +297,7 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RAS
         if (hc) { ctx.drawImage(hc, 0, y); y += hc.height; }
         const h = (p.end - p.start) * scale;
         ctx.drawImage(canvas, 0, (p.start - ch.start) * scale, page.width, h, 0, y, page.width, h);
-        footer(ctx, k + 1, plan.length, scale, line);
+        if (k > 0) footer(ctx, k + 1, plan.length, scale, line);
         if (k > 0) pdf.addPage('a4');
         // JPEG بجودة 0.8: نص حاد بمقياس 3، والملف بحجم يُرسل بالبريد
         pdf.addImage(page.toDataURL('image/jpeg', 0.8), 'JPEG', 0, 0, 595.28, 841.89, undefined, 'FAST');
@@ -295,6 +312,8 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = RAS
       pdf.setPage(k + 1);
       pdf.link(l.left * PT, top * PT, l.w * PT, l.h * PT, { pageNumber: l.to + 1 });
     }
+    // الفهرس الجانبي (المرحلة 5): باب لكل عنوان، كما يولّده المسار المتجهي (outline: true في workers/pdf-render)
+    for (const it of outlineItems(heads, pageOf)) pdf.outline.add(null, it.title, { pageNumber: it.page });
     onProgress('اكتمل الملف');
     return { blob: pdf.output('blob'), pages: plan.length, plan };
   } finally {

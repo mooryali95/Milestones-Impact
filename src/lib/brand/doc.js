@@ -36,7 +36,12 @@ export const LIVE_RING = () => `<svg class="ring" width="64" height="64" viewBox
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : esc(n));
-export const today = () => new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+// خلية رقمية في الجدول (المرحلة 5): عدد، أو نص أرقام بفواصل ونسبة أو عملة، فلا تلتف ولا تنكسر («480,00» ثم «0»)
+const NUMERIC = /^[+\-−]?[\d٠-٩][\d٠-٩,.٬٫\s]*(%|٪)?(\s*(ريال|ر\.س|SAR))?$/;
+const isNumeric = (v) => typeof v === 'number' || (typeof v === 'string' && NUMERIC.test(v.trim()));
+// المرحلة 5: صيغة تاريخ بشرية واحدة في الوثائق (27 نوفمبر 2026) بأرقام لاتينية وتوقيت الرياض، وISO في البصمة وحدها
+export const humanDate = (d) => { const t = new Date(d); return Number.isNaN(t.getTime()) ? '' : t.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' }); };
+export const today = () => humanDate(new Date());
 
 // رقم وثيقة قابل للتتبع: MI-<نوع>-<تاريخ>-<أربعة رموز>
 export function docId(kind) {
@@ -83,7 +88,7 @@ export const bars = (rows, total, { ltr = false } = {}) => (rows.length ? `<div 
 
 // جدول: cols [{ label, align?, ltr?, width? }]، rows مصفوفة قيم (نص أو { html })
 export const table = (cols, rows, empty = 'لا بيانات') => `<table class="tbl"><thead><tr>${cols.map((c) => `<th${c.width ? ` style="width:${c.width}"` : ''}>${esc(c.label)}</th>`).join('')}</tr></thead>
-<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : esc(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
+<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${isNumeric(v) ? ' class="num"' : ''}${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : num(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
 
 export const progress = (pct) => `<span class="pg"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span><span class="pgn">${num(Math.round(pct))}%</span>`;
 // علامة HTML الخام رمز لا يُزوَّر (المرحلة 21): كائن قادم من القاعدة أو JSON يحمل html لا يمر خامًا، بل يُهرَّب نصًا
@@ -172,6 +177,8 @@ ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link re
 /* الترويسة باسم الباب الحالي (string set) */
 body { string-set: chapter "${cssStr(meta.title)}"; }
 .sec > header h2, .in-open h2 { string-set: chapter content(text); }
+${meta.brand ? '' : `/* المرحلة 5: لا تذييل على الصفحة الأولى */
+@page :first { @bottom-right { content: none; } @bottom-left { content: none; } }`}
 ${meta.brand ? `/* الغلاف صفحة كاملة بلا هامش ولا ترويسة (الطباعة ومولّد الخادم)، والمحتوى يبدأ الصفحة الثانية */
 @page :first { margin: 0; @top-right { content: none; } @top-left { content: none; } @bottom-right { content: none; } @bottom-left { content: none; } }
 @media print { html:not(.pdf) .mast.co { height: 296.5mm; overflow: hidden; display: flex; flex-direction: column; padding: 18mm 18mm 16mm; break-after: page; margin: 0; }
@@ -196,7 +203,7 @@ html.print { background: ${C.paper}; } html.print .toolbar { display: none !impo
 html.embed { background: transparent; } html.embed .toolbar { display: none !important; }
 html.embed .sheet { margin: 0 auto; box-shadow: 0 0 0 1px ${C.line}; }
 @media screen and (max-width: 700px) { html.embed .sheet > *:not(.mast) { padding-inline: 6mm; } html.embed .mast { padding: 8mm 6mm; } html.embed .mast .meta { grid-template-columns: repeat(2, 1fr); } }
-p, li { orphans: 3; widows: 3; }
+p, li { orphans: 3; widows: 3; text-wrap: pretty; }
 h2, h3 { break-after: avoid; }
 h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: none; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; }
@@ -218,7 +225,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .mast .meta b { font-weight: 400; font-size: ${TS.small}pt; color: ${C.graphite}; }
 .thesis { display: flex; align-items: center; gap: 3mm; margin: 7mm 0 0; color: ${C.goldText}; font-size: ${TS.small}pt; }
 .thesis::before, .thesis::after { content: ''; flex: 1; height: 1px; background: ${C.gold}; opacity: .45; }
-.eyebrow { display: block; font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.goldText}; }
+.eyebrow { display: block; font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .12em; text-transform: uppercase; color: ${C.goldText}; opacity: .7; }
 .sec { margin-top: 9mm; break-inside: auto; }
 .sec.keep { break-inside: avoid; }
 .tbl tr { break-inside: avoid; }
@@ -250,6 +257,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .tbl td { padding: 2.2mm 1.5mm; border-bottom: 1px solid ${C.line}; vertical-align: top; }
 .tbl tr { break-inside: avoid; }
 .tbl td.c { text-align: center; padding: 6mm; }
+.tbl td.num { white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 22mm; }
 .tbl td:has(.pg) { white-space: nowrap; }
 .pg { display: inline-block; width: 16mm; height: 2px; background: ${C.line}; vertical-align: middle; margin-inline-end: 2mm; }
 .pg i { display: block; height: 100%; background: ${C.gold}; }
@@ -267,7 +275,8 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .close { break-before: avoid; display: flex; align-items: center; justify-content: space-between; gap: 8mm; margin-top: 12mm; padding-top: 6mm; border-top: 1px solid ${C.gold}; break-inside: avoid; }
 .close p { margin: 0; font-size: ${TS.caption}pt; color: ${C.slate}; max-width: 120mm; }
 .close .sig { font-size: ${TS.small}pt; } .close .sig b { font-weight: 400; display: block; }
-.rights { margin-top: 8mm; font-size: ${TS.footer}pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; }
+.rights { margin-top: 8mm; font-size: ${TS.footer}pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; word-break: keep-all; overflow-wrap: normal; }
+.rights .rt-meta { display: block; white-space: nowrap; margin-top: 1mm; font-variant-numeric: tabular-nums; }
 .rights b { font-weight: 400; color: ${C.slate}; }
 .dm { display: inline-block; vertical-align: middle; }
 .mast .stamp { display: inline-block; border: 1px solid ${C.gold}; color: ${C.goldText}; padding: .5mm 3mm; border-radius: 2px; font-size: ${TS.small}pt; font-weight: 500; letter-spacing: 0; background: ${C.paper}; line-height: 1.6; }
@@ -298,10 +307,10 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .mast.co { border-bottom: 0; }
 .close .thesis { margin: 0 0 3mm; flex-basis: 100%; }
 .close { flex-wrap: wrap; }
-.close .mi-mark svg { height: 14px; width: auto; display: block; opacity: .7; }
-/* ملف PDF: الغلاف صفحة كاملة وحده (حتى هامش التذييل: PAGE.h - PAGE.bottom في pdf.js، من PAGE_MM)، والعنوان في ثلثه الأوسط،
+.close .mi-mark svg { height: 9mm; width: auto; display: block; }
+/* ملف PDF: الغلاف صفحة كاملة وحده (إلى حافة الورقة بلا تذييل، المرحلة 5: FIRST_H = PAGE.h في pdf.js)، والعنوان في ثلثه الأوسط،
    وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
-html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h) - mmPx(PAGE_MM.bottom)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
+html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
 html.pdf .mast.co .eyebrow { margin-top: auto; }
 html.pdf .mast.co .meta { margin-top: auto; }
 html.pdf .mast.co .accent { bottom: 0; }
@@ -327,7 +336,7 @@ html.pdf .mast.co .accent { bottom: 0; }
   <footer class="rights">
     <b>جميع الحقوق محفوظة <bdi dir="ltr">© ${year} Milestone Impact</bdi>.</b>
     ${esc(meta.rights || REPORT_RIGHTS_AR).replace('Milestone Impact', '<bdi dir="ltr">Milestone Impact</bdi>')} ${esc(conf.replace(/\.$/, ''))}.
-    <span class="mono"><bdi dir="ltr">${esc(id)}</bdi> · ${esc(today())}</span>
+    <span class="rt-meta"><bdi dir="ltr">${esc(id)}</bdi> · <bdi>${esc(today())}</bdi></span>
   </footer>
 </article>
 ${isLiveDoc(meta) && !opts.pdf ? `<div class="wm" aria-hidden="true"><span>${esc(WATERMARK.text)}</span></div>` : ''}
