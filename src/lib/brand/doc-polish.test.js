@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { documentHtml, table, humanDate, mmPx, PAGE_MM } from './doc.js';
-import { planPages, outlineItems, PAGE } from './pdf.js';
+import { planPages, outlineItems, collectBreaks, PAGE } from './pdf.js';
 import { VERIFY_STYLE } from './verify-mark.js';
 import { IN_STYLE } from './institutional.js';
 
@@ -128,9 +128,42 @@ describe('لا صفحة شبه فارغة', () => {
     const plan = planPages({ total: 1500, cands: [{ y: 700 }, { y: 950, soft: true }], pageH: 1000, firstH: 1000 });
     expect(plan[0].end).toBe(700);
   });
+  it('اللين يُقبل إن كان تقديم الصلب يزيد الوثيقة صفحة (عقد مدى صفحات الشكل في البديل المصور)', () => {
+    // الصلب عند 700 يترك 30% فارغة ثم يجر ذيلًا إلى صفحة رابعة؛ اللين عند 950 يُبقيها ثلاثًا
+    const plan = planPages({ total: 2900, cands: [{ y: 700 }, { y: 950, soft: true }, { y: 1650 }, { y: 1900 }], pageH: 1000, firstH: 1000 });
+    expect(plan.length).toBe(3);
+    expect(plan[0].end).toBe(950);
+  });
   it('نهاية الباب (كسر إجباري) مستثناة', () => {
     const plan = planPages({ total: 1500, cands: [{ y: 1100 }], forced: [100], pageH: 1000, firstH: 1000 });
     expect(plan[0].end).toBe(100);
   });
   it('PAGE ثابت', () => { expect(PAGE.h).toBe(1123); });
+});
+
+// المرحلة 6: الغلاف في البديل المصور صفحة واحدة لا تنقسم. كان أطول من 90% من الصفحة فلا يُحسب «لا ينقسم»، فانكسر عند
+// سطر الحالة أسفله وجر شريطه إلى الصفحة الثانية، فزادت البطاقة صفحة عن مدى شكلها (e2e/initiative-pdf-reference.spec.js)
+describe('الغلاف لا ينقسم في البديل المصور', () => {
+  const fake = (els) => {
+    const mk = (e) => ({ ...e, getBoundingClientRect: () => ({ top: e.top, bottom: e.bottom, height: e.bottom - e.top, left: 0, right: 794 }) });
+    const nodes = els.map(mk);
+    const root = { ...mk({ top: 0, bottom: 2000 }), querySelectorAll: () => nodes };
+    const styles = new Map(nodes.map((n) => [n, { display: 'block', breakBefore: 'auto', breakAfter: 'auto', breakInside: 'auto', ...n.cs }]));
+    return { querySelector: () => root, defaultView: { getComputedStyle: (n) => styles.get(n) } };
+  };
+  it('break-after: page على الغلاف كسر إجباري عند نهايته، ولا كسر داخله', () => {
+    const doc = fake([
+      { tagName: 'HEADER', top: 0, bottom: 1123, cs: { breakAfter: 'page', breakInside: 'avoid' } },
+      { tagName: 'DIV', top: 1045, bottom: 1070 },
+      { tagName: 'DIV', top: 1123, bottom: 2000 },
+    ]);
+    const br = collectBreaks(doc, 949);
+    expect(br.forced).toContain(1123);
+    expect(br.cands.filter((c) => c.y > 0 && c.y < 1123 && !c.soft)).toEqual([]);
+    expect(planPages({ ...br, firstH: 1123 })[0].end).toBe(1123);
+  });
+  it('غلاف PDF يعلن break-after: page', () => {
+    const html = documentHtml({ title: 'ت', brand: { name: 'جهة' } }, '<p>x</p>', { pdf: true });
+    expect(css(html)).toMatch(/html\.pdf \.mast\.co \{[^}]*break-after: page/);
+  });
 });

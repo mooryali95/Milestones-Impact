@@ -310,7 +310,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .close .mi-mark svg { height: 9mm; width: auto; display: block; }
 /* ملف PDF: الغلاف صفحة كاملة وحده (إلى حافة الورقة بلا تذييل، المرحلة 5: FIRST_H = PAGE.h في pdf.js)، والعنوان في ثلثه الأوسط،
    وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
-html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
+html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; break-after: page; }
 html.pdf .mast.co .eyebrow { margin-top: auto; }
 html.pdf .mast.co .meta { margin-top: auto; }
 html.pdf .mast.co .accent { bottom: 0; }

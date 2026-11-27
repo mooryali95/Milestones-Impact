@@ -1,1 +1,0 @@
-import{j as a,c as r}from"./index-BDy7WljF.js";import{M as t}from"./MessageCenter-DC79Sagu.js";import"./react-XDCjal2T.js";const m={list:"me.messages",read:"me.messages-read",prefs:"me.mail-prefs"};function p({onBack:s,onUnread:e}){return a.jsx(t,{call:r,actions:m,onBack:s,backLabel:"رجوع إلى رحلتي",onUnread:e})}export{p as default};

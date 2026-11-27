@@ -28,7 +28,15 @@ const BLOCKISH = new Set(['block', 'flex', 'grid', 'table', 'table-row', 'list-i
  * cands مواضع كسر مسموحة (أعلى عنصر يبدأ عنده الكسر)، وhead رأس جدول يتكرر في الصفحة التالية إن كان الكسر بين صفوفه.
  * يعيد [{ start, end, head }]: head رأس الجدول الذي يُرسم أعلى الصفحة قبل محتواها
  */
-export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH = FIRST_H }) {
+export function planPages(input) {
+  // المرحلة 6: الصلب الممتلئ مقدَّم على اللين، إلا إن زاد ذلك الوثيقة صفحة؛ فحينها يُقبل أبعد كسر لين يملأ الصفحة أكثر من الصلب
+  // (عقد مدى صفحات الشكل document-forms.js يسري على البديل المصور كما على المتجهي)
+  const strict = planWith(input, false);
+  const loose = planWith(input, true);
+  return loose.length < strict.length ? loose : strict;
+}
+
+function planWith({ total, cands, forced = [], pageH = CONTENT_H, firstH = FIRST_H }, preferFill) {
   const ys = [...cands].sort((a, b) => a.y - b.y);
   const fs = [...new Set(forced)].sort((a, b) => a - b);
   const pages = [];
@@ -47,7 +55,8 @@ export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH
       const hard = ok.filter((c) => !c.soft);
       const full = hard.filter((c) => c.y >= s + room * 0.3);
       const softFull = ok.filter((c) => c.soft && c.y >= s + room * 0.3);
-      const pick = (full.length ? full : softFull.length ? softFull : hard.length ? hard : ok).at(-1);
+      const sparse = preferFill && full.length && softFull.at(-1)?.y > full.at(-1).y;
+      const pick = (sparse ? softFull : full.length ? full : softFull.length ? softFull : hard.length ? hard : ok).at(-1);
       end = pick ? pick.y : limit;
       next = pick?.head || null;
     }
@@ -103,6 +112,8 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
     if (r.bottom - r.top < 1 && cs.breakBefore !== 'page') continue;
     if (cs.breakBefore === 'page' && r.top > 4) forced.push(Math.floor(r.top));
     if ((cs.breakInside === 'avoid' || cs.breakInside === 'avoid-page') && r.bottom - r.top < pageH * 0.9) avoid.push(r);
+    // المرحلة 6: break-after: page كسر إجباري عند نهايته، والغلاف (أول الوثيقة) ما داخله لين لا يُختار ولو جاوز طوله 90% من الصفحة
+    if (cs.breakAfter === 'page' && r.bottom > 4) { forced.push(Math.floor(r.bottom)); if (r.top < 4) avoid.push(r); }
     if (cs.breakAfter === 'avoid' || cs.breakAfter === 'avoid-page') after.push(r);
     // break-before: avoid (خاتمة الوثيقة): لا كسر قبله ولا بين أوله وما قبله، فلا تبقى الخاتمة وحدها في صفحة أخيرة
     if (cs.breakBefore === 'avoid' || cs.breakBefore === 'avoid-page') after.push({ top: r.top - 140, bottom: r.top - 140 + 0.5, before: r.top });
