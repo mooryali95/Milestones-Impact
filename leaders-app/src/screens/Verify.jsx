@@ -98,14 +98,14 @@ export function DocumentVerify() {
         {r && !r.success && <p className="muted">{r.message}</p>}
         {r?.success && !r.found && <p className="vf-state missing"><i aria-hidden="true" />لا وثيقة معتمدة بهذه البصمة. تأكد منها كما هي مطبوعة في صفحة الاعتماد (مثل 1A2B-3C4D-5E6F-7A8B). النسخة الحية غير المعتمدة لا تُتحقق.</p>}
         {d && r.withheld && <>
-          <p className="vf-state valid" data-verify="withheld"><i aria-hidden="true" />{DOC_VERIFY_AR.withheld}</p>
+          <p className="vf-state registered" data-verify="withheld"><i aria-hidden="true" />{DOC_VERIFY_AR.withheld}</p>
           <dl>
             <dt>البصمة</dt><dd className="ltr" style={{ textAlign: 'start' }}>{d.fingerprint}</dd>
             <dt>الجهة المصدِرة</dt><dd>{d.issuer}</dd>
           </dl>
         </>}
         {d && !r.withheld && <>
-          <p className="vf-state valid"><i aria-hidden="true" />وثيقة معتمدة وأصلية: بصمتها تطابق النسخة المحفوظة لحظة اعتمادها</p>
+          <p className="vf-state registered" data-verify="registered"><i aria-hidden="true" />هذه البصمة مسجلة لوثيقة معتمدة لدى Milestone Impact، وبياناتها أدناه. طابقها مع غلاف ما بين يديك، فالتحقق هنا لا يطابق محتوى الصفحات</p>
           {d.initiative && <p className="vf-name">{d.initiative}</p>}
           <dl>
             {d.form && <><dt>الوثيقة</dt><dd>{d.form}</dd></>}

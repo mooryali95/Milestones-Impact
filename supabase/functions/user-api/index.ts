@@ -6,6 +6,7 @@ import {
 } from "npm:@simplewebauthn/server@13.3.3";
 import { MAIL_FROM_DEFAULT, mailButton, mailCode, mailRows, mailShell, mailText, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
+import { lockFields } from "../_shared/reg-lock.js";
 import { planNotice, type PlanNoticeResult } from "../_shared/plan-notice.ts";
 import { slackConfigured, slackDeliver } from "../_shared/slack.ts";
 import { notifySettings } from "../_shared/notify-settings.ts";
@@ -472,7 +473,14 @@ Deno.serve(async (req: Request) => {
       for (const k of SAVE_FIELDS) if (k in fields) updates[k] = fields[k];
       if (!Object.keys(updates).length) return json({ success: false, message: "لا توجد حقول للحفظ" }, 400);
       if (JSON.stringify(updates).length > 100_000) return json({ success: false, message: "البيانات أكبر من المسموح" }, 413);
-      const { data: before } = await sb.from("registrations").select("id, name, email, submitted").eq("id", subject).limit(1);
+      // القفل من القيمة المخزنة (reg-lock.js): لا يمسح المسجل تقديمه ولا طلب إعادة الفتح بنفسه. تعذّر القراءة لا يكتب شيئًا
+      const { data: before, error: readErr } = await sb.from("registrations").select("id, name, email, submitted, reopenRequested").eq("id", subject).limit(1);
+      if (readErr) throw readErr;
+      if (!before?.length) return json({ success: false, message: "التسجيل غير موجود" }, 404);
+      const locked = lockFields(before[0], updates);
+      for (const k of Object.keys(updates)) delete updates[k];
+      Object.assign(updates, locked);
+      if (!Object.keys(updates).length) return json({ success: true });
       const { error } = await sb.from("registrations").update(updates).eq("id", subject);
       if (error) throw error;
       // أول تقديم للخطة: إشعار المستشار من الخادم (D14)، ولا يوقف الرد إن تعذّر

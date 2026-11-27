@@ -64,7 +64,7 @@ export const AUDIT_AR = {
   'participant.link': 'رُبط به حساب آخر له', 'participant.merged': 'دُمج حسابه الثاني في حسابه هذا', 'participant.unmerged': 'أُرجع دمج حسابه الثاني',
   'participant.email-primary': 'تغيّر بريده الأساسي', 'participant.email-remove': 'حُذف بريد بديل من حسابه',
   'placement.approve': 'اعتُمد مستواه', 'assessment.submit': 'سلّم القياس', 'assessment.reset': 'طُلبت إعادة القياس',
-  'requirement.review': 'روجع متطلب في رحلته', 'requirement.file-replace': 'استبدل ملف بند في رحلته', 'milestone.participant': 'عُدّل معلم في رحلته', 'workshop.mark': 'سُجّل حضوره في ورشة', 'workshop.unmark': 'أُلغي حضوره في ورشة', 'workshop.checkin': 'سجّل حضوره في ورشة',
+  'requirement.review': 'روجع متطلب في رحلته', 'requirement.file-replace': 'استبدل ملف بند في رحلته', 'upload.url': 'طلب رابط رفع ملف', 'milestone.participant': 'عُدّل معلم في رحلته', 'workshop.mark': 'سُجّل حضوره في ورشة', 'workshop.unmark': 'أُلغي حضوره في ورشة', 'workshop.checkin': 'سجّل حضوره في ورشة',
   'cohort.enroll': 'سُجّل في دفعة', 'cohort.place-failed': 'تعذّر إلحاقه بدفعة تلقائيًا', 'hall.assign': 'وُزّع على طاولة في القاعة', 'admin.file-open': 'فُتحت سيرته الذاتية', 'admin.answers-view': 'فُتحت إجابات قياسه',
   'capstone.submit': 'سلّم وثيقة المبادرة', 'capstone.return': 'أُعيدت وثيقة المبادرة للتعديل', 'capstone.accept': 'قُبلت وثيقة المبادرة',
   'handbook.export': 'صدّر الكتاب', 'handbook.quiz-retry': 'أعاد اختبار باب في الكتاب', 'payment.checkout': 'فتح صفحة الدفع', 'payment.paid': 'دفع', 'payment.refunded': 'استُرد دفعه', 'payment.reminder': 'ذُكِّر بالدفع',

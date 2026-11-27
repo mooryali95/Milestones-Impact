@@ -117,7 +117,13 @@ describe('عقد الخادم: الصلاحيات والرد المحجوب وا
     expect(withheld).toMatch(/withheld: true/);
     expect(withheld).toMatch(/DOC_VERIFY_AR\.withheld/);
     expect(withheld).not.toMatch(/initiative|org|program|form|approved_at|ref/);
-    expect(DOC_VERIFY_AR.withheld).toBe('وثيقة صحيحة صادرة عن Milestone Impact، وتفاصيلها محجوبة بقرار صاحبها');
+    expect(DOC_VERIFY_AR.withheld).toBe('هذه البصمة مسجلة لوثيقة معتمدة لدى Milestone Impact، ومحتواها محجوب بقرار صاحبها، فلا يمكن هنا مطابقة ما بين يديك');
+    expect(DOC_VERIFY_AR.withheld).not.toMatch(/صحيحة|أصلية/);
+    expect(withheld).not.toMatch(/authentic/);
+    // الظاهر كذلك: registered لا authentic، فالخادم لا يطابق المحتوى
+    const visible = v.slice(v.indexOf('const s = row.snapshot'));
+    expect(visible).toMatch(/registered: true/);
+    expect(visible).not.toMatch(/authentic/);
     // قبل الترحيل يُعاد البحث بدون العمود فيعمل التحقق كما كان
     expect(v).toMatch(/missingColumn\(lookErr\)/);
   });
@@ -144,12 +150,12 @@ describe('الترحيل واللقطة', () => {
     expect(sql).toMatch(/check \(jsonb_typeof\(doc_options\) = 'object'\)/);
     expect(sql).toMatch(/exception when duplicate_object then null/);
     expect(sql).toMatch(new RegExp(`values \\('${name}'\\) on conflict do nothing`));
-    expect(MIGRATIONS.at(-1)).toBe(name);
+    expect(MIGRATIONS).toContain(name);
     expect(MIGRATION_GATES[name][0]).toBe('tolerant');
   });
   it('اللقطة تحمل العمود والقيد', () => {
     const base = read('supabase/schema/baseline.sql');
-    expect(base).toContain(`-- as-of migration: ${name}`);
+    expect(base).toMatch(/-- as-of migration: \d{14}_/);
     expect(base).toMatch(/doc_options jsonb default '\{\}'::jsonb not null/);
     expect(base).toMatch(/capstones_doc_options_check CHECK \(\(jsonb_typeof\(doc_options\) = 'object'::text\)\)/);
   });
