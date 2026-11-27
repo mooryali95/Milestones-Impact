@@ -282,7 +282,6 @@
 .la-org { --org: var(--gold); position: relative; border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; padding: 16px; display: grid; gap: 12px; overflow: hidden; }
 .la-org::before { content: ""; position: absolute; inset-inline: 0; top: 0; height: 4px; background: var(--org); }
 .la-org.off { opacity: .6; }
-.la-org.none { background: var(--brand-cream-faint); border-style: dashed; }
 .la-org header { display: flex; gap: 12px; align-items: center; cursor: pointer; }
 .la-org header b { display: block; font-size: 1rem; }
 .la-org header small { color: var(--ink-mid); font-size: .74rem; }
@@ -294,11 +293,11 @@
 .la-fn-bar { display: block; height: 7px; border-radius: 6px; background: var(--sand-light); overflow: hidden; }
 .la-fn-bar i { display: block; height: 100%; background: var(--org, var(--gold)); border-radius: 6px; }
 .la-funnel { display: grid; gap: 6px; }
-.la-fn { display: grid; grid-template-columns: 92px 1fr 34px; gap: 8px; align-items: center; font-size: .76rem; }
+.la-fn { display: grid; grid-template-columns: 92px 1fr auto; gap: 8px; align-items: center; font-size: .76rem; }
 .la-fn b { text-align: end; }
 .la-fn-l { color: var(--ink-mid); }
-.la-funnel.big .la-fn { grid-template-columns: 120px 1fr 40px; font-size: .86rem; }
-.la-funnel.big .la-fn-bar { height: 10px; }
+.la-funnel.big .la-fn { grid-template-columns: 120px 1fr auto; font-size: .86rem; }
+.la-funnel.big .la-fn-bar, .la-funnel.big .la-meter-bar { height: 10px; }
 .la-org-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .76rem; }
 .la-org-acts { flex-wrap: wrap; gap: 6px; }
 .la-typed { display: grid; gap: 6px; font-size: .82rem; }
@@ -1026,7 +1025,7 @@
 .pf-o.commendation { border-inline-start-color: var(--st-ok); }
 .pf-o p { margin: 6px 0; white-space: pre-wrap; }
 .pf-mini li { margin-bottom: 4px; font-size: .9rem; }
-.pf-time li { display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.pf-time li { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
 .pf-time li.warn b { color: var(--st-warn-text); }
 .pf-time li.ok b { color: var(--st-ok); }
 .pf-when { color: var(--ink-soft); }
@@ -1695,3 +1694,11 @@ tr.ct-on > td { background: var(--gold-pale); }
 .pt-table.pt-compact tbody tr { height: 32px; }
 .pt-table .pt-track { white-space: nowrap; }
 .pt-table tbody tr:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: -2px; }
+
+/* المرحلة 10: شريط مهمة «بلا جهة» أعلى شبكة الجهات بدل البطاقة الوهمية */
+.org-unassigned { margin-block: 12px; border-inline-start: 4px solid var(--st-warn); }
+.org-unassigned .la-typed { margin-top: 8px; }
+.la-fn .la-meter, .la-seats .la-meter { display: flex; min-width: 0; white-space: normal; }
+.la-fn .la-meter-bar, .la-seats .la-meter-bar { flex: 1; width: auto; min-width: 40px; height: 7px; }
+.la-funnel.big .la-fn .la-meter-bar { height: 10px; }
+.la-org .la-meter:not(.ok):not(.warn):not(.bad) .la-meter-bar > i, .la-fn .la-meter:not(.ok):not(.warn):not(.bad) .la-meter-bar > i { background: var(--org, var(--gold)); }
