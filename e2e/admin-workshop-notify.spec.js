@@ -144,7 +144,7 @@ for (const width of [1440, 390]) {
     const done = saves(calls).at(-1);
     expect([done.preview, 'notify_cancel' in done, done.row.starts_at || null]).toEqual([undefined, false, null]);
     await expect(page.locator('.toast')).toHaveText(`تم الحفظ، وأُرسل بريد سحب الموعد إلى ${MEMBERS} مشاركًا، وأُبلغ المدرب`);
-    await expect(ws.locator('tr', { hasText: 'اليوم 2' })).toContainText('يُحدد لاحقًا');
+    await expect(ws.locator('tr', { hasText: 'اليوم 2' })).toContainText('بلا موعد');
 
     // جلسة لم تُعلن: سحب موعدها حفظ عادي بلا سؤال ولا بريد
     await ws.locator('tr', { hasText: 'اليوم 4' }).getByRole('button', { name: 'تحرير' }).click();

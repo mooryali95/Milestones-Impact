@@ -60,7 +60,7 @@ const shot = async (page, name) => { if (SHOTS) { await page.mouse.move(2, 2); a
 const noOverflow = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 const bulk = (calls) => calls.filter((c) => c.action === 'admin.workshop-mark-bulk').map(({ session_id, present, absent, reason, unmark_reason }) => ({ session_id, present, absent, reason, unmark_reason }));
 const openSheet = async (page, count) => {
-  await page.getByRole('button', { name: `${count} حاضر` }).click();
+  await page.getByRole('button', { name: new RegExp(`^(سجّل|عرض) الحضور \\(${count}( |\\))`) }).click();
   return page.getByRole('dialog', { name: 'ورقة الحضور' });
 };
 const row = (sheet, name) => sheet.locator('.ats-row', { hasText: name });
@@ -125,7 +125,7 @@ for (const width of [1440, 390]) {
     // الإغلاق بلا تغيير معلّق لا يسأل، والعدد في «الحضور والجلسات» يتحدث
     await sheet.getByRole('button', { name: 'إغلاق' }).click();
     await expect(sheet).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '60 حاضر' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^سجّل الحضور \(60/ })).toBeVisible();
   });
 
   test(`تسجيل المحددين وإلغاء حضور في حفظ واحد: المرفوض باسمه وسببه، ومن سجّل نفسه بسبب مكتوب (${width})`, async ({ page }) => {
