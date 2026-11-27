@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // سياق تطبيق القادة: المنهجية والكتاب والمختبر والمشاركون والجهات والشهادات
 // ════════════════════════════════════════════════════════════════
-import { PageHeader } from '../PageHeader.jsx';
+import { PageHeader, SectionTitle } from '../PageHeader.jsx';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { lazyNamed, lazyRetry } from '../lazy-retry.js';
 import { L } from '../leaders.js';
@@ -163,6 +163,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else body = <Orgs data={orgData} reload={loadOrgs} canWrite={canWrite} orgId={orgId} onOpen={(id) => (id ? openOrg(id) : at('orgs'))} onPerson={openPerson} />;
 
   return (
+    <SectionTitle.Provider value={sectionTitle(tab)}>
     <div className="dash-body">
       {/* عنوان الترويسة وعنوان المستند اسم القسم المفتوح (المرحلة 7)، واسم التطبيق فوقه سطرًا صغيرًا */}
       {/* الترويسة: العنوان وحده، والنطاق في عنوان المستند (تصور 2026-11-26، القسم العام البند 3) */}
@@ -199,5 +200,6 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
         <ScreenBoundary key={tab}><Suspense fallback={<Spinner />}>{body}</Suspense></ScreenBoundary></div>
       </div>
     </div>
+    </SectionTitle.Provider>
   );
 }
