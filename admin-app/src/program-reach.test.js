@@ -53,7 +53,7 @@ describe('محرر الرحلة يسمي الدفعات التي يصلها ال
   });
   it('الجملة القديمة «التي تتبع آخر تعديل» لا تعود إلى الشاشة', () => {
     expect(read('admin-app/src/screens/Methodology.jsx')).not.toContain('تتبع آخر تعديل');
-    expect(read('admin-app/src/screens/Methodology.jsx')).toContain('<JourneyAudience pid={pid} data={pdata} />');
+    expect(read('admin-app/src/screens/Methodology.jsx')).toContain('<JourneyStatus pid={pid} data={pdata}'); // من يصله التعديل داخل سطر الحالة (المرحلة 19)
   });
 });
 

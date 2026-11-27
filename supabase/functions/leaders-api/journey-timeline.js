@@ -16,6 +16,13 @@ import { addDays, daysBetween } from './milestones.js';
 import { countedSessions, eachWorkshop, optionalReq, optionalSession } from './optional.js';
 import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planService, planTrack, planWithRules } from './stage-windows.js';
 
+// تسمية الأسبوع المختصرة على المسطرة: «أ» ورقم الأسبوع بالأرقام العربية المشرقية («أ١»، «أ١٢»)
+const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+export const weekShortAr = (n) => `أ${String(n).replace(/\d/g, (d) => AR_DIGITS[d])}`;
+// علامة المسطرة: «الأسبوع n» تُكتب مختصرة والكاملة في title (المرحلة 19)، وغيرها (البداية والتواريخ) كما هي.
+// تُشتق عند الرسم لا في النموذج، فيبقى نموذج الدفعات القائمة حرفًا بحرف (journey-legacy.snapshot.json)
+export const tickShortAr = (label) => { const m = /^الأسبوع (\d+)$/.exec(label || ''); return m ? weekShortAr(Number(m[1])) : null; };
+
 // غير الإلزامية (T0، تصور 2026-11-18 ب5.2): نمطها بكلمة واحدة على الخط والبطاقة، بإطار متقطع. الإلزامية بلا وسم
 export { STAGE_TAG_AR };
 

@@ -46,6 +46,11 @@ export const PARTICIPANT_STATUS_TONE = {
 // حالة نسخة البرنامج (المرحلة 11): شارة واحدة من versionState في admin-app/src/program-state.js، بتسميتها ونبرتها هنا
 export const PROGRAM_VERSION_STATE = { archived: 'مؤرشف', no_reqs: 'بلا متطلبات', no_version: 'بلا نسخة', draft: 'مسودة معدلة', saved: 'محفوظ' };
 export const PROGRAM_VERSION_STATE_TONE = { archived: '', no_reqs: 'warn', no_version: 'warn', draft: 'warn', saved: 'ok' };
+// سطر حالة محرر الرحلة (المرحلة 19): مستوى ملاحظة الاتساق ونبرتها، وعبارة أن المسودة لا تمس الدفعة الجارية
+export const JOURNEY_ISSUE_AR = { error: 'خطأ', warn: 'تنبيه' };
+export const JOURNEY_ISSUE_TONE = { error: 'bad', warn: 'warn' };
+export const JOURNEY_SAFE_AR = 'لا تمس الدفعة الجارية';
+export const journeyIssuesAr = (n) => countAr(n, 'ملاحظة اتساق واحدة', 'ملاحظتا اتساق', 'ملاحظات اتساق', 'ملاحظة اتساق');
 export const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الملف'], ['assessed', 'أنهى القياس'], ['approved', 'اعتُمد مساره'], ['completed', 'أنهى البرنامج']];
 
 export const REQ_STATUS = { pending: 'لم يُنجز', submitted: 'بانتظار المراجعة', done: 'منجز', returned: 'أُعيد للتعديل' };

@@ -329,3 +329,41 @@ div.ja-bar:hover .ja-label b { text-decoration: none; }
 .jt-slot.together { background: color-mix(in srgb, var(--jt-gold) 7%, var(--jt-surface)); }
 /* وسطر «تسير معًا» داخل خانته: لا يتسع عنها، وينكسر بالكلمة */
 .jt-together { max-width: 100%; min-width: 0; }
+
+/* ══ الإطار المتمرر (المرحلة 19): تدرج على الحافة التي بقي بعدها ما يُمرر، ومحاذاة للخانات، وزرا تمرير ══ */
+.jt-desk { position: relative; }
+.jt-scrollbox { position: relative; }
+.jt-scroll { scroll-snap-type: x proximity; scroll-padding-inline: 24px; }
+.jt-slot { scroll-snap-align: start; }
+.jt-scrollbox::before, .jt-scrollbox::after { content: ""; position: absolute; top: 16px; bottom: 0; width: 40px; z-index: 3; pointer-events: none; opacity: 0; transition: opacity .15s; }
+.jt-scrollbox::before { inset-inline-start: 0; background: linear-gradient(to right, transparent, var(--jt-surface)); }
+.jt-scrollbox::after { inset-inline-end: 0; background: linear-gradient(to left, transparent, var(--jt-surface)); }
+[dir="ltr"] .jt-scrollbox::before { background: linear-gradient(to left, transparent, var(--jt-surface)); }
+[dir="ltr"] .jt-scrollbox::after { background: linear-gradient(to right, transparent, var(--jt-surface)); }
+.jt-scrollbox.more-start::before, .jt-scrollbox.more-end::after { opacity: 1; }
+.jt-nudge { position: absolute; top: 50%; z-index: 4; display: none; place-items: center; width: 32px; height: 32px; margin-top: -8px; padding: 0; font: inherit; font-size: 20px; line-height: 1;
+  border: 1px solid var(--jt-line); border-radius: 50%; background: var(--jt-surface); color: var(--jt-primary); cursor: pointer; box-shadow: 0 1px 4px rgba(10, 42, 61, .15); }
+.jt-nudge.start { inset-inline-start: 4px; }
+.jt-nudge.end { inset-inline-end: 4px; }
+.jt-scrollbox.more-start .jt-nudge.start, .jt-scrollbox.more-end .jt-nudge.end { display: grid; }
+.jt-nudge:focus-visible { outline: 3px solid var(--jt-gold); outline-offset: 2px; }
+.jt-ruler span { cursor: default; }
+
+/* ══ البلاطات بأسمائها والتفاصيل الملاصقة (المرحلة 19، محرر الرحلة) ══ */
+.jt-tile { width: 76px; height: auto; min-height: 56px; padding: 6px 4px 4px; display: inline-flex; flex-direction: column; align-items: center; gap: 3px; border-radius: 8px; }
+.jt-tile-ico { position: relative; display: inline-grid; place-items: center; }
+.jt-tile-name { display: block; max-width: 100%; font-size: 11px; line-height: 1.35; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jt-tile .jt-badge.mode { bottom: -4px; inset-inline-end: -10px; }
+.jt-tile .jt-badge.tbd { top: -4px; inset-inline-start: -10px; }
+.jt-pop { position: absolute; z-index: 6; width: min(320px, 100%); box-sizing: border-box; min-height: 0; background: var(--jt-surface); box-shadow: 0 8px 24px rgba(10, 42, 61, .18); }
+.jt-pop:focus { outline: none; }
+.jt-pop:focus-visible { outline: 2px solid var(--jt-gold); outline-offset: 2px; }
+.jt-pop-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.jt-open.ghost { border-color: var(--jt-line); color: var(--jt-ink); }
+.jt-popmode .jt-foot { grid-template-columns: 1fr; }
+/* الهاتف: التفاصيل درج سفلي بعرض الشاشة */
+@media (max-width: 640px) {
+  .jt-pop { position: fixed; inset: auto 0 0 0 !important; top: auto !important; width: 100%; max-height: 70vh; overflow-y: auto; border-radius: 14px 14px 0 0; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) { .jt-scrollbox::before, .jt-scrollbox::after { transition: none; } }
+@media print { .jt-nudge, .jt-scrollbox::before, .jt-scrollbox::after { display: none; } }
