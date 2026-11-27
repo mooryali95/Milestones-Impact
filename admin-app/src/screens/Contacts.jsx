@@ -9,7 +9,7 @@ import ExportButton from '../ExportButton.jsx';
 import FilterBar, { FilterCards, SortTh, useFilters } from '../FilterBar.jsx';
 import { awaitingDays, cardCounts, CONTACT_CARDS, CONTACT_FIELDS, CONTACT_KEYS, filterContacts, INTEREST_AR, interestShort, isLate, mailto, PAGE_SIZE, pageList, SOURCE_AR, sourceTone, STATUS_AR } from '../contacts.js';
 import { Icon } from '../icons.jsx';
-import { Empty, LoadError, NoMatch, SkeletonRows, useCopy, useEscape, useUI } from '../ui.jsx';
+import { Empty, LoadError, NoMatch, SkeletonRows, useCopy, useEscape, useUI, useWide } from '../ui.jsx';
 import { announceContacts } from '../pending.js';
 
 // يبقى الطلب مفتوحًا هذه المدة قبل أن يُعلَّم مقروءًا: المرور بالأسهم لا يعلّم شيئًا ولا يرسل طلبًا لكل صف
@@ -118,19 +118,6 @@ function Pane({ r, onClose, onStatus }) {
   );
 }
 
-const WIDE = '(min-width: 1100px)';
-function useWide() {
-  const mq = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE) : null);
-  const [wide, setWide] = useState(() => !!mq()?.matches);
-  useEffect(() => {
-    const m = mq();
-    if (!m) return undefined;
-    const on = () => setWide(m.matches);
-    m.addEventListener?.('change', on);
-    return () => m.removeEventListener?.('change', on);
-  }, []);
-  return wide;
-}
 // أعمدة التصدير (الزر الموحد). البريد والجوال والرسالة حساسة: لا تُختار افتراضيًا، ويُنبَّه عند اختيارها
 export const CONTACT_COLS = [
   { key: 'name', label: 'الاسم', width: 24, get: (r) => r.name }, { key: 'org', label: 'الجهة', width: 24, get: (r) => r.organization },

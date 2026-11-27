@@ -116,7 +116,9 @@ test('أعمدة المشاركين: الدائمة ظاهرة، والاختي�
   await setup(page, { hash: '#/leaders/participants' });
   await expect(table(page).locator('tbody tr')).toHaveCount(4);
   let heads = await visibleHeads(page);
-  for (const h of ['الاسم', 'الحالة', 'أين توقف', 'بانتظار', 'الجهة', 'المسار']) expect(heads, h).toContain(h);
+  for (const h of ['الاسم', 'الحالة', 'التقدم', 'الجهة', 'المسار']) expect(heads, h).toContain(h);
+  // لا أحد في هذه البيانات ينتظر شيئًا: عمود «بانتظار» يُخفى (المرحلة 9)
+  expect(heads).not.toContain('بانتظار');
   expect(heads).not.toContain('التسجيل');
   expect(heads.some((h) => /المنهجية|الأثر|القيادة/.test(h))).toBe(false);
   await page.getByRole('button', { name: /^الأعمدة/ }).click();

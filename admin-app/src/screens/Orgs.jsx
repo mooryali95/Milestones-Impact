@@ -13,6 +13,7 @@ import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { Empty, NoMatch, Spinner, StatusChip, useCopy, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
+import { trackName } from '../../../supabase/functions/leaders-api/labels.js';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
 import OrgTeam from './OrgTeam.jsx';
 import OrgJourney from './OrgJourney.jsx';
@@ -291,11 +292,13 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   useEffect(() => { setJourney(null); if (id !== 'none') L('admin.org-journey', { organization_id: id }).then(setJourney); }, [id]);
 
   const all = d?.participants || [];
+  // اسم المسار بدالة trackName المشتركة (المرحلة 9)، بأسماء المسارات التي يرسلها الخادم مع كل عضو
+  const tt = useMemo(() => Object.fromEntries(all.filter((p) => p.track && p.track_title).map((p) => [p.track, p.track_title])), [all]);
   const memberFields = useMemo(() => [
     { key: 'status', label: 'الحالات', aria: 'الحالة', get: (p) => p.status, options: Object.entries(STATUS) },
-    { key: 'track', label: 'المسارات', aria: 'المسار', get: (p) => p.track, options: [...new Set(all.map((p) => p.track).filter(Boolean))].sort().map((k) => [k, k]) },
-  ], [all]);
-  const rows = useMemo(() => sortRows(applyFilters(all, { fields: memberFields, text: (p) => [p.full_name, p.email, p.job_title].join(' ') }, f), MEMBER_SORTS, f.sort), [all, f, memberFields]);
+    { key: 'track', label: 'المسارات', aria: 'المسار', get: (p) => p.track, options: [...new Set(all.map((p) => p.track).filter(Boolean))].sort().map((k) => [k, trackName(k, tt)]) },
+  ], [all, tt]);
+  const rows = useMemo(() => sortRows(applyFilters(all, { fields: memberFields, text: (p) => [p.full_name, p.email, p.job_title, p.track, trackName(p.track, tt)].join(' ') }, f), MEMBER_SORTS, f.sort), [all, f, memberFields, tt]);
 
   if (!d) return <div className="la-load"><Spinner /></div>;
   if (!d.success) return <><button className="la-link" onClick={onBack}>→ كل الجهات</button><div className="la-err">{d.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></>;
@@ -307,10 +310,10 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   const allOn = rows.length > 0 && rows.every((p) => picked.has(p.id));
 
   const memberCols = [
-    { key: 'name', label: 'الاسم', width: 26, get: (p) => p.full_name }, { key: 'email', label: 'البريد', width: 30, get: (p) => p.email },
-    { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.phone }, { key: 'title', label: 'المسمى', width: 22, get: (p) => p.job_title },
-    { key: 'status', label: 'الحالة', width: 18, get: (p) => STATUS[p.status] || p.status }, { key: 'track', label: 'المسار', width: 10, get: (p) => p.track },
-    { key: 'track_title', label: 'اسم المسار', width: 28, get: (p) => p.track_title }, { key: 'approved', label: 'معتمد', width: 8, get: (p) => (p.approved ? 'نعم' : 'لا') },
+    { key: 'name', label: 'الاسم', width: 26, get: (p) => p.full_name }, { key: 'email', label: 'البريد', width: 30, get: (p) => p.email, sensitive: true },
+    { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.phone, sensitive: true }, { key: 'title', label: 'المسمى', width: 22, get: (p) => p.job_title },
+    { key: 'status', label: 'الحالة', width: 18, get: (p) => STATUS[p.status] || p.status }, { key: 'track_title', label: 'المسار', width: 28, get: (p) => trackName(p.track, tt) },
+    { key: 'track', label: 'رمز المسار', width: 10, get: (p) => p.track }, { key: 'approved', label: 'معتمد', width: 8, get: (p) => (p.approved ? 'نعم' : 'لا') },
     { key: 'seen', label: 'آخر دخول', width: 16, get: (p) => date(p.last_login_at) }, { key: 'joined', label: 'التسجيل', width: 16, get: (p) => date(p.created_at) },
     { key: 'via', label: 'طريقة الانتساب', width: 16, get: (p) => VIA[p.org_via || 'none'] }, { key: 'campaign', label: 'الحملة', width: 14, get: (p) => p.campaign },
     { key: 'referrer', label: 'الموقع المُحيل', width: 22, get: (p) => p.referrer_host },
@@ -410,7 +413,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
               {canWrite && <td><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => setPicked((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} /></td>}
               <td><button className="la-link" onClick={() => onPerson(p.id)}><b>{p.full_name}</b></button><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
               <td>{p.job_title}</td>
-              <td>{p.track ? <><code className="la-code">{p.track}</code> {!p.approved && <small className="la-muted">مبدئي</small>}</> : <span className="la-muted">·</span>}</td>
+              <td>{p.track ? <><span className="pt-track" title={p.track}>{trackName(p.track, tt)}<span className="sr-only"> ({p.track})</span></span> {!p.approved && <small className="la-muted">مبدئي</small>}</> : <span className="la-muted">·</span>}</td>
               <td><StatusChip status={p.status} /></td>
               <td>{date(p.last_login_at)}</td>
               <td>{date(p.created_at)}{p.org_via && <><br /><small className="la-muted">{VIA[p.org_via]}{p.campaign && <> · <span dir="ltr">{p.campaign}</span></>}</small></>}</td>

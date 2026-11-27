@@ -256,3 +256,18 @@ export function DocLevelMeter({ level }) {
   if (!l) return null;
   return <span className="la-chip">مستوى الوثيقة: {l.title} <Meter value={l.step} max={LEVELS.length} label="مستوى الوثيقة" /></span>;
 }
+
+// الشاشة العريضة (مشتركة: التواصل، وكثافة المشاركين في المرحلة 9)
+export const WIDE = '(min-width: 1100px)';
+export function useWide(query = WIDE) {
+  const mq = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query) : null);
+  const [wide, setWide] = useState(() => !!mq()?.matches);
+  useEffect(() => {
+    const m = mq();
+    if (!m) return undefined;
+    const on = () => setWide(m.matches);
+    m.addEventListener?.('change', on);
+    return () => m.removeEventListener?.('change', on);
+  }, [query]); // eslint-disable-line
+  return wide;
+}

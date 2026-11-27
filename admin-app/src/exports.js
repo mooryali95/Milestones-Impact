@@ -33,7 +33,8 @@ export function chosenColumns(columns, keys) {
 }
 /** الأعمدة الحساسة بين المختارة (للتنبيه في نافذة التصدير) */
 export const sensitivePicked = (columns, keys) => columns.filter((c) => c.sensitive && keys.includes(c.key));
-const colsKey = (scope) => `mi_admin_cols_${scope}`;
+// v2: الاختيارات المحفوظة قبل وسم البريد والجوال حساسين تُهمل، فيسري الافتراض الخاص
+const colsKey = (scope) => `mi_admin_cols_v2_${scope}`;
 export function loadColumns(scope) {
   try { const v = JSON.parse(localStorage.getItem(colsKey(scope))); return Array.isArray(v) ? v : null; } catch { return null; }
 }

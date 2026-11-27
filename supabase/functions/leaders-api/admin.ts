@@ -396,7 +396,8 @@ export async function participants(b: Body) {
     if (s) q = q.or(`full_name.ilike.%${s}%,email.ilike.%${s}%,organization_name.ilike.%${s}%${phone ? `,phone.ilike.%${phone}%` : ''}`);
   }
   const rows = (must(await q) ?? []) as any[];
-  const [progress, active] = await Promise.all([baselineProgress(rows.map((r) => r.id)), lastActiveFor(rows)]);
+  // أسماء المسارات المعروضة (displayTitles، المصدر نفسه الذي تقرؤه لوحة الجهة) لتسمية المسار في القائمة بدل رمزه (المرحلة 9)؛ تعذّرها لا يُسقط القائمة
+  const [progress, active, shownTitles] = await Promise.all([baselineProgress(rows.map((r) => r.id)), lastActiveFor(rows), displayTitles().catch(() => ({} as Record<string, { ar: string | null }>))]);
   // دفعة كل مشارك بالقاعدة نفسها التي تحكم رحلته (pickCohort): تسجيله الصريح، ثم دفعة جهته، ثم الافتراضية. لفلتر «الدفعات» في القائمة
   const [cohorts, enr] = await Promise.all([
     db.from('cohorts').select('id, name, status, is_default, organization_id, starts_on, created_at').then((r) => (r.data || []) as any[]),
@@ -419,7 +420,7 @@ export async function participants(b: Body) {
   return { success: true, participants: rows.map((r) => {
     const g = progress[r.id] || null;
     return { ...r, last_active_at: active[r.id] ?? r.last_login_at ?? null, cohort_id: cohortId(r), waiting: waitingOf(r), onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
-  }), cohorts: cohorts.map((c) => ({ id: c.id, name: c.name })), ...capInfo(rows) };
+  }), cohorts: cohorts.map((c) => ({ id: c.id, name: c.name })), track_titles: Object.fromEntries(Object.entries(shownTitles).filter(([, v]) => v?.ar).map(([k, v]) => [k, v.ar])), ...capInfo(rows) };
 }
 
 // آخر نشاط فعلي لكل مشارك (last-active.js): الأحدث من آخر دخول ومن آخر استعمال لجلساته (auth_sessions.last_seen_at).
