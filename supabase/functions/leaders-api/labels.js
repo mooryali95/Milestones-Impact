@@ -84,14 +84,12 @@ export const STAGE_COMPLETE_AR = { required: 'بإنجاز أنشطتها الإ
 export const STAGE_STATUS_AR = { done: 'مكتملة', active: 'الحالية', available: 'متاحة عند الحاجة', locked: 'مقفلة' };
 // تدخل الأدمن لمشارك بعينه في مرحلة: يفتحها أو يعتمد اكتمالها أو يعفيه منها
 // الخط الزمني «الرحلة في لمحة» (J1b): نوع كل نشاط بكلمة، ومن يكمله، وحال المرحلة في الدفعة
+// أسماء أنواع النشاط، مصدر واحد للإدارة والمشارك وقوالب النشاط (4.1 البند 11): لا يتشارك نوعان اسمًا
 export const ACTIVITY_KIND_AR = Object.freeze({
-  workshop: 'تدريب', check: 'تدريب', meeting: 'لقاء', reading: 'قراءة واختبار', video: 'مقطع مرئي', coaching: 'توجيه فردي',
+  workshop: 'جلسة جماعية', check: 'تدريب', meeting: 'لقاء', reading: 'قراءة واختبار', video: 'مقطع مرئي', coaching: 'توجيه فردي',
   curriculum: 'منهج المسار', upload: 'رفع ملف', form: 'نموذج', model: 'نموذج تطبيقي', capstone: 'وثيقة المبادرة',
   survey: 'استبانة', lab: 'أداة من المختبر', auto: 'آلي',
 });
-// أسماء أنواع النشاط في واجهة الإدارة وحدها (4.1 البند 11): لكل نوع اسم لا يشاركه فيه غيره.
-// الخط الزمني الذي يراه المشارك يقرأ ACTIVITY_KIND_AR أعلاه فلا يتغير (4.1 البند 3)
-export const ACTIVITY_KIND_ADMIN_AR = Object.freeze({ ...ACTIVITY_KIND_AR, workshop: 'جلسة جماعية', auto: AUTO_DONE_AR });
 export const ACTIVITY_OWNER_AR = Object.freeze({
   participant: 'يكمله المشارك', admin: 'يكمله الأدمن بتسجيل الحضور', expert: 'يسجله المستشار', coach: 'يحجزه المشارك ويؤكده الخبير', system: 'يكتمل آليًا',
 });

@@ -51,10 +51,11 @@ describe('المصطلحات من مصدر واحد (labels.js)', () => {
   it('نوع المرحلة: أساسية وعند الطلب وإضافية، بالقيم المخزنة نفسها', () => {
     expect(labels.STAGE_MODE_AR).toEqual({ required: 'أساسية', on_demand: 'عند الطلب', optional: 'إضافية' });
   });
-  it('ACTIVITY_KIND_ADMIN_AR: لا يتشارك نوعان اسمًا، و«يكتمل تلقائيًا» للآلي وللاكتمال الآلي', () => {
-    const v = Object.values(labels.ACTIVITY_KIND_ADMIN_AR);
+  it('ACTIVITY_KIND_AR مصدر واحد: لا يتشارك نوعان اسمًا، ولا خريطة ثانية للإدارة', () => {
+    const v = Object.values(labels.ACTIVITY_KIND_AR);
     expect(new Set(v).size).toBe(v.length);
-    expect(labels.ACTIVITY_KIND_ADMIN_AR.auto).toBe(labels.AUTO_DONE_AR);
+    expect(labels.ACTIVITY_KIND_ADMIN_AR).toBeUndefined();
+    expect(labels.ACTIVITY_KIND_AR.workshop).toBe('جلسة جماعية');
     expect(labels.COMPLETION_AR.auto).toBe('يكتمل تلقائيًا');
     expect(labels.PARALLEL_SERVICE_AR).toBe('خدمة موازية');
   });
@@ -119,6 +120,12 @@ describe('العرض الواحد', () => {
     expect(host.querySelector('.j-board').textContent).not.toContain('لقاء استشاري');
     const key = host.querySelector('.j-key');
     for (const w of ['إلزامي', 'اختياري', 'يكتمل تلقائيًا', 'يحتاج مراجعة']) expect(key.textContent).toContain(w);
+    for (const kind of Object.keys(labels.ACTIVITY_KIND_AR)) {
+      const dd = key.querySelector(`.j-key-kind[data-kind="${kind}"]`);
+      expect(dd.querySelector('svg.ico-svg')).toBeTruthy();
+      expect(dd.textContent).toBe(labels.ACTIVITY_KIND_AR[kind]);
+    }
+    expect(host.querySelector('#jreq-r2 [data-kind="reading"] svg.ico-svg')).toBeTruthy();
     const bars = [...host.querySelectorAll('.j-strip-bar')];
     expect(bars.map((b) => b.textContent)).toEqual(['الملف الشخصي', 'التدريب', 'الدعم']);
     expect(host.querySelector('.j-strip').textContent).not.toContain('أكمل ملفك');
@@ -175,15 +182,12 @@ describe('طي المعالم المطابقة', () => {
 });
 
 describe('ملاحظات المراجعة على المرحلة 21', () => {
-  it('الخط الزمني للمشارك لا يتغير: ACTIVITY_KIND_AR بقيمه السابقة، والمصطلح الجديد في ACTIVITY_KIND_ADMIN_AR وحده', async () => {
+  it('الخط الزمني للمشارك يقرأ ACTIVITY_KIND_AR نفسه بعد إصلاحه', async () => {
     const { journeyTimeline } = await import('../../supabase/functions/leaders-api/journey-timeline.js');
-    expect(labels.ACTIVITY_KIND_AR.workshop).toBe('تدريب');
+    expect(labels.ACTIVITY_KIND_AR.check).toBe('تدريب');
     expect(labels.ACTIVITY_KIND_AR.auto).toBe('آلي');
-    expect(labels.ACTIVITY_KIND_ADMIN_AR.workshop).toBe('جلسة جماعية');
-    expect(labels.ACTIVITY_KIND_ADMIN_AR.auto).toBe(labels.AUTO_DONE_AR);
     const tl = JSON.stringify(journeyTimeline({ stages, requirements: [...reqs, { id: 'r5', code: 'T-WS', stage_key: 'training', kind: 'workshop', required: true, title_ar: 'ورشة', sort: 3, active: true }] }, { title: 'رحلتك' }));
-    expect(tl).not.toContain('جلسة جماعية');
-    expect(tl).not.toContain('يكتمل تلقائيًا');
+    expect(tl).toContain('جلسة جماعية');
   });
   it('مرحلة lane=track تظهر عمودًا في الشريط القصير بشارتها، وتنقل إلى بطاقتها، وارتفاع العمود 24px على الأقل', async () => {
     const withTrack = [...stages, { key: 'ojt', title_ar: 'التطبيق المستمر', phase: 'qualification', sort: 5, duration_days: 30, active: true, rules: { lane: 'track', unlock: 'with', with: 'training', until: 'journey_end' } }];

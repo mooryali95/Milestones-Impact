@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { ASSESSMENT_MISSING_AR, completionSource, journeyCoherence, journeyCtx, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { ACTIVITY_AR, ACTIVITY_KIND_ADMIN_AR, COMPLETION_AR, JOURNEY_KEY_AR, PARALLEL_SERVICE_AR, PARALLEL_SERVICE_NOTE_AR, TRACK_ONLY_AR, JOURNEY_ISSUE_AR, JOURNEY_ISSUE_TONE, JOURNEY_SAFE_AR, journeyIssuesAr, PROGRAM_VERSION_STATE, PROGRAM_VERSION_STATE_TONE } from '../../../supabase/functions/leaders-api/labels.js';
+import { ACTIVITY_AR, ACTIVITY_KIND_AR, COMPLETION_AR, JOURNEY_KEY_AR, PARALLEL_SERVICE_AR, PARALLEL_SERVICE_NOTE_AR, TRACK_ONLY_AR, JOURNEY_ISSUE_AR, JOURNEY_ISSUE_TONE, JOURNEY_SAFE_AR, journeyIssuesAr, PROGRAM_VERSION_STATE, PROGRAM_VERSION_STATE_TONE } from '../../../supabase/functions/leaders-api/labels.js';
 import {
   CELL_FIELDS, foldMilestones, INST_FIELDS, journeyBoard, NO_AXIS_NOTE_AR, LVLS, lockReqCode, MODE, MODEL_DEFAULT, QUESTIONS_LOCK_AR, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
@@ -21,6 +21,8 @@ import { versionState } from '../program-state.js';
 import { keepSpot, saveQueue, takeSpot } from '../review-queue.js';
 import { readQuery, writeQuery } from '../route.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
+// أيقونات أنواع النشاط من مجموعة تطبيق leaders نفسها: shared/ui/Ico.jsx
+import Ico, { ACTIVITY_KIND_ICO } from '../../../shared/ui/Ico.jsx';
 import { journeyAudience, journeyAudienceAr } from '../program-reach.js';
 import { journeyTimeline } from '../../../supabase/functions/leaders-api/journey-timeline.js';
 
@@ -158,6 +160,9 @@ export function JourneyKey() {
       <dd><span className="j-key-mark opt" aria-hidden="true" />{k.optional}</dd>
       <dd><span className="la-chip j-auto">{k.auto}</span></dd>
       <dd><span className="la-chip warn">{k.review}</span></dd>
+      {Object.entries(ACTIVITY_KIND_ICO).map(([kind, ico]) => (
+        <dd key={kind} className="j-key-kind" data-kind={kind}><Ico name={ico} />{ACTIVITY_KIND_AR[kind]}</dd>
+      ))}
     </dl>
   );
 }
@@ -276,7 +281,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
           <KeyRow key={r.id} rowId={r.id} id={`jreq-${r.id}`} title={r.code} className={`${r.required ? 'req-must' : 'req-opt'}${r.active ? '' : ' off'}`}>{(rkeys) => (<>
             <span className="j-act">
               <span className="j-act-name">{shown(r.title_ar)}</span>{' '}
-              <small className="la-chip">{ACTIVITY_KIND_ADMIN_AR[r.kind] || r.kind}</small>{' '}
+              <small className="la-chip" data-kind={r.kind}>{ACTIVITY_KIND_ICO[r.kind] && <Ico name={ACTIVITY_KIND_ICO[r.kind]} />}{ACTIVITY_KIND_AR[r.kind] || r.kind}</small>{' '}
               <small className="la-chip j-word">{r.required ? JOURNEY_KEY_AR.required : JOURNEY_KEY_AR.optional}</small>{' '}
               <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : completionSource(r) === 'auto' ? 'j-auto' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
               {r.dimension && <> <small className="la-chip">{DIM[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small></>}

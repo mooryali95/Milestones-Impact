@@ -29,3 +29,8 @@ export default function Ico({ name, size = '1.2em' }) {
   );
 }
 export const ICO_NAMES = Object.keys(PATHS);
+// أيقونة كل نوع نشاط من المجموعة نفسها (مفتاح رموز الرحلة في الإدارة، 4.3 البند 4)
+export const ACTIVITY_KIND_ICO = Object.freeze({
+  workshop: 'hall', check: 'clock', meeting: 'people', reading: 'book', video: 'link', coaching: 'compass',
+  curriculum: 'cap', upload: 'inbox', form: 'doc', model: 'target', capstone: 'key', survey: 'hand', lab: 'bulb', auto: 'refresh',
+});
