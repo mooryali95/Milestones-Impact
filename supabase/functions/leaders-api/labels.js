@@ -80,6 +80,18 @@ export const MARK_REASON_MAX = 300;
 // عدد المسارات مشتق: كل تركيبة من مستوى لكل بُعد
 export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
 
+// اسم المسار من رمزه (المرحلة 9 من تصور تطبيق القادة): دالة واحدة للخلية والمرشح والتصدير ولوحة الجهة.
+// titles: أسماء المسارات المعروضة من الخادم (displayTitles) إن وصلت، وإلا اسم مشتق من مستويات الأطر الثلاثة بترتيبها.
+// الرمز لا يُعرض نصًا ظاهرًا بعدها، بل في title وsr-only وعمود ثانٍ في التصدير. رمز غير صالح يعود كما هو.
+export function trackName(code, titles = null) {
+  if (!code) return '';
+  const t = titles?.[code];
+  if (t) return t;
+  const m = /^M([1-9])I([1-9])L([1-9])$/.exec(String(code));
+  const lv = m && [m[1], m[2], m[3]].map((n) => LEVELS[Number(n) - 1]?.title);
+  return lv && lv.every(Boolean) ? lv.join(' · ') : String(code);
+}
+
 // حالات العمل المسلَّم (نموذج تعليمي أو فصل): بصوت المشارك، وما تقوله الإدارة يختلف في المخاطَب فقط
 // «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): التسليم يُحتسب فورًا، والمراجع يقرأ ويكتب ملاحظة أو يطلب تعديلًا.
 // بطاقة المبادرة وحدها بوابة تنتظر الاعتماد (MODEL_GATE_STATUS)

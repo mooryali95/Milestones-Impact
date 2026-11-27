@@ -211,7 +211,7 @@ test('قائمة المشاركين: «أين توقف» للمتعثر قبل �
   const row = rows.filter({ hasText: 'هند السالم' });
   await expect(row).toContainText('القياس جارٍ');
   await expect(row).toContainText('أجاب 42 من 63، وبقي 21');
-  await expect(row.getByRole('progressbar', { name: 'أجاب 42 من 63' })).toBeVisible();
+  await expect(row.getByRole('meter', { name: 'أجاب: 42 من 63' })).toBeVisible();
   // من اعتُمد لا يحمل شارة توقف
   await expect(rows.filter({ hasText: 'Omar Ali' })).not.toContainText('معتمد');
   const chip = page.getByRole('button', { name: /لم يكمل التسجيل/ });

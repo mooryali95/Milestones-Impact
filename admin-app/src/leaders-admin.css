@@ -1689,3 +1689,9 @@ tr.ct-on > td { background: var(--gold-pale); }
 .today-n[aria-current="true"] { border-color: var(--petrol, var(--line-strong)); box-shadow: inset 0 0 0 1px var(--petrol, var(--line-strong)); }
 .today-exc-sk .sk { display: block; flex: 1; block-size: 14px; }
 .today-mx { margin: 0 0 14px; font-size: .9rem; }
+
+/* المرحلة 9: كثافة جدول المشاركين (مضغوط للعريض وحده)، والصف 32 بكسل على الأقل */
+.pt-table.pt-compact td { padding-block: 4px; line-height: 1.3; }
+.pt-table.pt-compact tbody tr { height: 32px; }
+.pt-table .pt-track { white-space: nowrap; }
+.pt-table tbody tr:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: -2px; }
