@@ -112,23 +112,23 @@ test('المسارات: اللوحة وتحرير هوية المسار', async 
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')).toMatchObject({ entity: 'tracks', row: { key: 'M1I1L2', title_ar: 'مسار البداية الجديد' } });
 });
 
-test('الرحلة: متطلب جديد بمربعات الاختيار، وترتيب داخل المرحلة', async ({ page }) => {
+test('الرحلة: نشاط جديد بمربعات الاختيار، وترتيب داخل المرحلة', async ({ page }) => {
   const calls = await setup(page);
   await tab(page, 'الرحلة والمتطلبات');
-  await page.getByRole('button', { name: '+ متطلب' }).first().click();
+  await page.getByRole('button', { name: '+ نشاط' }).first().click();
   await page.getByLabel('الرمز (فريد، مثل T-ATTEND)').fill('T-9');
-  await page.getByLabel('نص المتطلب').fill('رفع التقرير');
+  await page.getByLabel('نص النشاط').fill('رفع التقرير');
   await page.getByLabel('يعتمده المستشار بعد الإنجاز').check();
   await page.getByRole('button', { name: 'حفظ' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ stage_key: 's1', code: 'T-9', needs_review: true, required: true, dimension: null, sort: 3 });
-  await page.getByRole('button', { name: 'انقل المتطلب T-1 لأسفل' }).click();
+  await page.getByRole('button', { name: 'انقل نشاط «خطة التطوير» لأسفل' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
 });
 
 test('المرحلة 18: Alt مع السهم على صف المتطلب ينقله وحده دون مرحلته', async ({ page }) => {
   const calls = await setup(page);
   await tab(page, 'الرحلة والمتطلبات');
-  await page.getByRole('button', { name: 'انقل المتطلب T-1 لأسفل' }).focus();
+  await page.getByRole('button', { name: 'انقل نشاط «خطة التطوير» لأسفل' }).focus();
   await page.keyboard.press('Alt+ArrowDown');
   await expect.poll(() => calls.filter((c) => c.action === 'admin.reorder')).toHaveLength(1);
   expect(calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });

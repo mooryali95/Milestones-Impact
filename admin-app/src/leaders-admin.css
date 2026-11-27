@@ -1770,3 +1770,36 @@ details.how-it-works[open] > summary { margin-bottom: 12px; }
 .j-details > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
 .j-details[open] > summary { margin-bottom: 6px; }
 .j-issues .la-link { text-align: start; }
+
+/* ── محرر الرحلة: العرض الواحد (تصور الرحلة والمسار 2026-11-27، المرحلة 21) ── */
+.j-strip-h { margin: 12px 0 4px; font-size: .8rem; }
+.j-strip { position: relative; min-block-size: 48px; background: var(--sand-light); border-radius: 6px; overflow: hidden; }
+.j-strip-bar { position: absolute; box-sizing: border-box; padding: 0 6px; border: 1px solid #fff; border-radius: 4px; font: inherit; font-size: .7rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; cursor: pointer; color: #fff; background: var(--petrol-mid); }
+.j-strip-bar.ph-admission { background: var(--gold-text); }
+.j-strip-bar.ph-impact { background: var(--st-ok-text); }
+.j-strip-bar.opt { background: var(--sand-paper); color: var(--ink); border: 2px dashed var(--petrol-mid); }
+.j-strip-bar.opt.ph-admission { border-color: var(--gold-text); }
+.j-strip-bar.opt.ph-impact { border-color: var(--st-ok-text); }
+.j-strip-bar:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 1px; z-index: 1; }
+.j-tl-detail { margin: 8px 0; }
+.j-tl-detail > summary { cursor: pointer; font-size: .86rem; min-block-size: 32px; display: flex; align-items: center; }
+.j-key { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin: 10px 0; font-size: .8rem; color: var(--ink-soft); }
+.j-key dd { margin: 0; display: inline-flex; align-items: center; gap: 6px; }
+.j-key-mark { inline-size: 22px; block-size: 14px; border-radius: 3px; background: var(--sand-paper); border: 2px solid var(--line-strong); }
+.j-key-mark.opt { border-style: dashed; }
+.la-chip.j-auto { background: var(--st-info-bg); color: var(--st-info); }
+.j-board { display: grid; gap: 0 16px; }
+.j-axis { min-inline-size: 0; }
+.j-cards { display: grid; gap: 12px; }
+.j-cards > .la-card { margin-bottom: 0; }
+.j-acts li { border-inline-start: 3px solid var(--line-strong); }
+.j-acts li.req-opt { border-inline-start-style: dashed; }
+.j-act { min-inline-size: 0; flex: 1 1 16rem; }
+.j-act-name { white-space: normal; overflow-wrap: anywhere; }
+.j-service { margin-top: 18px; padding: 10px 14px; border: 1px solid var(--line); border-inline-start: 3px solid var(--st-info); border-radius: 8px; background: var(--sand-light); }
+.j-service .la-phase { margin-top: 4px; }
+.j-ms-fold { margin: 6px 0; }
+/* بين 1024 و1280: أقسام متتالية، وبطاقات المراحل عمودان. وفوق 1280: المحاور ثلاثة أعمدة. وتحت 1024 كل شيء متتالٍ */
+@media (min-width: 1024px) and (max-width: 1279px) { .j-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .j-board { grid-template-columns: repeat(3, minmax(0, 1fr)); } .j-service .j-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

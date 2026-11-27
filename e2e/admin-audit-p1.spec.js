@@ -111,6 +111,8 @@ test('جدول المشاركين: أسهم الفرز وخانات التحدي
 
 test('الرحلة والمتطلبات: لمحة الرحلة بمراحل بلا مدد لا تطبع «undefined» ولا «NaN»، والمدة «—»', async ({ page }) => {
   await open(page, '#/leaders/journey');
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   const card = page.locator('.jt').first();
   await expect(card).toBeVisible();
   await expect(page.locator('#screen-dashboard')).not.toContainText('undefined');

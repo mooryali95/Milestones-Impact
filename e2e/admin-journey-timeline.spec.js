@@ -74,6 +74,8 @@ test('البرنامج على الحاسوب: المحاور والمراحل ا
   await setup(page, 1440);
   await tab(page, 'الرحلة والمتطلبات');
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   await expect(tl).toBeVisible();
   // البطاقات: المدة، والتأهيل بأطول مراحله، والمراحل والأنشطة
   await expect(tl.locator('.jt-cards')).toContainText('المراحل8 في 3 محاور');
@@ -115,6 +117,8 @@ test('البرنامج على الهاتف 390: خط رأسي بلا تمرير 
   await setup(page, 390);
   await tab(page, 'الرحلة والمتطلبات');
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   await expect(tl.locator('.jt-desk')).toBeHidden();
   const phone = tl.getByRole('list', { name: 'مراحل الرحلة' });
   await expect(phone).toBeVisible();

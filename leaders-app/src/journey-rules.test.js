@@ -82,7 +82,7 @@ describe('محرك قواعد المراحل', () => {
   });
 
   it('يلخص القاعدة بجملة للأدمن', () => {
-    expect(stageRuleSummary(stages[2], stages)).toBe('عند الحاجة · تُفتح بعد اكتمال: التدريب · تكتمل بمتطلباتها الإلزامية');
-    expect(stageRuleSummary(stages[0], stages)).toBe('إلزامية · تُفتح بعد اكتمال الإلزامية قبلها · تكتمل بمتطلباتها الإلزامية');
+    expect(stageRuleSummary(stages[2], stages)).toBe('عند الطلب · تُفتح بعد اكتمال: التدريب · تكتمل بأنشطتها الإلزامية');
+    expect(stageRuleSummary(stages[0], stages)).toBe('أساسية · تُفتح بعد اكتمال الإلزامية قبلها · تكتمل بأنشطتها الإلزامية');
   });
 });

@@ -78,6 +78,8 @@ test('1280: سطر الحالة في الترويسة، والشريط بحاف�
   await expect(head.locator('details.j-details')).not.toHaveAttribute('open', '');
   await expect(page.getByText('الرحلة متسقة')).toHaveCount(0);
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   const sc = tl.getByRole('group', { name: 'الخط الزمني، يتحرك بالأسهم' });
   await expect(sc).toHaveAttribute('tabindex', '0');
   // المسطرة مختصرة لا تلتف، والكامل في title
@@ -105,6 +107,8 @@ test('375: الهاتف بخطه الرأسي بلا تمرير أفقي، وس�
   await tab(page, 'الرحلة والمتطلبات');
   await expect(page.locator('.screen-head .j-status-line [data-status="no_version"]')).toBeVisible();
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   await expect(tl.getByRole('list', { name: 'مراحل الرحلة' })).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
   await shot(page, 'journey');
@@ -117,6 +121,8 @@ test('375: التفاصيل درج سفلي على الهاتف، وEsc يغلق
   await setup(page, 375);
   await tab(page, 'الرحلة والمتطلبات');
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   await expect(tl.locator('.jt-desk')).toBeHidden();
   const stage = tl.locator('.jt-m-stage', { hasText: 'قراءة الباب الأول' }).first();
   if (!(await stage.locator('details').evaluate((d) => d.open))) await stage.locator('summary').click();
