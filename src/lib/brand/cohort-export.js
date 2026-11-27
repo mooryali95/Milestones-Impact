@@ -87,6 +87,12 @@ export function bookStarts(coverPages, parts) {
   for (const p of parts) { starts[p.id] = at; at += p.pages; }
   return starts;
 }
+/** يولد الغلاف بتقدير لعدد صفحاته (make(est) يعيد { pages, coverPages }) ويعيد حتى يثبت، فلا تنزاح أرقام الفهرس */
+export async function settleCover(make, max = 4) {
+  let c = await make(1);
+  for (let i = 1; i < max && c.pages !== c.coverPages; i++) c = await make(c.pages);
+  return c;
+}
 export async function pageCount(bytes) {
   const { PDFDocument } = await import('pdf-lib');
   return (await PDFDocument.load(bytes, { ignoreEncryption: true })).getPageCount();

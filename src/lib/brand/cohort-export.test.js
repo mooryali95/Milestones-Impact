@@ -217,3 +217,20 @@ describe('التخزين المؤقت ببصمة الوثيقة (الاستئن�
     expect((await cachedPart('k', async () => ({ bytes: new Uint8Array([2]), via: 'server' }), null)).via).toBe('server');
   });
 });
+
+import { settleCover } from './cohort-export.js';
+describe('ثبات أرقام الفهرس (مراجعة المرحلة 3)', () => {
+  it('يعيد توليد الغلاف حتى يطابق عدد صفحاته التقدير الذي بُنيت عليه أرقامه', async () => {
+    // الغلاف بتقدير 1 يخرج 2، وبتقدير 2 يخرج 3 (الأرقام الأطول تدفع سطرًا)، وبتقدير 3 يثبت على 3
+    const real = { 1: 2, 2: 3, 3: 3 };
+    const make = vi.fn(async (est) => ({ pages: real[est], coverPages: est }));
+    const c = await settleCover(make);
+    expect(c.coverPages).toBe(3);
+    expect(c.pages).toBe(3);
+  });
+  it('لا يدور بلا حد إن تذبذب العدد', async () => {
+    const make = vi.fn(async (est) => ({ pages: est === 1 ? 2 : 1, coverPages: est }));
+    await settleCover(make, 4);
+    expect(make.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+});

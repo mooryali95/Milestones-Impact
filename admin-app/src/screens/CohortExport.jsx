@@ -49,8 +49,7 @@ async function buildVolume({ cohort, rows, volume, signal, onProgress }) {
     const pdf = await B.renderPart(draft.meta, draft.body, server);
     return { draft, pdf, pages: await B.pageCount(pdf.bytes), coverPages };
   };
-  let cover = await coverOf(1);
-  if (cover.pages !== cover.coverPages) cover = await coverOf(cover.pages);
+  const cover = await B.settleCover(coverOf);
   const draft = cover.draft;
   const label = (r) => [r.full_name, r.initiative].filter(Boolean).join(': ');
   const byId = Object.fromEntries(rows.map((r) => [r.participant_id, r]));
