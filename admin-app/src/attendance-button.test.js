@@ -12,9 +12,10 @@ describe('زر الحضور (المرحلة 12)', () => {
   it('بلا متوقع في الرد (خادم أقدم أو تعذّر) يبقى العدد وحده', () => {
     expect(attendanceButton({ ...past, expected: undefined, attended: 0 }, { canWrite: true, now: NOW }).label).toBe('سجّل الحضور (0)');
   });
-  it('يُعطل لغير المؤرخة وحدها بسبب ظاهر، والمستقبلية تفتح لعرض المتوقعين', () => {
+  it('يُعطل لغير المؤرخة وللمستقبلية بسبب ظاهر، ويفتح إن سُجل حضور', () => {
     const future = { starts_at: '2026-11-25T06:00:00Z', ends_at: '2026-11-25T12:00:00Z', attended: 0, expected: 4 };
-    expect(attendanceButton(future, { canWrite: true, now: NOW })).toEqual({ label: 'سجّل الحضور (0 من 4)', disabled: false, reason: null });
+    expect(attendanceButton(future, { canWrite: true, now: NOW })).toEqual({ label: 'سجّل الحضور (0 من 4)', disabled: true, reason: 'يُفتح عند بدء الجلسة' });
+    expect(attendanceButton({ ...future, attended: 1 }, { canWrite: true, now: NOW }).disabled).toBe(false);
     expect(attendanceButton({ attended: 0 }, { canWrite: true, now: NOW }).reason).toBe('يُفتح بعد تحديد الموعد');
     expect(attendanceButton({ attended: 2 }, { canWrite: true, now: NOW }).disabled).toBe(false);
   });

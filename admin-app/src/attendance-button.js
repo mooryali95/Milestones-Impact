@@ -1,5 +1,5 @@
 // زر الحضور في «الحضور والجلسات» (المرحلة 12): يقول ما يفتح. «سجّل الحضور (الحاضر من المتوقع)» لمن يكتب و«عرض الحضور» لمن يقرأ،
-// ويُعطل للجلسة بلا موعد وحدها ما لم يكن فيها حضور مسجل؛ الجلسة المستقبلية تفتح الورقة لعرض المتوقعين (والحضور المبكر). expected من admin.activities حين يحمله الرد
+// ويُعطل بسبب ظاهر للجلسة بلا موعد وللجلسة التي لم تبدأ (التصور المعتمد)، ما لم يكن فيها حضور مسجل. expected من admin.activities حين يحمله الرد
 import { isUndated } from '../../supabase/functions/leaders-api/logic.js';
 
 export function attendanceButton(s, { canWrite, now = Date.now() } = {}) {
@@ -8,7 +8,8 @@ export function attendanceButton(s, { canWrite, now = Date.now() } = {}) {
   const count = expected == null ? `(${attended})` : `(${attended} من ${expected})`;
   const label = `${canWrite ? 'سجّل الحضور' : 'عرض الحضور'} ${count}`;
   const undated = isUndated(s);
-  void now;
-  if (undated && attended === 0) return { label, disabled: true, reason: 'يُفتح بعد تحديد الموعد' };
+  if (attended === 0 && undated) return { label, disabled: true, reason: 'يُفتح بعد تحديد الموعد' };
+  const starts = Date.parse(s?.starts_at);
+  if (attended === 0 && Number.isFinite(starts) && starts > now) return { label, disabled: true, reason: 'يُفتح عند بدء الجلسة' };
   return { label, disabled: false, reason: null };
 }
