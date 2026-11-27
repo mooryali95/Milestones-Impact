@@ -1803,3 +1803,31 @@ details.how-it-works[open] > summary { margin-bottom: 12px; }
 /* بين 1024 و1280: أقسام متتالية، وبطاقات المراحل عمودان. وفوق 1280: المحاور ثلاثة أعمدة. وتحت 1024 كل شيء متتالٍ */
 @media (min-width: 1024px) and (max-width: 1279px) { .j-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1280px) { .j-board { grid-template-columns: repeat(3, minmax(0, 1fr)); } .j-service .j-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* ══ وضع البناء في الرحلة (المرحلة 22، 4.3 و4.9) ══ */
+/* مفتاح «عرض» و«بناء»: radiogroup بهدف 44px */
+.j-mode { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; }
+.j-mode button { min-block-size: 44px; min-inline-size: 64px; padding: 0 14px; border: 0; background: none; font: inherit; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+.j-mode button.on { background: var(--petrol-mid); color: #fff; }
+.j-mode button:focus-visible { outline: 3px solid var(--brand-gold); outline-offset: -3px; }
+/* «⋯» في وضع البناء: هدف 44px دائمًا. على الشاشات العريضة بمؤشر يظهر بالمرور أو التركيز، وتحت 1024 أو باللمس ظاهر دائمًا */
+.j-build .j-acts-menu .pf-more > .pf-more-btn { min-inline-size: 44px; inline-size: 44px; block-size: 44px; min-block-size: 44px; }
+@media (hover: hover) and (min-width: 1024px) {
+  .j-build .la-stage-ed > .la-row .j-acts-menu, .j-build .j-acts li .j-acts-menu { opacity: 0; transition: opacity .12s; }
+  .j-build .la-stage-ed:hover > .la-row .j-acts-menu, .j-build .la-stage-ed:focus-within > .la-row .j-acts-menu,
+  .j-build .j-acts li:hover .j-acts-menu, .j-build .j-acts li:focus-within .j-acts-menu, .j-build .j-acts-menu:has([aria-expanded="true"]) { opacity: 1; }
+}
+.j-build .j-open, .j-build .j-act-name { min-block-size: 44px; text-align: start; font: inherit; font-weight: inherit; }
+.j-build .j-add { min-block-size: 44px; margin-block-start: 6px; }
+.j-acts li .j-acts-menu { flex-shrink: 0; }
+/* اللوحة الجانبية: 480px على جهة نهاية السطر (اليسار في RTL)، ودرج سفلي على الهاتف */
+.mid-ov.j-panel-ov { background: rgba(6, 19, 24, .18); backdrop-filter: none; justify-content: flex-end; align-items: stretch; padding: 0; }
+.mi-form.j-panel { inline-size: min(480px, 100%); max-block-size: 100vh; block-size: 100vh; max-block-size: 100dvh; block-size: 100dvh; border-radius: 0; margin-inline-start: auto; overflow-y: auto; }
+.mi-form.j-panel h3 { position: sticky; top: 0; background: inherit; z-index: 1; padding-block: 4px; }
+.j-panel .la-form-group { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 12px; margin: 10px 0; display: grid; gap: 10px; min-inline-size: 0; }
+.j-panel .la-form-group > legend, .j-panel details.la-form-group > summary { font-weight: 700; padding: 0 4px; cursor: pointer; min-block-size: 44px; display: flex; align-items: center; }
+.j-panel .la-choice-opts { display: grid; gap: 6px; }
+@media (max-width: 640px) {
+  .mid-ov.j-panel-ov { align-items: flex-end; }
+  .mi-form.j-panel { inline-size: 100%; block-size: auto; max-block-size: 85vh; max-block-size: 85dvh; border-radius: 16px 16px 0 0; margin: 0; }
+}

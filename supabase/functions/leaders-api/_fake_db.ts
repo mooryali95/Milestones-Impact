@@ -21,11 +21,24 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
     const filters: ((r: Row) => boolean)[] = [];
     const orders: [string, boolean][] = [];
     let single = false, head = false, limit = Infinity, cols = '*', returning = false;
-    let op: { kind: 'select' | 'insert' | 'update' | 'upsert' | 'delete'; value?: any } = { kind: 'select' };
+    let op: { kind: 'select' | 'insert' | 'update' | 'upsert' | 'delete'; value?: any; on?: string; skip?: boolean } = { kind: 'select' };
     const run = () => {
       const rows = tables[table] || (tables[table] = []);
       const err = opts.fail?.(table, { kind: op.kind, cols, value: op.value });
       if (err) return { data: null, error: err, count: null };
+      // upsert بـonConflict: الصف الموجود بالمفتاح نفسه يُحدَّث في مكانه كما في PostgreSQL (ويُترك مع ignoreDuplicates)، وما لا يطابق يُدرج
+      if (op.kind === 'upsert' && op.on) {
+        writes.push({ table, kind: 'upsert', value: op.value });
+        const on = op.on.split(',').map((c) => c.trim());
+        const out = (Array.isArray(op.value) ? op.value : [op.value]).map((v: Row) => {
+          const hit = rows.find((r) => on.every((c) => String(r[c]) === String(v[c])));
+          if (hit) { if (!op.skip) Object.assign(hit, structuredClone(v)); return hit; }
+          const added = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...structuredClone(v) };
+          rows.push(added);
+          return added;
+        });
+        return { data: single ? out[0] : out, error: null };
+      }
       if (op.kind === 'insert' || op.kind === 'upsert') {
         writes.push({ table, kind: op.kind, value: op.value });
         const added = (Array.isArray(op.value) ? op.value : [op.value]).map((v: Row) => ({ id: crypto.randomUUID(), created_at: new Date().toISOString(), ...structuredClone(v) }));
@@ -77,7 +90,7 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       order: (c: string, o?: { ascending?: boolean }) => { orders.push([c, o?.ascending !== false]); return q; },
       limit: (n: number) => { limit = n; return q; }, range: () => q,
       insert: (v: any) => { op = { kind: 'insert', value: v }; return q; },
-      upsert: (v: any) => { op = { kind: 'upsert', value: v }; return q; },
+      upsert: (v: any, o?: { onConflict?: string; ignoreDuplicates?: boolean }) => { op = { kind: 'upsert', value: v, on: o?.onConflict, skip: !!o?.ignoreDuplicates }; return q; },
       update: (v: any) => { op = { kind: 'update', value: v }; return q; },
       delete: () => { op = { kind: 'delete' }; return q; },
       eq: (c: string, v: unknown) => { filters.push((r) => (get(r, c) ?? null) === v); return q; },

@@ -40,6 +40,7 @@ async function setup(page) {
         { kind: 'model', kind_ar: 'نموذج للقراءة', id: 'm1', title: 'خالد العتيبي', sub: 'سجل المخاطر', at: '2026-11-12', days: 1, late: false, to: { tab: 'participants', id: 'p2' } }] },
       'admin.track': { success: true, track: { key: 'M1I1L2', title_ar: 'مسار البداية', summary_ar: 'لمن يبدأ', focus_ar: '1. المعالم\n2. الأثر' }, participants: [{ id: 'p1', full_name: 'سارة الأحمد', email: 's@x.com', status: 'enrolled', approved: true }], handbook: [{ id: 'h1', dimension: 'milestone', title: 'باب', md: '## عنوان\n- بند **مهم**\n@chain سلسلة' }], levels: { milestone: 'beginner', impact: 'beginner', leadership: 'intermediate' } },
       'admin.save': { success: true }, 'admin.reorder': { success: true }, 'admin.delete': { success: true },
+      'admin.requirement-move': { success: true, from: 's1', to: 's1', position: 2, stage_title: 'التهيئة', rows: [] },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
@@ -112,26 +113,35 @@ test('المسارات: اللوحة وتحرير هوية المسار', async 
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')).toMatchObject({ entity: 'tracks', row: { key: 'M1I1L2', title_ar: 'مسار البداية الجديد' } });
 });
 
-test('الرحلة: نشاط جديد بمربعات الاختيار، وترتيب داخل المرحلة', async ({ page }) => {
+// المرحلة 22: الإضافة والترتيب في وضع البناء: «+ نشاط» يختار النوع أولًا ثم اللوحة الجانبية، والترتيب بقائمة «⋯» عبر النقل الذري
+test('الرحلة: نشاط جديد باختيار النوع ثم لوحته، وترتيب داخل المرحلة من «⋯»', async ({ page }) => {
   const calls = await setup(page);
   await tab(page, 'الرحلة والمتطلبات');
+  await page.getByRole('radio', { name: 'بناء' }).click();
   await page.getByRole('button', { name: '+ نشاط' }).first().click();
-  await page.getByLabel('الرمز (فريد، مثل T-ATTEND)').fill('T-9');
-  await page.getByLabel('نص النشاط').fill('رفع التقرير');
-  await page.getByLabel('يعتمده المستشار بعد الإنجاز').check();
-  await page.getByRole('button', { name: 'حفظ' }).click();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ stage_key: 's1', code: 'T-9', needs_review: true, required: true, dimension: null, sort: 3 });
-  await page.getByRole('button', { name: 'انقل نشاط «خطة التطوير» لأسفل' }).click();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
+  await page.getByRole('radio', { name: 'رفع ملف' }).check();
+  await page.getByRole('button', { name: 'التالي' }).click();
+  const panel = page.getByRole('dialog', { name: 'نشاط جديد' });
+  await panel.getByText('متقدم', { exact: true }).click();
+  await panel.getByLabel('الرمز (فريد، مثل T-ATTEND)').fill('T-9');
+  await panel.getByLabel('نص النشاط').fill('رفع التقرير');
+  await panel.getByLabel('يعتمده المستشار بعد الإنجاز').check();
+  await panel.getByRole('button', { name: 'حفظ' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ stage_key: 's1', code: 'T-9', kind: 'upload', needs_review: true, required: true, dimension: null, sort: 3 });
+  await page.getByRole('button', { name: 'إجراءات نشاط «خطة التطوير»' }).click();
+  await page.getByRole('menuitem', { name: 'أسفل' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.requirement-move')).toMatchObject({ id: 'r1', stage_key: 's1', position: 2, target_ids: ['r2'] });
 });
 
-test('المرحلة 18: Alt مع السهم على صف المتطلب ينقله وحده دون مرحلته', async ({ page }) => {
+test('المرحلة 18 و22: Alt مع السهم على صف النشاط في وضع البناء ينقله وحده دون مرحلته', async ({ page }) => {
   const calls = await setup(page);
   await tab(page, 'الرحلة والمتطلبات');
-  await page.getByRole('button', { name: 'انقل نشاط «خطة التطوير» لأسفل' }).focus();
+  await page.getByRole('radio', { name: 'بناء' }).click();
+  await page.getByRole('button', { name: 'إجراءات نشاط «خطة التطوير»' }).focus();
   await page.keyboard.press('Alt+ArrowDown');
-  await expect.poll(() => calls.filter((c) => c.action === 'admin.reorder')).toHaveLength(1);
-  expect(calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.requirement-move')).toHaveLength(1);
+  expect(calls.filter((c) => c.action === 'admin.reorder')).toHaveLength(0);
+  expect(calls.find((c) => c.action === 'admin.requirement-move')).toMatchObject({ id: 'r1', stage_key: 's1', position: 2 });
 });
 
 test('القياس: الفقرة وخياراتها ودرجاتها من المستودع، واللوحة تحرر التلميح وحده (D01)', async ({ page }) => {

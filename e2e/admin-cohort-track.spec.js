@@ -176,8 +176,12 @@ test('البرنامج: نموذج المرحلة يضبط «مسار مستمر
   await expect(tl.getByRole('group', { name: 'مسارات مستمرة' })).toContainText('التوجيه على رأس العمل');
   const sec = page.locator('.la-stage-ed', { hasText: 'التوجيه على رأس العمل' });
   await expect(sec.locator('.la-rule')).toHaveText('مسار مستمر · تُفتح مع بداية «التدريب»، ومخطط بعد يوم واحد من بدايتها · يمتد حتى نهاية الرحلة · بنوده الإلزامية مطلوبة قبل «التقرير النهائي» وحدها');
-  await sec.locator('.btn-sm', { hasText: 'تحرير' }).click();
+  // المرحلة 22: التحرير في وضع البناء من «⋯»، و«شروط متقدمة» مطوية في اللوحة الجانبية
+  await page.getByRole('radio', { name: 'بناء' }).click();
+  await sec.getByRole('button', { name: /^إجراءات المرحلة/ }).first().click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'مرحلة: التوجيه على رأس العمل' });
+  await form.getByText('شروط متقدمة').click();
   await expect(form.getByRole('combobox', { name: /^طبيعتها في الرحلة/ })).toHaveValue('track');
   await expect(form.getByRole('combobox', { name: /^متى تُفتح/ })).toHaveCount(0);
   await expect(form.getByRole('combobox', { name: /^يبدأ مع / })).toHaveValue('training');

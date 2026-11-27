@@ -5,8 +5,8 @@
 // لتُختبر وحدها. الاحتساب الرسمي للتسكين على الخادم؛ هنا نسخة العرض.
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
-import { countAr, MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, journeyCtx, renderJourneyText, stageRules, withCandidates, SESSIONS_MAX_LIMIT, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
+import { ACTIVITY_CUSTOM_AR, ACTIVITY_KIND_AR, countAr, MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
+import { AUTO_CHECKS, evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, journeyCtx, renderJourneyText, stageRules, withCandidates, SESSIONS_MAX_LIMIT, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 import { CONSULT_ANY_DEFAULT, GATE_STAGE_KEYS, SERVICE_NOTE_AR, SERVICE_UNLOCK_DEFAULT, TRACK_UNTIL_DEFAULT, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
 
@@ -237,6 +237,84 @@ export const Q_FIELDS = [
 export const Q_SAFE = Q_FIELDS.filter((f) => CONTENT_LOCK.questions.editable.includes(f.name));
 export const QUESTIONS_LOCK_AR = `${REPO_EDIT_AR}. تحرر اللوحة التلميح والترتيب، والإصدار والتفعيل بترحيل محروس بعد توقيع لجنة القياس.`;
 // رمز المتطلب ثابت بعد إنشائه (D01): الرحلة والتقارير تقرأ التقدم به
+// ── وضع البناء (المرحلة 22، 4.4): اللوحة الجانبية بأقسامها، وإضافة مرحلة بأربعة حقول، ونشاط باختيار النوع ──
+// أقسام لوحة المرحلة: الأساسيات مفتوحة، ثم ما يراه المشارك، ثم الشروط المتقدمة مطوية (أعلاها جملة القاعدة البشرية)
+export const STAGE_GROUPS_AR = Object.freeze({ basics: 'الأساسيات', participant: 'ما يراه المشارك', advanced: 'شروط متقدمة' });
+const STAGE_GROUP_OF = {
+  title_ar: 'basics', phase: 'basics', rule_mode: 'basics', duration_days: 'basics', description_ar: 'basics',
+  outcome_ar: 'participant', builds_on_ar: 'participant', activities_ar: 'participant', duration_label: 'participant',
+};
+// الأساسيات بترتيب التصور: الاسم، والمحور، والنوع، والمدة، والوصف؛ وما سواها بترتيبه في stageFields
+const STAGE_BASICS = ['title_ar', 'phase', 'rule_mode', 'duration_days', 'description_ar'];
+export const stagePanelFields = (fields) => [
+  ...STAGE_BASICS.map((n) => fields.find((f) => f.name === n)).filter(Boolean),
+  ...fields.filter((f) => !STAGE_BASICS.includes(f.name)),
+].map((f) => ({ ...f, group: STAGE_GROUP_OF[f.name] || 'advanced' }));
+export const stagePanelGroups = (rule) => [
+  { key: 'basics', title: STAGE_GROUPS_AR.basics },
+  { key: 'participant', title: STAGE_GROUPS_AR.participant },
+  { key: 'advanced', title: STAGE_GROUPS_AR.advanced, open: false, lead: rule || null },
+];
+// المدة: duration_days هو المصدر، ونص المدة للمشارك يُقترح منه، وملاحظة اتساق إن تعارضا
+export function durationNote(v) {
+  const d = Number(v.duration_days) || 0;
+  const label = String(v.duration_label || '');
+  if (!d || !label || label.includes('{duration}')) return [];
+  const n = Number((/\d+/.exec(label.replace(/[٠-٩]/g, (x) => '٠١٢٣٤٥٦٧٨٩'.indexOf(x))) || [])[0]);
+  if (!n) return [];
+  const days = /أسبوع|أسابيع/.test(label) ? n * 7 : /شهر|أشهر/.test(label) ? n * 30 : /يوم|أيام/.test(label) ? n : null;
+  return days && Math.abs(days - d) > Math.max(2, d * 0.2) ? [{ text: `المدة كما تظهر للمشارك («${label}») لا تطابق ${d} يومًا`, tone: 'warn' }] : [];
+}
+// أقسام لوحة النشاط: الأساسيات، ثم «لمن»، ثم إعدادات النوع، ثم المتقدم (الرمز والمراجعة)
+export const REQ_GROUPS_AR = Object.freeze({ basics: 'الأساسيات', audience: 'لمن', kind: 'إعدادات النوع', advanced: 'متقدم' });
+const REQ_GROUP_OF = { title_ar: 'basics', help_ar: 'basics', required: 'basics', stage_key: 'basics', dimension: 'audience', level: 'audience', kind: 'kind', code: 'advanced', needs_review: 'advanced', active: 'advanced' };
+export const reqPanelFields = (fields) => fields.map((f) => ({ ...f, group: REQ_GROUP_OF[f.name] || (f.name.startsWith('cfg_') ? 'kind' : 'advanced'),
+  ...(f.name === 'level' ? { help: (v) => (v.dimension && v.level ? `يظهر لمن مستواه ${LVL[v.level]} في ${DIM[v.dimension]} بالضبط` : null) } : {}) }));
+export const reqPanelGroups = () => [
+  { key: 'basics', title: REQ_GROUPS_AR.basics }, { key: 'audience', title: REQ_GROUPS_AR.audience },
+  { key: 'kind', title: REQ_GROUPS_AR.kind }, { key: 'advanced', title: REQ_GROUPS_AR.advanced, open: false },
+];
+// رمز نظامي (AUTO_CHECKS في logic.js): يكتمل من حالة المشارك برمزه، فلا يُغيَّر
+export const SYSTEM_CODE_AR = 'رمز نظامي لا يُغيَّر';
+export const isSystemCode = (code) => Object.hasOwn(AUTO_CHECKS, String(code || ''));
+// أنواع «+ نشاط» بأسمائها من ACTIVITY_KIND_AR (مصدر واحد)، و«تأكيد إنجاز» باسم «مخصص». هنا config الافتراضي لكل نوع وحده
+export const ADD_KINDS = ['reading', 'upload', 'form', 'workshop', 'coaching', 'lab', 'curriculum', 'survey', 'video', 'model', 'check'];
+export const addKindAr = (k) => (k === 'check' ? ACTIVITY_CUSTOM_AR : ACTIVITY_KIND_AR[k] || k);
+export const KIND_DEFAULT_CONFIG = Object.freeze({
+  reading: { scope: 'all', quiz: true }, video: { min_pct: 90 }, workshop: { sessions_required: 1, minutes: 60, verify: 'qr' },
+  coaching: { sessions_required: 1, minutes: 60, mode: 'online' }, model: { accept: 'reviewed' }, lab: { accept: 'mastery' },
+});
+export const kindChoiceField = () => ({ name: 'kind', label: 'نوع النشاط', type: 'choice', required: 'اختر نوع النشاط',
+  options: ADD_KINDS.map((k) => ({ value: k, label: addKindAr(k), help: KIND_HELP[k] })) });
+// الرمز المقترح: بادئة النوع ورقم لا يتكرر في البرنامج، قابل للتعديل قبل الحفظ الأول وحده (lockReqCode بعده)
+const CODE_PREFIX = { reading: 'R', upload: 'U', form: 'F', workshop: 'W', coaching: 'C', lab: 'L', curriculum: 'K', survey: 'S', video: 'V', model: 'M', check: 'T' };
+export function suggestCode(kind, reqs = []) {
+  const taken = new Set(reqs.map((r) => r.code));
+  const p = CODE_PREFIX[kind] || 'T';
+  for (let i = 1; ; i++) { const c = `${p}-${i}`; if (!taken.has(c)) return c; }
+}
+// مرحلة جديدة: الاسم والمحور والنوع والمدة، وتُدرج آخر محورها (stageCreate على الخادم)
+export const newStageFields = () => [
+  { name: 'title_ar', label: 'اسم المرحلة' },
+  { name: 'phase', label: 'المحور', type: 'select', options: PHASE },
+  { name: 'mode', label: 'نوع المرحلة', type: 'select', options: STAGE_MODE_AR, help: (v) => RULE_HELP[v.mode] },
+  { name: 'duration_days', label: 'المدة بالأيام', type: 'number' },
+];
+// «نقل إلى…»: المرحلة والموضع فيها (1 أول المرحلة، وفراغ آخرها)
+export const moveFields = (stages) => [
+  { name: 'stage_key', label: 'إلى مرحلة', type: 'select', options: Object.fromEntries(stages.map((s) => [s.key, s.title_ar])) },
+  { name: 'position', label: 'في الموضع (فراغ: آخر المرحلة)', type: 'number' },
+];
+// وضع الصفحة من الرابط (?mode=build): البناء لصاحب الكتابة وحده، وما سواه عرض
+export const journeyModeOf = (qs, canWrite) => (canWrite && new URLSearchParams(qs || '').get('mode') === 'build' ? 'build' : 'view');
+export function withMode(qs, mode) {
+  const q = new URLSearchParams(qs || '');
+  if (mode === 'build') q.set('mode', 'build'); else q.delete('mode');
+  return q.toString();
+}
+// إعلان النقل (aria-live): «نُقل إلى الموضع 3 في مرحلة التأهيل»
+export const movedAr = (pos, stageTitle) => `نُقل إلى الموضع ${pos} في مرحلة ${stageTitle}`;
+
 export const lockReqCode = (fields) => fields.map((f) => (f.name === 'code' ? { ...f, readOnly: true, label: 'الرمز (ثابت بعد الإنشاء)' } : f));
 
 export const INST_FIELDS = [

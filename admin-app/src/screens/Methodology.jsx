@@ -7,11 +7,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { ASSESSMENT_MISSING_AR, completionSource, journeyCoherence, journeyCtx, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { ACTIVITY_AR, ACTIVITY_KIND_AR, COMPLETION_AR, JOURNEY_KEY_AR, PARALLEL_SERVICE_AR, PARALLEL_SERVICE_NOTE_AR, TRACK_ONLY_AR, JOURNEY_ISSUE_AR, JOURNEY_ISSUE_TONE, JOURNEY_SAFE_AR, journeyIssuesAr, PROGRAM_VERSION_STATE, PROGRAM_VERSION_STATE_TONE } from '../../../supabase/functions/leaders-api/labels.js';
+import { ACTIVITY_AR, ACTIVITY_KIND_AR, COMPLETION_AR, JOURNEY_KEY_AR, JOURNEY_MODE_AR, PARALLEL_SERVICE_AR, PARALLEL_SERVICE_NOTE_AR, TRACK_ONLY_AR, JOURNEY_ISSUE_AR, JOURNEY_ISSUE_TONE, JOURNEY_SAFE_AR, journeyIssuesAr, PROGRAM_VERSION_STATE, PROGRAM_VERSION_STATE_TONE } from '../../../supabase/functions/leaders-api/labels.js';
 import {
   CELL_FIELDS, foldMilestones, INST_FIELDS, journeyBoard, NO_AXIS_NOTE_AR, LVLS, lockReqCode, MODE, MODEL_DEFAULT, QUESTIONS_LOCK_AR, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
+  durationNote, isSystemCode, journeyModeOf, KIND_DEFAULT_CONFIG, kindChoiceField, moveFields, movedAr, newStageFields, reqPanelFields, reqPanelGroups,
+  stagePanelFields, stagePanelGroups, suggestCode, SYSTEM_CODE_AR, withMode,
 } from '../methodology.js';
+import { MoreMenu } from './PersonShell.jsx';
 import Form from '../Form.jsx';
 import ItemQuality from './ItemQuality.jsx';
 import { ProgramMilestones } from './Milestones.jsx';
@@ -33,8 +36,13 @@ const del = (entity, id) => () => L('admin.delete', { entity, id });
 function useEditor(reload) {
   const { toast } = useUI();
   const [form, setForm] = useState(null);
+  // saved: true يعيد التحميل، و'silent' يغلق بلا إعادة تحميل (النقل يحدّث مرحلتيه وحدهما)، و{ nextForm } يفتح النموذج التالي
   const node = form && (
-    <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); reload(); } }} />
+    <Form key={form.title} {...form} onClose={(saved) => {
+      if (saved?.nextForm) { setForm(saved.nextForm); return; }
+      setForm(null);
+      if (saved === true) { toast('تم الحفظ'); reload(); }
+    }} />
   );
   return [setForm, node];
 }
@@ -74,6 +82,8 @@ function useSpot(dep) {
     const row = s.id && [...document.querySelectorAll('[data-mt-row]')].find((e) => e.dataset.mtRow === s.id);
     if (row && !row.contains(document.activeElement)) {
       const btns = row.querySelectorAll(':scope .la-move-btn');
+      // وضع البناء في الرحلة بلا أسهم ظاهرة: يعود التركيز إلى زر «⋯» في الصف نفسه
+      if (!btns.length) { row.querySelector('.pf-more-btn')?.focus({ preventScroll: true }); spotDir = 0; return; }
       const btn = btns[spotDir > 0 ? 1 : 0];
       (btn && btn.getAttribute('aria-disabled') !== 'true' ? btn : btns[0])?.focus({ preventScroll: true });
     }
@@ -167,6 +177,28 @@ export function JourneyKey() {
   );
 }
 
+// مفتاح «عرض» و«بناء» (المرحلة 22، 4.3): radiogroup بالأسهم، والوضع في الرابط (?mode=build). لا يظهر لمن لا يملك الكتابة
+export function ModeSwitch({ mode, onMode }) {
+  const keys = ['view', 'build'];
+  const key = (e) => {
+    const i = keys.indexOf(mode);
+    const to = { ArrowLeft: i + 1, ArrowRight: i - 1, ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: keys.length - 1 }[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    const k = keys[(to + keys.length) % keys.length];
+    onMode(k);
+    e.currentTarget.querySelector(`[data-mode="${k}"]`)?.focus();
+  };
+  return (
+    <div className="j-mode" role="radiogroup" aria-label="وضع الصفحة" onKeyDown={key}>
+      {keys.map((k) => (
+        <button key={k} type="button" role="radio" data-mode={k} aria-checked={mode === k} tabIndex={mode === k ? 0 : -1}
+          className={mode === k ? 'on' : ''} onClick={() => onMode(k)}>{JOURNEY_MODE_AR[k]}</button>
+      ))}
+    </div>
+  );
+}
+
 // الشريط الزمني القصير (4.2 البند 1): أعمدة المراحل بطول مدتها وتداخلها، بلا أسماء أنشطة. من نموذج journeyTimeline نفسه
 // (الخانة وموضع المرحلة فيها)، فلا حساب ثانٍ للمدد. النقر على مرحلة ينقل إلى بطاقتها
 export function StageStrip({ model, onStage }) {
@@ -201,17 +233,23 @@ export function StageStrip({ model, onStage }) {
 }
 
 const NONE = Object.freeze([]);
-export function Journey({ catalog, reload, canWrite, onProgram }) {
+export function Journey({ catalog, reload, canWrite, onProgram, onPatch }) {
   const [edit, editor] = useEditor(reload);
-  const { toast, prompt } = useUI();
+  const { toast, confirm } = useUI();
   const pid = catalog.program_id;
+  // وضع العرض افتراضي، والبناء لصاحب الكتابة وحده (الخادم يبقى صاحب القرار: requireWrite على كل كتابة)
+  const [mode, setModeRaw] = useState(() => journeyModeOf(readQuery(), canWrite));
+  const build = canWrite && mode === 'build';
+  const setMode = (m) => { setModeRaw(m); writeQuery(withMode(readQuery(), m)); };
+  useEffect(() => { if (!canWrite && mode === 'build') setModeRaw('view'); }, [canWrite, mode]);
+  // إعلان النقل والإخفاء (aria-live)
+  const [said, setSaid] = useState('');
   const [pdata, setPdata] = useState(null);
   useEffect(() => { L('admin.programs').then(setPdata); }, [pid]);
   // تحصين (نقطة التحقق 2026-11-27): رد ناجح بلا journey_stages أو stage_requirements يُعرض رحلة فارغة بدل الانهيار
   const stagesIn = Array.isArray(catalog.journey_stages) ? catalog.journey_stages : NONE;
   const stages = useMemo(() => [...stagesIn].sort((a, b) => a.sort - b.sort), [stagesIn]);
   const reqs = Array.isArray(catalog.stage_requirements) ? catalog.stage_requirements : NONE;
-  const mv = { catalog, reload, canWrite };
   // المعالم المخالفة للافتراض: شارة على بطاقة مرحلتها (طي المعالم، 4.2 البند 2)
   const [msList, setMsList] = useState(NONE);
   const msOdd = useMemo(() => new Set(foldMilestones(msList, stages).shown.filter((m) => m.active !== false && m.stage_key).map((m) => m.stage_key)), [msList, stages]);
@@ -226,23 +264,29 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
     const el = document.getElementById(`jreq-${a.requirement_id}`);
     if (!el) return;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    el.querySelector('button.la-link')?.focus({ preventScroll: true });
+    (el.querySelector('button.la-link') || el).focus?.({ preventScroll: true });
   };
   // القدوم من «الحضور والجلسات» (attendance-groups.js): ‎?add=workshop‎ يفتح نموذج المتطلب نفسه بنوع الجلسات الجماعية،
   // و‎?req=<id>‎ ينقل إلى المتطلب في القائمة. يُحفظ بالمسار نفسه (stage_requirements في المسودة)، فلا نسخة ثانية للمتطلب
-  const newReq = (stageKey, kind = 'check') => edit({
-    title: `${ACTIVITY_AR} جديد`, fields: reqFields(stages, catalog.learning_models || [], catalog.lab_links || []),
-    values: reqToForm({ stage_key: stageKey, kind, required: true, active: true }),
+  // نشاط جديد (المرحلة 22، 4.4): النوع أولًا بأسمائه البشرية، ثم لوحة النشاط بالاسم وإلزامي أو اختياري، والرمز مقترح في «متقدم»
+  const reqDetails = (stageKey, kind) => ({
+    title: `${ACTIVITY_AR} جديد`, panel: true, groups: reqPanelGroups(),
+    fields: reqPanelFields(reqFields(stages, catalog.learning_models || [], catalog.lab_links || [])),
+    values: reqToForm({ stage_key: stageKey, kind, required: true, active: true, code: suggestCode(kind, reqs), config: { ...(KIND_DEFAULT_CONFIG[kind] || {}) } }),
     onSave: (v) => save('stage_requirements', { program_id: pid, sort: reqs.filter((x) => x.stage_key === v.stage_key).length + 1 })(formToReq(v)),
+  });
+  const newReq = (stageKey, kind = null) => edit(kind ? reqDetails(stageKey, kind) : {
+    title: `نوع ${ACTIVITY_AR} الجديد`, panel: true, fields: [kindChoiceField()], values: {}, saveLabel: 'التالي',
+    onSave: async (v) => ({ success: true, nextForm: reqDetails(stageKey, v.kind) }),
   });
   useEffect(() => {
     const q = new URLSearchParams(readQuery());
     const add = q.get('add'), req = q.get('req');
     if (!add && !req) return;
-    writeQuery('');
+    writeQuery(withMode('', mode));
     if (req) { setTimeout(() => openReq({ requirement_id: req }), 0); return; }
     const first = stages.find((s) => s.active) || stages[0];
-    if (add === 'workshop' && canWrite && first) newReq(first.key, 'workshop');
+    if (add === 'workshop' && canWrite && first) { setMode('build'); newReq(first.key, 'workshop'); }
   }, [pid]);
   // الرحلة الفارغة: زر الخط الزمني ينقل إلى أول «+ مرحلة» (لمن يملك الكتابة)
   // ملاحظة الاتساق: الرابط ينقل إلى متطلبها (برمزه) أو إلى بطاقة مرحلتها في القائمة، ويضع التركيز فيها
@@ -254,62 +298,170 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     (el.querySelector('button') || el).focus?.({ preventScroll: true });
   };
+  const rowEl = (key) => [...document.querySelectorAll('[data-mt-row]')].find((e) => e.dataset.mtRow === key);
   const toStage = (key) => {
-    const el = [...document.querySelectorAll('[data-mt-row]')].find((e) => e.dataset.mtRow === key);
+    const el = rowEl(key);
     if (!el) return;
     el.scrollIntoView({ block: 'start', behavior: 'smooth' });
     el.focus?.({ preventScroll: true });
+    // فتح من الملخص: في وضع البناء تُفتح لوحة المرحلة أيضًا
+    const s = build && stages.find((x) => x.key === key);
+    if (s) editStage(s);
   };
+  // ── وضع البناء (المرحلة 22): اللوحات وقائمة «⋯» والنقل ──
+  // البطاقة المحررة تبقى ظاهرة بجانب اللوحة
+  const beside = (key) => rowEl(key)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  const editStage = (s) => {
+    beside(s.key);
+    edit({ title: `مرحلة: ${s.title_ar}`, panel: true, groups: stagePanelGroups(stageRuleSummary(s, stages)), notes: durationNote,
+      fields: stagePanelFields(stageFields(reqs, stages, s.key, catalog.assessment_minutes)), values: stageToForm(s),
+      onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) });
+  };
+  const editReq = (r) => {
+    beside(r.id);
+    const sys = isSystemCode(r.code);
+    edit({ title: `تحرير ${ACTIVITY_AR}`, panel: true, groups: reqPanelGroups(), lead: sys ? `${SYSTEM_CODE_AR}: ${r.code}` : null,
+      fields: reqPanelFields(lockReqCode(reqFields(stages, catalog.learning_models || [], catalog.lab_links || []))).map((f) => (sys && f.name === 'code' ? { ...f, label: `الرمز (${SYSTEM_CODE_AR})` } : f)),
+      values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) });
+  };
+  const newStage = (ph) => edit({
+    title: 'مرحلة جديدة', panel: true, fields: newStageFields(), values: { phase: ph, mode: 'required', duration_days: '' }, saveLabel: 'أضف المرحلة',
+    onSave: async (v) => {
+      const r = await L('admin.stage-create', { program_id: pid, title_ar: v.title_ar, phase: v.phase, mode: v.mode, duration_days: v.duration_days });
+      if (r.success) {
+        const after = r.next && stages.find((x) => x.key === r.next);
+        toast(after ? `أُضيفت آخر محورها، وصارت «${after.title_ar}» بعدها` : 'أُضيفت المرحلة آخر محورها');
+      }
+      return r;
+    },
+  });
+  // ما يعود من النقل: صفوف المرحلتين وحدهما تحل محل ما في الكتالوج، بلا إعادة تحميله كله
+  const patchStages = (rows, keys) => {
+    if (!onPatch) { reload(); return; }
+    const touched = new Set(keys);
+    onPatch((c) => ({ ...c, stage_requirements: [...(c.stage_requirements || []).filter((x) => !touched.has(x.stage_key)), ...rows] }));
+  };
+  const moveReqTo = async (r, stageKey, position, ok = false) => {
+    const target = reqs.filter((x) => x.stage_key === stageKey && x.id !== r.id).sort((a, b) => a.sort - b.sort).map((x) => x.id);
+    const source = reqs.filter((x) => x.stage_key === r.stage_key && x.id !== r.id).sort((a, b) => a.sort - b.sort).map((x) => x.id);
+    let res = await L('admin.requirement-move', { id: r.id, program_id: pid, stage_key: stageKey, position, expect_stage: r.stage_key, expect_sort: r.sort, target_ids: target, source_ids: source, confirm: ok || undefined });
+    if (!res.success && res.code === 'confirm') {
+      if (!(await confirm(`${res.message} انقله؟`, { ok: 'انقله' }))) return { success: false, message: 'لم يُنقل شيء' };
+      res = await L('admin.requirement-move', { id: r.id, program_id: pid, stage_key: stageKey, position, expect_stage: r.stage_key, expect_sort: r.sort, target_ids: target, source_ids: source, confirm: true });
+    }
+    if (!res.success) {
+      // تعارض كتابة من مدير آخر: رسالة لا تُتجاهل ثم إعادة تحميل
+      if (res.code === 'conflict') { await confirm(res.message, { ok: 'حدّث الصفحة' }); reload(); }
+      return res;
+    }
+    patchStages(res.rows || [], [res.from, res.to]);
+    setSaid(movedAr(res.position, res.stage_title));
+    return { ...res, silent: true };
+  };
+  const moveReq = async (r, dir) => {
+    const list = reqs.filter((x) => x.stage_key === r.stage_key).sort((a, b) => a.sort - b.sort);
+    const i = list.findIndex((x) => x.id === r.id);
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return;
+    const res = await moveReqTo(r, r.stage_key, j + 1);
+    if (!res.success && res.message) toast(res.message);
+  };
+  const moveStage = async (s, dir) => {
+    const ids = reorderIds(stagesIn, 'journey_stages', s.key, dir);
+    if (!ids) return;
+    const r = await L('admin.reorder', { entity: 'journey_stages', ids, program_id: pid });
+    if (!r.success) { toast(r.message); return; }
+    setSaid(`«${s.title_ar}» صارت في الموضع ${ids.indexOf(s.key) + 1} من ${ids.length}`);
+    keepSpot(typeof window === 'undefined' ? 0 : window.scrollY, s.key, SPOT_SCOPE);
+    reload();
+  };
+  const moveTo = (r) => edit({
+    title: `نقل ${ACTIVITY_AR} «${plain(r.title_ar)}»`, panel: true, fields: moveFields(stages), values: { stage_key: r.stage_key, position: '' }, saveLabel: 'انقل',
+    onSave: (v) => moveReqTo(r, v.stage_key, v.position == null ? null : v.position),
+  });
+  // الإخفاء بدل الحذف: active=false عبر admin.save، فيبقى تقدم المشاركين والنسخ المحفوظة
+  const toggle = async (entity, base, on, name) => {
+    const r = await save(entity, base)({ active: on });
+    if (!r.success) { toast(r.message); return; }
+    setSaid(on ? `أُظهر ${name}` : `أُخفي ${name}، ويبقى تقدم المشاركين محفوظًا`);
+    reload();
+  };
+  const stageMenu = (s) => {
+    const sorted = stages;
+    const i = sorted.findIndex((x) => x.key === s.key);
+    return [
+      { label: 'تحرير', run: () => editStage(s) },
+      i > 0 && { label: 'أعلى', run: () => moveStage(s, -1) },
+      i < sorted.length - 1 && { label: 'أسفل', run: () => moveStage(s, 1) },
+      { label: s.active ? 'إخفاء' : 'إظهار', run: () => toggle('journey_stages', { key: s.key, program_id: pid }, !s.active, `المرحلة «${s.title_ar}»`) },
+    ];
+  };
+  const reqMenu = (r, i, n) => [
+    { label: 'تحرير', run: () => editReq(r) },
+    i > 0 && { label: 'أعلى', run: () => moveReq(r, -1) },
+    i < n - 1 && { label: 'أسفل', run: () => moveReq(r, 1) },
+    { label: 'نقل إلى…', run: () => moveTo(r) },
+    { label: r.active ? 'إخفاء' : 'إظهار', run: () => toggle('stage_requirements', { id: r.id }, !r.active, `${ACTIVITY_AR} «${plain(r.title_ar)}»`) },
+  ];
   const plain = (t, s) => String(renderJourneyText(t, ctxOf(s)) ?? '');
   // بطاقة المرحلة: الرقم والاسم والمدة وطريقة التقديم، وجملة القاعدة، وأنشطتها صفوفًا بأسماء كاملة بلا قص (4.3 وضع العرض 1).
   // الرمز التقني (P-INFO) في title وحقل التحرير المتقدم وحدهما (4.1 البند 9)
-  const stageCard = (s) => (
-    <KeyRow as="section" key={s.key} rowId={s.key} tabIndex={-1} aria-labelledby={`j-st-${s.key}`} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>{(skeys) => (<>
-      <div className="la-row between">
-        <div><b id={`j-st-${s.key}`}>{s.sort}. {shown(s.title_ar, s)}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small>
-          {stageRules(s).lane === 'track' && <> <small className="la-chip">{TRACK_ONLY_AR}</small></>}
-          {msOdd.has(s.key) && <> <small className="la-chip">معلم مخصص</small></>}</div>
-        <div className="la-row">
-          <RowMove {...mv} entity="journey_stages" id={s.key} name={`المرحلة ${s.sort}`} keysRef={skeys} />
-          {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs, stages, s.key, catalog.assessment_minutes), values: stageToForm(s), onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) })}>تحرير</button>}
-        </div>
-      </div>
-      <p className={`la-rule ${stageRules(s).mode}`}>{stageRuleSummary(s, stages)}</p>
-      {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
-      <ul className="la-reqs j-acts">
-        {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (
-          <KeyRow key={r.id} rowId={r.id} id={`jreq-${r.id}`} title={r.code} className={`${r.required ? 'req-must' : 'req-opt'}${r.active ? '' : ' off'}`}>{(rkeys) => (<>
-            <span className="j-act">
-              <span className="j-act-name">{shown(r.title_ar)}</span>{' '}
-              <small className="la-chip" data-kind={r.kind}>{ACTIVITY_KIND_ICO[r.kind] && <Ico name={ACTIVITY_KIND_ICO[r.kind]} />}{ACTIVITY_KIND_AR[r.kind] || r.kind}</small>{' '}
-              <small className="la-chip j-word">{r.required ? JOURNEY_KEY_AR.required : JOURNEY_KEY_AR.optional}</small>{' '}
-              <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : completionSource(r) === 'auto' ? 'j-auto' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
-              {r.dimension && <> <small className="la-chip">{DIM[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small></>}
-              {r.needs_review && <> <small className="la-chip warn">{JOURNEY_KEY_AR.review}</small></>}
-            </span>
-            <span className="la-row">
-              <RowMove {...mv} entity="stage_requirements" id={r.id} name={`${ACTIVITY_AR} «${plain(r.title_ar)}»`} keysRef={rkeys} />
-              {canWrite && <button className="la-link" onClick={() => edit({ title: `تحرير ${ACTIVITY_AR}`, fields: lockReqCode(reqFields(stages, catalog.learning_models || [], catalog.lab_links || [])), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
-            </span>
-          </>)}</KeyRow>
-        ))}
-      </ul>
-      {canWrite && (
-        <button className="la-link" onClick={() => newReq(s.key)}>+ {ACTIVITY_AR}</button>
-      )}
-    </>)}</KeyRow>
-  );
+  // وضع العرض بلا أزرار تحرير. وضع البناء: الاسم يفتح لوحته، وقائمة «⋯» في كل صف، وAlt مع الأسهم ينقل الصف
+  const stageCard = (s) => {
+    const list = reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort);
+    return (
+      <KeyRow as="section" key={s.key} rowId={s.key} tabIndex={-1} aria-labelledby={`j-st-${s.key}`} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>{(skeys) => {
+        if (build) skeys.current = (dir) => moveStage(s, dir);
+        const name = <>{s.sort}. {shown(s.title_ar, s)}</>;
+        return (<>
+          <div className="la-row between">
+            <div><b id={`j-st-${s.key}`}>{build ? <button type="button" className="la-link j-open" onClick={() => editStage(s)}>{name}</button> : name}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small>
+              {stageRules(s).lane === 'track' && <> <small className="la-chip">{TRACK_ONLY_AR}</small></>}
+              {msOdd.has(s.key) && <> <small className="la-chip">معلم مخصص</small></>}</div>
+            {build && <div className="la-row j-acts-menu"><MoreMenu label={`إجراءات المرحلة «${plain(s.title_ar, s)}»`} items={stageMenu(s)} /></div>}
+          </div>
+          <p className={`la-rule ${stageRules(s).mode}`}>{stageRuleSummary(s, stages)}</p>
+          {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
+          <ul className="la-reqs j-acts">
+            {list.map((r, i) => (
+              <KeyRow key={r.id} rowId={r.id} id={`jreq-${r.id}`} tabIndex={-1} title={r.code} className={`${r.required ? 'req-must' : 'req-opt'}${r.active ? '' : ' off'}`}>{(rkeys) => {
+                if (build) rkeys.current = (dir) => moveReq(r, dir);
+                const title = shown(r.title_ar);
+                return (<>
+                  <span className="j-act">
+                    {build ? <button type="button" className="la-link j-act-name" onClick={() => editReq(r)}>{title}</button> : <span className="j-act-name">{title}</span>}{' '}
+                    <small className="la-chip" data-kind={r.kind}>{ACTIVITY_KIND_ICO[r.kind] && <Ico name={ACTIVITY_KIND_ICO[r.kind]} />}{ACTIVITY_KIND_AR[r.kind] || r.kind}</small>{' '}
+                    <small className="la-chip j-word">{r.required ? JOURNEY_KEY_AR.required : JOURNEY_KEY_AR.optional}</small>{' '}
+                    <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : completionSource(r) === 'auto' ? 'j-auto' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
+                    {r.dimension && <> <small className="la-chip">{DIM[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small></>}
+                    {r.needs_review && <> <small className="la-chip warn">{JOURNEY_KEY_AR.review}</small></>}
+                    {!r.active && <> <small className="la-chip">مخفي</small></>}
+                  </span>
+                  {build && <span className="la-row j-acts-menu"><MoreMenu label={`إجراءات ${ACTIVITY_AR} «${plain(r.title_ar)}»`} items={reqMenu(r, i, list.length)} /></span>}
+                </>);
+              }}</KeyRow>
+            ))}
+          </ul>
+          {build && <button className="la-link j-add" onClick={() => newReq(s.key)}>+ {ACTIVITY_AR}</button>}
+        </>);
+      }}</KeyRow>
+    );
+  };
   const toAddStage = () => {
-    const btn = document.querySelector('[data-add-stage]');
-    if (!btn) return;
-    btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    btn.focus({ preventScroll: true });
+    if (canWrite && !build) setMode('build');
+    setTimeout(() => {
+      const btn = document.querySelector('[data-add-stage]');
+      if (!btn) return;
+      btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      btn.focus({ preventScroll: true });
+    }, 0);
   };
   return (
     <>
-      {/* الترويسة الموحدة (المرحلة 7 و18) وسطر حالتها الواحد (المرحلة 19) */}
+      {/* الترويسة الموحدة (المرحلة 7 و18) وسطر حالتها الواحد (المرحلة 19)، ومفتاح العرض والبناء لصاحب الكتابة (المرحلة 22) */}
       <ScreenHead title="الرحلة والمتطلبات" status={<JourneyStatus pid={pid} data={pdata} issues={issues} onIssue={toIssue} />}
-        actions={onProgram ? <ProgramBar current={pid} onProgram={onProgram} programs={pdata?.success ? pdata.programs : null} /> : null} />
+        actions={<>{canWrite && <ModeSwitch mode={build ? 'build' : 'view'} onMode={setMode} />}{onProgram ? <ProgramBar current={pid} onProgram={onProgram} programs={pdata?.success ? pdata.programs : null} /> : null}</>} />
+      <p className="sr-only" aria-live="polite" data-testid="j-said">{said}</p>
       {/* العرض الواحد (المرحلة 21): الشريط الزمني القصير مفتوحًا، وتفصيل الأنشطة الزمني مطويًا، ثم المحاور وبطاقاتها */}
       <StageStrip model={timeline} onStage={toStage} />
       <details className="j-tl-detail">
@@ -317,33 +469,24 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
         <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} pop />
       </details>
       <JourneyKey />
-      <div className="j-board">
+      <div className={`j-board${build ? ' j-build' : ''}`}>
         {board.phases.map(({ key: ph, title: phl, stages: list, orphan }) => (
           <section key={ph} className="j-axis" aria-labelledby={`j-axis-${ph}`}>
-            <div className="la-row between">
-              <h3 className="la-phase" id={`j-axis-${ph}`}>{phl}</h3>
-              {canWrite && !orphan && <button className="btn-sm ghost" data-add-stage={ph} onClick={async () => {
-                const title_ar = await prompt(`اسم المرحلة الجديدة في «${phl}»`, '');
-                if (!title_ar) return;
-                const r = await L('admin.stage-create', { program_id: pid, title_ar, phase: ph });
-                if (!r.success) return toast(r.message);
-                toast('أُضيفت المرحلة آخر الرحلة. رتّبها بالأسهم واضبط نوعها ومتى تُفتح من «تحرير».');
-                reload();
-              }}>+ مرحلة</button>}
-            </div>
+            <h3 className="la-phase" id={`j-axis-${ph}`}>{phl}</h3>
             {orphan && <p className="la-hint warn" role="note">{NO_AXIS_NOTE_AR}</p>}
             <div className="j-cards">{list.map(stageCard)}</div>
+            {build && !orphan && <button className="btn-sm ghost j-add" data-add-stage={ph} onClick={() => newStage(ph)}>+ مرحلة</button>}
           </section>
         ))}
       </div>
       {board.services.length > 0 && (
-        <section className="j-service" aria-labelledby="j-service-h">
+        <section className={`j-service${build ? ' j-build' : ''}`} aria-labelledby="j-service-h">
           <h3 className="la-phase" id="j-service-h">{PARALLEL_SERVICE_AR}</h3>
           <p className="la-muted">{PARALLEL_SERVICE_NOTE_AR}</p>
           <div className="j-cards">{board.services.map(stageCard)}</div>
         </section>
       )}
-      <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} onList={setMsList} />
+      <ProgramMilestones pid={pid} stages={stages} canWrite={build} onList={setMsList} />
       {editor}
     </>
   );

@@ -131,7 +131,8 @@ describe('العرض الواحد', () => {
     expect(host.querySelector('.j-strip').textContent).not.toContain('أكمل ملفك');
     // تفصيل الأنشطة الزمني مطوي، والجدول البديل لقارئ الشاشة يبقى داخله
     expect(host.querySelector('details.j-tl-detail').open).toBe(false);
-    expect([...host.querySelectorAll('button')].some((b) => b.textContent === '+ نشاط')).toBe(true);
+    // المرحلة 22: «+ نشاط» في وضع البناء وحده، ووضع العرض الافتراضي بلا أزرار تحرير
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent === '+ نشاط')).toBe(false);
     expect(host.textContent).not.toContain('الترتيب بالأسهم');
   });
   it('كل aria-label في الرحلة يبدأ بنصه المرئي إن كان له نص', async () => {

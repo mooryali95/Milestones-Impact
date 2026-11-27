@@ -90,6 +90,10 @@ export const ACTIVITY_KIND_AR = Object.freeze({
   curriculum: 'منهج المسار', upload: 'رفع ملف', form: 'نموذج', model: 'نموذج تطبيقي', capstone: 'وثيقة المبادرة',
   survey: 'استبانة', lab: 'أداة من المختبر', auto: 'آلي',
 });
+// «+ نشاط» في وضع البناء (المرحلة 22، 4.4): النوع العام «تأكيد إنجاز» يُعرض بين الأنواع باسم «مخصص»
+export const ACTIVITY_CUSTOM_AR = 'مخصص';
+// وضعا صفحة الرحلة (المرحلة 22، 4.3): عرض للجميع، وبناء لصاحب صلاحية الكتابة وحده
+export const JOURNEY_MODE_AR = Object.freeze({ view: 'عرض', build: 'بناء' });
 export const ACTIVITY_OWNER_AR = Object.freeze({
   participant: 'يكمله المشارك', admin: 'يكمله الأدمن بتسجيل الحضور', expert: 'يسجله المستشار', coach: 'يحجزه المشارك ويؤكده الخبير', system: 'يكتمل آليًا',
 });
