@@ -393,7 +393,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
             {/* فعل أساسي واحد (تدقيق 2026-11-23، كما في Stripe): «حرّر الرحلة»، و«سجل النسخ» يكشف قائمة تحت البطاقة فيبقى ظاهرًا
                 بحالته (aria-expanded)، وبقية الأفعال في قائمة ⋯ نفسها التي في ملف المشارك */}
             <button className="btn-sm primary" onClick={() => onEditJourney(p.id)}>حرّر الرحلة</button>
-            <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id} aria-label={`سجل نسخ «${p.name}» (${p.versions.length})`}>سجل النسخ ({p.versions.length}) <span aria-hidden="true">{open === p.id ? '▴' : '▾'}</span></button>
+            <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id} aria-label={`سجل النسخ (${p.versions.length}) لبرنامج «${p.name}»`}>سجل النسخ ({p.versions.length}) <span aria-hidden="true">{open === p.id ? '▴' : '▾'}</span></button>
             {canWrite && <MoreMenu label={`إجراءات أخرى لبرنامج «${p.name}»`} items={[
               { label: 'احفظ نسخة', run: () => saveVersion(p) },
               !p.archived_at && { label: 'أنشئ له دفعة', run: () => onWizard({ program_id: p.id }) },
