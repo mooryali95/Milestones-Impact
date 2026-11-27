@@ -56,23 +56,22 @@ describe('جدول المبادرات', () => {
     reply['admin.capstones'] = { success: true, capstones: DRAFTS };
     await mount(<Capstones canWrite onOpen={() => {}} onPerson={() => {}} />);
     const r1 = host.querySelector('tr[data-row="p1"]');
-    expect(r1.querySelector('.cps-untitled').textContent).toBe(NO_TITLE);
+    expect(r1.querySelector('.cps-untitled').textContent).toBe(`${NO_TITLE} (ليلى)`);
     expect(r1.querySelector('td[data-col="org"] .la-missing').getAttribute('title')).toBe('بلا جهة');
     expect(r1.querySelector('td[data-col="ready"] .la-missing .sr-only').textContent).toContain('غير محدد');
     expect(host.querySelector('.cps-table').textContent).not.toMatch(/·|بلا اسم/);
   });
-  it('الأعمدة تعود حين يكون فيها قيمة، والصف كله يفتح الوثيقة بالنقر وزر الاسم يفتحها مرة واحدة', async () => {
+  it('الأعمدة تعود حين يكون فيها قيمة، والصف كله يفتح الوثيقة بالنقر وبـEnter (la-click مع tabIndex كما في التصور)', async () => {
     reply['admin.capstones'] = { success: true, capstones: [SUBMITTED, ...DRAFTS] };
     const onOpen = vi.fn();
     await mount(<Capstones canWrite onOpen={onOpen} onPerson={() => {}} />);
     expect(heads()).toEqual(['المبادرة', 'القائد', 'الجهة', 'النوع', 'الحالة', 'الجاهزية', 'المعيار', 'سُلّمت']);
     const tr = host.querySelector('tr[data-row="p3"]');
     expect(tr.className).toContain('la-click');
-    expect(tr.hasAttribute('tabindex')).toBe(false);
+    expect(tr.getAttribute('tabindex')).toBe('0');
     await act(async () => tr.querySelector('td[data-col="lead"]').click());
-    const btn = tr.querySelector('td[data-col="name"] button.la-link');
-    expect(btn.textContent).toBe(SUBMITTED.initiative);
-    await act(async () => btn.click());
+    expect(tr.querySelector('td[data-col="name"] .la-link').textContent).toBe(SUBMITTED.initiative);
+    await act(async () => tr.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(onOpen).toHaveBeenCalledTimes(2);
     expect(onOpen).toHaveBeenCalledWith('p3');
     const chip = tr.querySelector('.st-chip');

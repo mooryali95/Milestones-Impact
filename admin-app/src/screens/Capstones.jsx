@@ -409,7 +409,7 @@ const CAP_COLS = [
 ];
 // أعمدة الجدول المعروض (المرحلة 17): fold للأعمدة التي تُطوى إن خلت، وget لفحص الخلو
 const CAP_TABLE = [
-  { key: 'name', label: 'المبادرة', sort: true, cell: (x, open) => <button type="button" className="la-link" onClick={(e) => { e.stopPropagation(); open(x.participant_id); }}>{x.initiative || <Untitled />}</button> },
+  { key: 'name', label: 'المبادرة', sort: true, cell: (x) => <span className="la-link">{x.initiative || <Untitled name={x.full_name} />}</span> },
   { key: 'lead', label: 'القائد', sort: true, cell: (x) => x.full_name },
   { key: 'org', label: 'الجهة', sort: true, cell: (x) => x.organization || <Missing reason={CAP_MISSING.org} /> },
   { key: 'scope', label: 'النوع', sort: true, fold: true, get: (x) => SCOPE[x.scope], cell: (x) => SCOPE[x.scope] || <Missing reason={CAP_MISSING.scope} /> },
@@ -453,8 +453,8 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
         <table className="la-table cps-table">
           <thead><tr>{cols.map((c) => (c.sort ? <SortTh key={c.key} k={c.key} state={f} set={setF}>{c.label}</SortTh> : <th key={c.key}>{c.label}</th>))}</tr></thead>
           <tbody>{rows.map((x) => (
-            <tr key={x.participant_id} className="la-click" data-row={x.participant_id} onClick={() => onOpen(x.participant_id)}>
-              {cols.map((c) => <td key={c.key} data-col={c.key}>{c.cell(x, onOpen)}</td>)}
+            <tr key={x.participant_id} className="la-click" data-row={x.participant_id} tabIndex={0} onClick={() => onOpen(x.participant_id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(x.participant_id); } }}>
+              {cols.map((c) => <td key={c.key} data-col={c.key}>{c.cell(x)}</td>)}
             </tr>
           ))}</tbody>
         </table>

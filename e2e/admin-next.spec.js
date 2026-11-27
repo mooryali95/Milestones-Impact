@@ -37,7 +37,7 @@ async function signIn(page) {
   await page.getByRole('button', { name: 'أرسل رمز الدخول' }).click();
   await page.getByLabel('الرمز المكوّن من 6 أرقام').fill('123456');
   await page.getByRole('button', { name: 'تأكيد الدخول' }).click();
-  await expect(page.getByText('مدير الاختبار')).toBeVisible();
+  await expect(page.getByText('مدير الاختبار', { exact: true })).toBeVisible();
 }
 
 test('الدخول برمز خاطئ يعرض الخطأ، والصحيح يفتح اللوحة ويحفظ الجلسة', async ({ page }) => {
