@@ -171,6 +171,8 @@ test('البرنامج: نموذج المرحلة يضبط «مسار مستمر
   const calls = await setup(page, 1440);
   await nav(page, 'الرحلة والمتطلبات');
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   await expect(tl.getByRole('group', { name: 'مسارات مستمرة' })).toContainText('التوجيه على رأس العمل');
   const sec = page.locator('.la-stage-ed', { hasText: 'التوجيه على رأس العمل' });
   await expect(sec.locator('.la-rule')).toHaveText('مسار مستمر · تُفتح مع بداية «التدريب»، ومخطط بعد يوم واحد من بدايتها · يمتد حتى نهاية الرحلة · بنوده الإلزامية مطلوبة قبل «التقرير النهائي» وحدها');

@@ -30,10 +30,10 @@ export const KIND_HELP = {
   workshop: 'ورشة أو محاضرة أو لقاء جماعي. تضيف مواعيده من «الحضور والجلسات»، ولكل موعد طريقته: حضوري بمكان، أو عن بعد برابط اجتماع. الموعد والرابط يمكن أن يُحددا لاحقًا، فيرى المشارك «يُحدد لاحقًا» حتى تضيفهما.',
   curriculum: 'مقاطع وملفات وروابط من «بنك المحتوى» يختار النظام منها ما يخص مسار كل مشارك بحسب وسومها. يكتمل بمشاهدة المقاطع وفتح الملفات فعلًا.',
   coaching: 'توجيه أو استشارة فردية. يحجز المشارك من رابط Cal.com أو Calendly، أو يتصل فورًا حين تكون متاحًا، وتؤكد أنت حضوره.',
-  model: 'نموذج من «كتاب القائد» يبنيه المشارك في المنصة، فيكتمل المتطلب بتسليمه أو بتقييمك له. لا رفع ملفات: النموذج نفسه هو المخرج وفصل في وثيقة مبادرته.',
+  model: 'نموذج من «كتاب القائد» يبنيه المشارك في المنصة، فيكتمل النشاط بتسليمه أو بتقييمك له. لا رفع ملفات: النموذج نفسه هو المخرج وفصل في وثيقة مبادرته.',
   capstone: 'وثيقة المبادرة: يكتمل حين تعتمدها بالمعيار (ويؤيدها راعيها إن سُمّي)، أو حين يحفظ المشارك فصولًا تختارها منها، كخطة التطبيق. تراجعها من «المبادرات».',
-  survey: 'أسئلة تكتبها أنت، يكتمل المتطلب بإرسال المشارك إجاباته لا بنقرة. إن أخفيته من دفعة اختفى من رحلات أعضائها وبقيت الإجابات.',
-  lab: 'أداة من «مختبر القائد» تُصحَّح آليًا. يكتمل من محاولات المشارك فيها، ويفتحها المتطلب لمن يخصه بلا منح. إن أوقفت الأداة حُسب المتطلب منجزًا، فلا يُطالب أحد بما لا يراه.',
+  survey: 'أسئلة تكتبها أنت، يكتمل النشاط بإرسال المشارك إجاباته لا بنقرة. إن أخفيته من دفعة اختفى من رحلات أعضائها وبقيت الإجابات.',
+  lab: 'أداة من «مختبر القائد» تُصحَّح آليًا. يكتمل من محاولات المشارك فيها، ويفتحها النشاط لمن يخصه بلا منح. إن أوقفت الأداة حُسب النشاط منجزًا، فلا يُطالب أحد بما لا يراه.',
 };
 export const VERIFY = VERIFY_AR;
 export const COACH_MODE = SESSION_MODE_AR;
@@ -162,7 +162,7 @@ export const stageFields = (reqs = [], stages = [], selfKey = null, assessmentMi
 
 export const reqFields = (stages, models = [], labs = []) => [
   { name: 'code', label: 'الرمز (فريد، مثل T-ATTEND)', dir: 'ltr' },
-  { name: 'title_ar', label: 'نص المتطلب' },
+  { name: 'title_ar', label: 'نص النشاط' },
   { name: 'help_ar', label: 'توضيح للمشارك', type: 'textarea', rows: 2, help: TOKEN_HELP },
   { name: 'stage_key', label: 'المرحلة', type: 'select', options: Object.fromEntries(stages.map((s) => [s.key, s.title_ar])) },
   { name: 'kind', label: 'النوع', type: 'select', options: KIND, help: (v) => KIND_HELP[v.kind] },
@@ -188,10 +188,10 @@ export const reqFields = (stages, models = [], labs = []) => [
   { name: 'cfg_instant_url', label: 'رابط غرفة الاتصال الفوري (Google Meet أو Zoom الثابت)', dir: 'ltr', show: (v) => v.kind === 'coaching' && v.cfg_mode !== 'in_person' },
   { name: 'cfg_coach_email', label: 'بريد الموجّه لتنبيه الاتصال الفوري', type: 'email', dir: 'ltr', show: (v) => v.kind === 'coaching' },
   { name: 'cfg_model_key', label: 'النموذج التعليمي', type: 'select', options: Object.fromEntries(models.map((m) => [m.key, m.title_ar])), show: (v) => v.kind === 'model',
-    help: () => 'يراه المشارك بمستواه ونطاق عمله. إن لم يكن النموذج متاحًا له حُسب المتطلب منجزًا، فلا يُطالب بما لا يخصه.' },
+    help: () => 'يراه المشارك بمستواه ونطاق عمله. إن لم يكن النموذج متاحًا له حُسب النشاط منجزًا، فلا يُطالب بما لا يخصه.' },
   { name: 'cfg_accept', label: 'يكتمل', type: 'select', options: ACCEPT, show: (v) => v.kind === 'model' },
   { name: 'cfg_lab_key', label: 'أداة المختبر', type: 'select', options: Object.fromEntries(labs.map((l) => [l.key, `${l.title_ar}${l.active === false ? ' (موقوفة)' : ''}`])), show: (v) => v.kind === 'lab',
-    help: () => 'يراها المشارك في المختبر وفي بطاقة المتطلب بزر «افتح في المختبر». والسقالة فيها بحسب مستواه في إطارها.' },
+    help: () => 'يراها المشارك في المختبر وفي بطاقة النشاط بزر «افتح في المختبر». والسقالة فيها بحسب مستواه في إطارها.' },
   { name: 'cfg_lab_accept', label: 'يكتمل', type: 'select', options: LAB_ACCEPT_AR, show: (v) => v.kind === 'lab' },
   { name: 'cfg_sections', label: 'فصول من وثيقة المبادرة (اتركها فارغة ليكتمل باعتماد الوثيقة كلها)', type: 'multi', options: Object.fromEntries(models.map((m) => [m.key, m.title_ar])), show: (v) => v.kind === 'capstone',
     help: () => 'يكتمل حين يحفظ المشارك الفصول المختارة، فتصير خطة التطبيق جزءًا من وثيقته لا ملفًا مرفوعًا.' },
@@ -547,4 +547,35 @@ export function audienceLabel(c) {
   else parts.push(`${DIM[c.dimension]}${c.only_level ? ` · ${LVL[c.only_level]} فقط` : c.min_level ? ` · ${LVL[c.min_level]} فأعلى` : ''}`);
   if ((c.exclude_tracks || []).length) parts.push(`عدا ${c.exclude_tracks.join('، ')}`);
   return parts.join(' · ');
+}
+
+// ══ العرض الواحد لمحرر الرحلة (تصور الرحلة والمسار 2026-11-27، المرحلة 21) ══
+// المحاور الثلاثة بمراحلها المتتابعة ومراحل المسار (lane=track، بشارة «خاصة بالمسار»)، والخدمات الموازية (lane=service)
+// شريط واحد تحتها. stages مرتبة بـ sort، فلا يتغير ترتيب ولا سلسلة فتح
+export const NO_AXIS_KEY = 'none';
+export const NO_AXIS_AR = 'بلا محور';
+export const NO_AXIS_NOTE_AR = 'محور هذه المراحل غير معروف؛ افتح «تحرير» واختر محورها';
+export function journeyBoard(stages = []) {
+  const list = [...(stages || [])].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const services = list.filter((s) => stageRules(s).lane === 'service');
+  const rest = list.filter((s) => stageRules(s).lane !== 'service');
+  // مرحلة محورها المخزن غير معروف لا تُنسب خفية إلى محور: تظهر في مجموعة «بلا محور» ظاهرة مع تنبيه لتصحيحها
+  const orphan = rest.filter((s) => !PHASE_AR[s.phase]);
+  const phases = Object.entries(PHASE_AR).map(([key, title]) => ({ key, title, stages: rest.filter((s) => s.phase === key) }));
+  if (orphan.length) phases.push({ key: NO_AXIS_KEY, title: NO_AXIS_AR, stages: orphan, orphan: true });
+  return { phases, services };
+}
+
+// المعلم المطابق للافتراض (4.2 البند 2): مرتكز على نهاية مرحلته نفسها، بإزاحة صفر، ويكتمل تلقائيًا باكتمالها.
+// يُطوى في سطر واحد؛ وما خالف أي شرط (أو فقد مرحلته) يظهر صفًا وشارة على بطاقة مرحلته
+export function isDefaultMilestone(m, stages = []) {
+  if (!m || m.anchor !== 'stage_end' || !m.stage_key || m.complete !== 'stage') return false;
+  if (Number(m.offset_days || 0) !== 0) return false;
+  return (stages || []).some((s) => s.key === m.stage_key);
+}
+/** @returns {{ folded: any[], shown: any[] }} */
+export function foldMilestones(list = [], stages = []) {
+  const folded = [], shown = [];
+  for (const m of list || []) (m.active !== false && isDefaultMilestone(m, stages) ? folded : shown).push(m);
+  return { folded, shown };
 }

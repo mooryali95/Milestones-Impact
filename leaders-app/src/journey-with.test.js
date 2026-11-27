@@ -53,7 +53,7 @@ describe('«تبدأ مع»: القراءة والحفظ', () => {
 
   it('التسمية في القائمة وفي جملة القاعدة', () => {
     expect(STAGE_UNLOCK_AR.with).toBe('تبدأ مع مرحلة أختارها');
-    expect(stageRuleSummary(STAGES[2], STAGES)).toBe('إلزامية · تُفتح مع بداية «التدريب» · تكتمل بمتطلباتها الإلزامية');
+    expect(stageRuleSummary(STAGES[2], STAGES)).toBe('أساسية · تُفتح مع بداية «التدريب» · تكتمل بأنشطتها الإلزامية');
   });
 });
 

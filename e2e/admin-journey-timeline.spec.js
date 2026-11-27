@@ -74,7 +74,14 @@ test('البرنامج على الحاسوب: المحاور والمراحل ا
   await setup(page, 1440);
   await tab(page, 'الرحلة والمتطلبات');
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   await expect(tl).toBeVisible();
+  // مفتاح الرموز: أيقونة لكل نوع نشاط باسمه من ACTIVITY_KIND_AR (4.3 البند 4)
+  const key = page.locator('.j-key');
+  await expect(key.locator('.j-key-kind[data-kind="workshop"] svg')).toHaveCount(1);
+  await expect(key.locator('.j-key-kind[data-kind="workshop"]')).toHaveText('جلسة جماعية');
+  await expect(page.locator('#jreq-r2 [data-kind="workshop"] svg')).toHaveCount(1);
   // البطاقات: المدة، والتأهيل بأطول مراحله، والمراحل والأنشطة
   await expect(tl.locator('.jt-cards')).toContainText('المراحل8 في 3 محاور');
   await expect(tl.locator('.jt-cards')).toContainText('4 أسابيع بدل 8 أسابيع لو كانت متتابعة');
@@ -89,8 +96,8 @@ test('البرنامج على الحاسوب: المحاور والمراحل ا
   await expect(tl.locator('.jt-dates')).toHaveCount(0);
   await expect(tl.locator('.jt-today')).toHaveCount(0);
   // كل نشاط بلاطة باسمها وزر إفصاح بوصف كامل (المرحلة 19)، والنقر يفتح التفاصيل ملاصقة لها
-  const act = tl.getByRole('button', { name: /^يوم ورشة عن بعد، مرحلة التدريب، تدريب، إلزامي/ });
-  await expect(act).toHaveAttribute('aria-label', 'يوم ورشة عن بعد، مرحلة التدريب، تدريب، إلزامي، الموعد والرابط يُحددان في الدفعة، يكمله الأدمن بتسجيل الحضور');
+  const act = tl.getByRole('button', { name: /^يوم ورشة عن بعد، مرحلة التدريب، جلسة جماعية، إلزامي/ });
+  await expect(act).toHaveAttribute('aria-label', 'يوم ورشة عن بعد، مرحلة التدريب، جلسة جماعية، إلزامي، الموعد والرابط يُحددان في الدفعة، يكمله الأدمن بتسجيل الحضور');
   await expect(act).toHaveAttribute('aria-expanded', 'false');
   await expect(act.locator('.jt-tile-name')).toHaveText('يوم ورشة عن بعد');
   await act.click();
@@ -115,6 +122,8 @@ test('البرنامج على الهاتف 390: خط رأسي بلا تمرير 
   await setup(page, 390);
   await tab(page, 'الرحلة والمتطلبات');
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   await expect(tl.locator('.jt-desk')).toBeHidden();
   const phone = tl.getByRole('list', { name: 'مراحل الرحلة' });
   await expect(phone).toBeVisible();

@@ -8,7 +8,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { date, dateOnly as day, L } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useUI } from '../ui.jsx';
-import { MILESTONE_RUBRIC, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { MILESTONE_RUBRIC, milestonesFoldedAr, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { foldMilestones } from '../methodology.js';
 import {
   MILESTONE_ANCHOR_AR, MILESTONE_COMPLETE_AR, MILESTONE_STATUS_AR,
 } from '../../../supabase/functions/leaders-api/logic.js';
@@ -37,12 +38,15 @@ const ruleLine = (m, stages) => {
   return `${when} · يكتمل ${MILESTONE_COMPLETE_AR[m.complete]}`;
 };
 
-export function ProgramMilestones({ pid, stages, canWrite }) {
+// onList: يُبلَّغ محرر الرحلة بالقائمة ليضع شارة المعلم المخالف على بطاقة مرحلته (طي المعالم، المرحلة 21)
+export function ProgramMilestones({ pid, stages, canWrite, onList }) {
   const { toast, confirm } = useUI();
   const [list, setList] = useState(null);
   const [form, setForm] = useState(null);
+  const [all, setAll] = useState(false);
   const load = useCallback(async () => { const r = await L('admin.milestones', { program_id: pid }); setList(r.success ? r.milestones : []); }, [pid]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (list && onList) onList(list); }, [list]);
   if (!list) return <Spinner />;
   const live = stages.filter((s) => s.active !== false);
   const edit = (m = { anchor: 'stage_end', complete: 'stage', offset_days: 0, active: true }) => setForm({
@@ -65,15 +69,26 @@ export function ProgramMilestones({ pid, stages, canWrite }) {
         {canWrite && <div className="la-row"><button className="la-link" onClick={seed}>معلم لنهاية كل مرحلة</button><button className="btn-sm ghost" onClick={() => edit()}>+ معلم</button></div>}
       </div>
       <p className="la-muted">المعلم نقطة يُقاس عندها موقع المشارك وتأخره. موعده يُحسب من جدول دفعته، فالبرنامج نفسه يصلح لشهر أو لسنة.</p>
-      {list.length ? (
-        <ul className="la-reqs">{list.map((m) => (
+      {(() => {
+        // المعالم المطابقة للافتراض تُطوى في سطر واحد ورابط «عرضها»، ولا يظهر صف إلا لمخالف (foldMilestones)
+        const { folded, shown } = foldMilestones(list, stages);
+        const rows = all ? list : shown;
+        return (<>
+          {folded.length > 0 && (
+            <p className="la-muted j-ms-fold">{milestonesFoldedAr(folded.length)}{' '}
+              <button type="button" className="la-link" aria-expanded={all} onClick={() => setAll(!all)}>{all ? 'طيّها' : 'عرضها'}</button></p>
+          )}
+          {rows.length ? (
+        <ul className="la-reqs">{rows.map((m) => (
           <li key={m.id} className={m.active ? '' : 'off'}>
             <span><b>{m.title_ar}</b> <small className="la-muted">{ruleLine(m, stages)}{m.weight != null ? ` · وزن ${m.weight}` : ''}</small>
               {m.description_ar && <><br /><small className="la-muted">{m.description_ar}</small></>}</span>
             {canWrite && <button className="la-link" onClick={() => edit(m)}>تحرير</button>}
           </li>
         ))}</ul>
-      ) : <p className="la-muted">لا معالم بعد.</p>}
+          ) : !list.length ? <p className="la-muted">لا معالم بعد.</p> : null}
+        </>);
+      })()}
       {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); load(); } }} />}
     </section>
   );

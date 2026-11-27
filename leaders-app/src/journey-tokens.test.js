@@ -27,10 +27,10 @@ describe('رموز الرحلة', () => {
     expect(renderJourneyText('{assessment_minutes} {duration}', ctx)).toBe('9 دقيقة أسبوع');
     expect(unresolvedTokens('{assessment_minutes}', {})).toEqual(['assessment_minutes']);
   });
-  it('journeyCoherence يلاحظ «رمز بلا قيمة» حين تعرف الإدارة القيم', () => {
+  it('journeyCoherence يلاحظ «قيمة لم تُضبط» حين تعرف الإدارة القيم', () => {
     const stages = [{ key: 's1', title_ar: 'القياس', active: true, description_ar: 'نحو {assessment_minutes}' }];
-    expect(journeyCoherence(stages, [], { assessmentMinutes: null }).some((x) => x.msg.includes('رمز بلا قيمة'))).toBe(true);
-    expect(journeyCoherence(stages, [], { assessmentMinutes: 12 }).some((x) => x.msg.includes('رمز بلا قيمة'))).toBe(false);
+    expect(journeyCoherence(stages, [], { assessmentMinutes: null }).some((x) => x.msg.includes('قيمة لم تُضبط'))).toBe(true);
+    expect(journeyCoherence(stages, [], { assessmentMinutes: 12 }).some((x) => x.msg.includes('قيمة لم تُضبط'))).toBe(false);
   });
   it('الإدارة: الرد يحمل assessment_minutes من baselineMinutes، وMethodology يمررها عبر journeyCtx بلا رقم ثابت', () => {
     expect(src('../../supabase/functions/leaders-api/admin.ts')).toContain('out.assessment_minutes = await baselineMinutes()');

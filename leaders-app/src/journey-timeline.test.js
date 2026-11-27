@@ -84,7 +84,7 @@ describe('journeyTimeline: البرنامج بالأسابيع', () => {
     expect(a['T-ATTEND'].timing).toBe('undated');
     expect(a['T-ATTEND'].undated).toBe(false);
     expect(a['T-ATTEND'].when_ar).toBe('الموعد والرابط يُحددان في الدفعة');
-    expect(a['T-ATTEND'].aria_ar).toBe('حضور يومان، مرحلة التدريب، تدريب، إلزامي، الموعد والرابط يُحددان في الدفعة، يكمله الأدمن بتسجيل الحضور');
+    expect(a['T-ATTEND'].aria_ar).toBe('حضور يومان، مرحلة التدريب، جلسة جماعية، إلزامي، الموعد والرابط يُحددان في الدفعة، يكمله الأدمن بتسجيل الحضور');
     expect(a['P-PROF'].timing).toBe('auto');
     expect(a['O-SESS'].timing).toBe('booked');
     expect(a['O-SESS'].mode_ar).toBe('عن بعد');

@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // منفصلة عن logic.js لحجمها؛ تُصدَّر منه أيضًا فلا يتغير أي استيراد قائم.
 import { requirementApplies, SESSION_DEFAULTS } from './logic.js';
-import { PHASE_AR } from './labels.js';
+import { PARALLEL_SERVICE_AR, PHASE_AR, STAGE_MODE_AR } from './labels.js';
 import { plainInt } from './digits.js';
 import { countedDef, countedItems } from './optional.js';
 
@@ -74,6 +74,8 @@ export function unresolvedTokens(text, ctx = {}) {
   return typeof r === 'string' ? [...r.matchAll(ANY_TOKEN)].map((m) => m[0].slice(1, -1)) : [];
 }
 
+// اسم الحقل في رسالة الاتساق، ليعرف الأدمن أي نص فيه الرمز المكسور دون أن يُعرض الرمز نفسه (4.1 البند 9)
+const TEXT_FIELD_AR = { title_ar: 'الاسم', duration_label: 'نص المدة', description_ar: 'الوصف', activities_ar: 'الأنشطة نصًا', outcome_ar: 'النتيجة', mode_note_ar: 'طريقة التقديم', builds_on_ar: 'يبني على', help_ar: 'الشرح' };
 const STAGE_TEXT = ['title_ar', 'duration_label', 'description_ar', 'activities_ar', 'outcome_ar', 'mode_note_ar', 'builds_on_ar'];
 /**
  * @param {any} def
@@ -118,6 +120,9 @@ export function unknownTokens(text, reqs) {
 // شاشة كل مرحلة قبول تُكمل متطلبها وحده (انظر leaders-app/src/gates.js)
 const ONBOARDING_GATE = { profile: 'P-INFO', assessment: 'A-DONE' };
 
+// اسم النشاط في رسالة الاتساق (تصور الرحلة 2026-11-27، 4.1 البند 9): بلا رمزه التقني (P-INFO) ولا رموز نصه ({sessions:…})،
+// والرمز يبقى في حقل req للربط وفي التفاصيل المتقدمة وحدها
+export const activityNameAr = (r) => `«${String(r?.title_ar || '').replace(/\{[^}]*\}/g, '…').replace(/\s+/g, ' ').trim() || 'نشاط بلا اسم'}»`;
 export function journeyCoherence(stages, requirements, opts = null) {
   const out = [];
   // opts يُمرَّر من الإدارة حين تعرف القيم (journeyCtx): رمز بلا قيمة يُلاحظ، ويراه المشارك عبارة محايدة
@@ -125,15 +130,15 @@ export function journeyCoherence(stages, requirements, opts = null) {
   const noValue = (text, where, extra = {}) => {
     if (!valueCtx) return;
     for (const t of unresolvedTokens(text, valueCtx).filter((x) => x === 'assessment_minutes' || x === 'ready_min')) {
-      out.push({ level: 'warn', ...extra, msg: `${where}: رمز بلا قيمة {${t}}${t === 'assessment_minutes' ? ` (${ASSESSMENT_MISSING_AR})` : ''}، ويراه المشارك «${t === 'assessment_minutes' ? ASSESSMENT_TBD_AR : TOKEN_TBD_AR}»` });
+      out.push({ level: 'warn', ...extra, msg: `${where}: في النص قيمة لم تُضبط${t === 'assessment_minutes' ? ` (${ASSESSMENT_MISSING_AR})` : ' (الحد الأدنى للجاهزية)'}، ويراه المشارك «${t === 'assessment_minutes' ? ASSESSMENT_TBD_AR : TOKEN_TBD_AR}»` });
     }
   };
   const reqs = (requirements || []).filter((r) => r.active !== false);
   for (const s of (stages || []).filter((x) => x.active !== false)) {
     const days = Number(s.duration_days) || 0;
     for (const f of STAGE_TEXT) {
-      for (const c of unknownTokens(s[f], reqs)) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: الرمز يشير إلى نشاط غير موجود (${c})` });
-      if (/\{duration\}/.test(s[f] || '') && !days) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: {duration} بلا مدة بالأيام` });
+      for (const c of unknownTokens(s[f], reqs)) out.push({ level: 'error', stage: s.key, field: f, token: c, msg: `«${s.title_ar}»: ${TEXT_FIELD_AR[f]} يذكر نشاطًا غير موجود (حُذف أو تغير رمزه)` });
+      if (/\{duration\}/.test(s[f] || '') && !days) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: النص يذكر المدة والمرحلة بلا مدة بالأيام` });
       noValue(s[f], `«${s.title_ar}»`, { stage: s.key });
     }
     for (const r of reqs.filter((x) => x.stage_key === s.key)) {
@@ -141,20 +146,22 @@ export function journeyCoherence(stages, requirements, opts = null) {
       const n = Number(c.sessions_required) || 0;
       const gap = MIN_GAP_DAYS[r.kind];
       if (gap && n > 1 && days && n > Math.ceil(days / gap)) {
-        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: ${sessionsAr(n)} في ${durationAr(days)} أكثر مما تسعه المرحلة (جلسة كل ${gap === 1 ? 'يوم' : `${gap} أيام`} على الأقل)` });
+        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${activityNameAr(r)}: ${sessionsAr(n)} في ${durationAr(days)} أكثر مما تسعه المرحلة (جلسة كل ${gap === 1 ? 'يوم' : `${gap} أيام`} على الأقل)` });
       }
       const range = MINUTES_RANGE[r.kind];
       if (range && c.minutes && (c.minutes < range[0] || c.minutes > range[1])) {
-        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: مدة الجلسة ${minutesAr(c.minutes)} خارج المعتاد (${range[0]} إلى ${range[1]} دقيقة)` });
+        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${activityNameAr(r)}: مدة الجلسة ${minutesAr(c.minutes)} خارج المعتاد (${range[0]} إلى ${range[1]} دقيقة)` });
       }
-      noValue(r.title_ar, r.code, { stage: s.key, req: r.code });
-      noValue(r.help_ar, r.code, { stage: s.key, req: r.code });
-      for (const code of [...unknownTokens(r.title_ar, reqs), ...unknownTokens(r.help_ar, reqs)]) out.push({ level: 'error', stage: s.key, req: r.code, msg: `${r.code}: الرمز يشير إلى نشاط غير موجود (${code})` });
+      noValue(r.title_ar, activityNameAr(r), { stage: s.key, req: r.code });
+      noValue(r.help_ar, activityNameAr(r), { stage: s.key, req: r.code });
+      for (const f of ['title_ar', 'help_ar']) {
+        for (const code of unknownTokens(r[f], reqs)) out.push({ level: 'error', stage: s.key, req: r.code, field: f, token: code, msg: `${activityNameAr(r)}: ${TEXT_FIELD_AR[f]} يذكر نشاطًا غير موجود (حُذف أو تغير رمزه)` });
+      }
     }
-    // مرحلتا القبول تُكملهما شاشتان مخصصتان؛ متطلب إلزامي آخر فيهما يُكمَل من الرحلة بعدهما لا من الشاشة
+    // مرحلتا القبول تُكملهما شاشتان مخصصتان؛ نشاط إلزامي آخر فيهما يُكمَل من الرحلة بعدهما لا من الشاشة
     if (ONBOARDING_GATE[s.key]) {
       for (const r of reqs.filter((x) => x.stage_key === s.key && countedDef(x) && x.code !== ONBOARDING_GATE[s.key])) {
-        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: متطلب إلزامي في «${s.title_ar}» لا تُكمله شاشة ${s.key === 'profile' ? 'الملف' : 'القياس'}؛ يظهر للمشارك في رحلته بعدها، فاجعله في المرحلة التالية أو اختياريًا إن كان يمنع اكتمال المرحلة` });
+        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${activityNameAr(r)}: نشاط إلزامي في «${s.title_ar}» لا تُكمله شاشة ${s.key === 'profile' ? 'الملف' : 'القياس'}؛ يظهر للمشارك في رحلته بعدها، فاجعله في المرحلة التالية أو اختياريًا إن كان يمنع اكتمال المرحلة` });
       }
     }
   }
@@ -539,7 +546,7 @@ export function stageRulesIssues(stages) {
     if (r.unlock === 'stages' && !r.after.length) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح «بعد مراحل» بلا مراحل محددة` });
     if (r.unlock === 'day' && r.day == null) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح بالأيام بلا عدد أيام` });
     if (r.unlock === 'approval') out.push({ level: 'warn', stage: s.key, msg: `«${s.title_ar}»: لا تُفتح إلا بيد الأدمن أو الخبير لكل مشارك` });
-    if (r.complete === 'approval' && r.mode === 'required') out.push({ level: 'warn', stage: s.key, msg: `«${s.title_ar}»: إلزامية لا تكتمل إلا باعتماد يدوي، وما بعدها ينتظر هذا الاعتماد` });
+    if (r.complete === 'approval' && r.mode === 'required') out.push({ level: 'warn', stage: s.key, msg: `«${s.title_ar}»: ${STAGE_MODE_AR.required} لا تكتمل إلا باعتماد يدوي، وما بعدها ينتظر هذا الاعتماد` });
   }
   // حلقة: مرحلة تنتظر (مباشرة أو عبر غيرها) مرحلة تنتظرها
   const seen = new Set(), stack = new Set();
@@ -587,7 +594,8 @@ export function sessionsMaxAr(n) {
 export function stageRuleSummary(stage, stages = []) {
   const r = stageRules(stage);
   const title = (k) => stages.find((s) => s.key === k)?.title_ar || k;
-  const mode = { required: 'إلزامية', on_demand: STAGE_TAG_AR.on_demand, optional: `${STAGE_TAG_AR.optional} مقترحة` }[r.mode];
+  // نوع المرحلة بتسمية الإدارة الواحدة (STAGE_MODE_AR: أساسية، عند الطلب، إضافية)
+  const mode = STAGE_MODE_AR[r.mode];
   const unlock = {
     previous: 'تُفتح بعد اكتمال الإلزامية قبلها',
     always: 'متاحة من البداية',
@@ -597,10 +605,10 @@ export function stageRuleSummary(stage, stages = []) {
     approval: 'يفتحها الأدمن أو الخبير',
     any: `تُفتح ${anyAr(r.any, title)}`,
   }[r.unlock];
-  const complete = { required: 'تكتمل بمتطلباتها الإلزامية', any: 'تكتمل بأي متطلب فيها', approval: 'تكتمل باعتماد الأدمن أو الخبير' }[r.complete];
+  const complete = { required: 'تكتمل بأنشطتها الإلزامية', any: 'تكتمل بأي نشاط فيها', approval: 'تكتمل باعتماد الأدمن أو الخبير' }[r.complete];
   if (r.lane === 'track') return `${LANE_AR.track} · ${unlock} · ${untilAr(r.until, title)} · ${dueBeforeAr(r.due_before, stages)}`;
   // الخدمة (T2): إتاحتها، ثم أنها لا تأخذ من الرحلة أيامًا ولا تُحسب في التقدم
-  if (r.lane === 'service') return `${LANE_AR.service} ${STAGE_TAG_AR[r.mode] || ''} · ${serviceAvailAr(stage, title)} · ${SERVICE_NOTE_AR}`;
+  if (r.lane === 'service') return `${PARALLEL_SERVICE_AR} · ${serviceAvailAr(stage, title)} · ${SERVICE_NOTE_AR}`;
   return `${mode} · ${unlock} · ${complete}`;
 }
 /** نهاية المسار بجملة @param {string} until @param {(k: string) => string} [title] */

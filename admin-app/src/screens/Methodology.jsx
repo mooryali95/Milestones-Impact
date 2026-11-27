@@ -7,9 +7,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { ASSESSMENT_MISSING_AR, completionSource, journeyCoherence, journeyCtx, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { COMPLETION_AR, JOURNEY_ISSUE_AR, JOURNEY_ISSUE_TONE, JOURNEY_SAFE_AR, journeyIssuesAr, PROGRAM_VERSION_STATE, PROGRAM_VERSION_STATE_TONE } from '../../../supabase/functions/leaders-api/labels.js';
+import { ACTIVITY_AR, ACTIVITY_KIND_AR, COMPLETION_AR, JOURNEY_KEY_AR, PARALLEL_SERVICE_AR, PARALLEL_SERVICE_NOTE_AR, TRACK_ONLY_AR, JOURNEY_ISSUE_AR, JOURNEY_ISSUE_TONE, JOURNEY_SAFE_AR, journeyIssuesAr, PROGRAM_VERSION_STATE, PROGRAM_VERSION_STATE_TONE } from '../../../supabase/functions/leaders-api/labels.js';
 import {
-  CELL_FIELDS, INST_FIELDS, KIND, LVLS, lockReqCode, MODE, MODEL_DEFAULT, PHASE, QUESTIONS_LOCK_AR, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
+  CELL_FIELDS, foldMilestones, INST_FIELDS, journeyBoard, NO_AXIS_NOTE_AR, LVLS, lockReqCode, MODE, MODEL_DEFAULT, QUESTIONS_LOCK_AR, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
 } from '../methodology.js';
 import Form from '../Form.jsx';
@@ -21,6 +21,8 @@ import { versionState } from '../program-state.js';
 import { keepSpot, saveQueue, takeSpot } from '../review-queue.js';
 import { readQuery, writeQuery } from '../route.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
+// أيقونات أنواع النشاط من مجموعة تطبيق leaders نفسها: shared/ui/Ico.jsx
+import Ico, { ACTIVITY_KIND_ICO } from '../../../shared/ui/Ico.jsx';
 import { journeyAudience, journeyAudienceAr } from '../program-reach.js';
 import { journeyTimeline } from '../../../supabase/functions/leaders-api/journey-timeline.js';
 
@@ -130,7 +132,7 @@ export function JourneyStatus({ pid, data, issues = [], onIssue }) {
               {issues.map((x, i) => (
                 <li key={i}>
                   <StatusChip status={x.level === 'error' ? 'error' : 'warn'} labels={JOURNEY_ISSUE_AR} tones={JOURNEY_ISSUE_TONE} />{' '}
-                  {onIssue && (x.req || x.stage) ? <button type="button" className="la-link" onClick={() => onIssue(x)}>{x.msg}</button> : x.msg}
+                  {onIssue && (x.req || x.stage) ? <button type="button" className="la-link" title={x.token || undefined} onClick={() => onIssue(x)}>{x.msg}</button> : <span title={x.token || undefined}>{x.msg}</span>}
                 </li>
               ))}
             </ul>
@@ -148,6 +150,56 @@ export function JourneyText({ text }) {
   return text.split(MISSING_TOKEN).flatMap((part, i) => (i ? [<span key={i} className="la-chip warn">{ASSESSMENT_MISSING_AR}</span>, part] : [part]));
 }
 
+// مفتاح الرموز الواحد (المرحلة 21، 4.2 البند 3 و4.3 البند 4): كل علامة بكلمتها بجانب شكلها، فلا يُعتمد على اللون أو الحد وحده
+export function JourneyKey() {
+  const k = JOURNEY_KEY_AR;
+  return (
+    <dl className="j-key" aria-label={k.title}>
+      <dt className="sr-only">{k.title}</dt>
+      <dd><span className="j-key-mark must" aria-hidden="true" />{k.required}</dd>
+      <dd><span className="j-key-mark opt" aria-hidden="true" />{k.optional}</dd>
+      <dd><span className="la-chip j-auto">{k.auto}</span></dd>
+      <dd><span className="la-chip warn">{k.review}</span></dd>
+      {Object.entries(ACTIVITY_KIND_ICO).map(([kind, ico]) => (
+        <dd key={kind} className="j-key-kind" data-kind={kind}><Ico name={ico} />{ACTIVITY_KIND_AR[kind]}</dd>
+      ))}
+    </dl>
+  );
+}
+
+// الشريط الزمني القصير (4.2 البند 1): أعمدة المراحل بطول مدتها وتداخلها، بلا أسماء أنشطة. من نموذج journeyTimeline نفسه
+// (الخانة وموضع المرحلة فيها)، فلا حساب ثانٍ للمدد. النقر على مرحلة ينقل إلى بطاقتها
+export function StageStrip({ model, onStage }) {
+  if (!model || model.empty) return null;
+  const slots = new Map((model.slots || []).map((x) => [x.key, x]));
+  const stageLanes = Math.max(1, ...(model.stages || []).map((s) => (s.lane || 0) + 1));
+  // مراحل lane=track لا تقع في model.stages بل في model.tracks على المقياس نفسه (at وwidth): لكل منها صف تحت المراحل بشارتها
+  const tracks = model.tracks || [];
+  const rows = stageLanes + tracks.length;
+  // لا يقل ارتفاع العمود عن 24px (WCAG 2.5.8)؛ ويطول الشريط بعدد الصفوف بدل تقليص الأعمدة
+  const rowPx = Math.max(24, 48 / rows);
+  const bar = (key, cls, title, label, start, width, row, text) => (
+    <button key={key} type="button" className={`j-strip-bar ${cls}`} title={`${title} · ${label}`}
+      style={{ insetInlineStart: `${start}%`, inlineSize: `${width}%`, insetBlockStart: `${rowPx * row}px`, blockSize: `${rowPx}px` }}
+      onClick={() => onStage?.(key)}>{text}</button>
+  );
+  return (
+    <div className="j-strip-wrap" role="group" aria-labelledby="j-strip-h">
+    <p className="la-muted j-strip-h" id="j-strip-h">المراحل على الزمن{model.total_label ? ` · ${model.total_label}` : ''}</p>
+    <div className="j-strip" style={{ blockSize: `${rowPx * rows}px` }}>
+      {(model.stages || []).map((s) => {
+        const sl = slots.get(s.slot);
+        if (!sl) return null;
+        const start = sl.at + (sl.width * (s.lane_at || 0)) / 100;
+        const width = Math.max(2, (sl.width * (s.lane_width || 100)) / 100);
+        return bar(s.key, `ph-${s.phase}${s.optional ? ' opt' : ''}`, s.title, s.label, start, width, s.lane || 0, s.title);
+      })}
+      {tracks.map((t, i) => bar(t.key, `ph-${t.phase} track${t.optional ? ' opt' : ''}`, `${t.title} · ${TRACK_ONLY_AR}`, t.label, t.at, Math.max(2, t.width), stageLanes + i, `${t.title} · ${TRACK_ONLY_AR}`))}
+    </div>
+    </div>
+  );
+}
+
 const NONE = Object.freeze([]);
 export function Journey({ catalog, reload, canWrite, onProgram }) {
   const [edit, editor] = useEditor(reload);
@@ -157,9 +209,13 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   useEffect(() => { L('admin.programs').then(setPdata); }, [pid]);
   // تحصين (نقطة التحقق 2026-11-27): رد ناجح بلا journey_stages أو stage_requirements يُعرض رحلة فارغة بدل الانهيار
   const stagesIn = Array.isArray(catalog.journey_stages) ? catalog.journey_stages : NONE;
-  const stages = [...stagesIn].sort((a, b) => a.sort - b.sort);
+  const stages = useMemo(() => [...stagesIn].sort((a, b) => a.sort - b.sort), [stagesIn]);
   const reqs = Array.isArray(catalog.stage_requirements) ? catalog.stage_requirements : NONE;
   const mv = { catalog, reload, canWrite };
+  // المعالم المخالفة للافتراض: شارة على بطاقة مرحلتها (طي المعالم، 4.2 البند 2)
+  const [msList, setMsList] = useState(NONE);
+  const msOdd = useMemo(() => new Set(foldMilestones(msList, stages).shown.filter((m) => m.active !== false && m.stage_key).map((m) => m.stage_key)), [msList, stages]);
+  const board = useMemo(() => journeyBoard(stagesIn), [stagesIn]);
   useSpot(catalog);
   // سياق واحد (journeyCtx): مدة القياس من رد admin.catalog (baselineMinutes على الخادم)، لا قيمة ثابتة هنا
   const ctxOf = (s) => journeyCtx({ reqs, readyMin: READY_MIN, assessmentMinutes: catalog.assessment_minutes }, s);
@@ -175,7 +231,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   // القدوم من «الحضور والجلسات» (attendance-groups.js): ‎?add=workshop‎ يفتح نموذج المتطلب نفسه بنوع الجلسات الجماعية،
   // و‎?req=<id>‎ ينقل إلى المتطلب في القائمة. يُحفظ بالمسار نفسه (stage_requirements في المسودة)، فلا نسخة ثانية للمتطلب
   const newReq = (stageKey, kind = 'check') => edit({
-    title: 'متطلب جديد', fields: reqFields(stages, catalog.learning_models || [], catalog.lab_links || []),
+    title: `${ACTIVITY_AR} جديد`, fields: reqFields(stages, catalog.learning_models || [], catalog.lab_links || []),
     values: reqToForm({ stage_key: stageKey, kind, required: true, active: true }),
     onSave: (v) => save('stage_requirements', { program_id: pid, sort: reqs.filter((x) => x.stage_key === v.stage_key).length + 1 })(formToReq(v)),
   });
@@ -198,6 +254,51 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     (el.querySelector('button') || el).focus?.({ preventScroll: true });
   };
+  const toStage = (key) => {
+    const el = [...document.querySelectorAll('[data-mt-row]')].find((e) => e.dataset.mtRow === key);
+    if (!el) return;
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    el.focus?.({ preventScroll: true });
+  };
+  const plain = (t, s) => String(renderJourneyText(t, ctxOf(s)) ?? '');
+  // بطاقة المرحلة: الرقم والاسم والمدة وطريقة التقديم، وجملة القاعدة، وأنشطتها صفوفًا بأسماء كاملة بلا قص (4.3 وضع العرض 1).
+  // الرمز التقني (P-INFO) في title وحقل التحرير المتقدم وحدهما (4.1 البند 9)
+  const stageCard = (s) => (
+    <KeyRow as="section" key={s.key} rowId={s.key} tabIndex={-1} aria-labelledby={`j-st-${s.key}`} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>{(skeys) => (<>
+      <div className="la-row between">
+        <div><b id={`j-st-${s.key}`}>{s.sort}. {shown(s.title_ar, s)}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small>
+          {stageRules(s).lane === 'track' && <> <small className="la-chip">{TRACK_ONLY_AR}</small></>}
+          {msOdd.has(s.key) && <> <small className="la-chip">معلم مخصص</small></>}</div>
+        <div className="la-row">
+          <RowMove {...mv} entity="journey_stages" id={s.key} name={`المرحلة ${s.sort}`} keysRef={skeys} />
+          {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs, stages, s.key, catalog.assessment_minutes), values: stageToForm(s), onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) })}>تحرير</button>}
+        </div>
+      </div>
+      <p className={`la-rule ${stageRules(s).mode}`}>{stageRuleSummary(s, stages)}</p>
+      {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
+      <ul className="la-reqs j-acts">
+        {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (
+          <KeyRow key={r.id} rowId={r.id} id={`jreq-${r.id}`} title={r.code} className={`${r.required ? 'req-must' : 'req-opt'}${r.active ? '' : ' off'}`}>{(rkeys) => (<>
+            <span className="j-act">
+              <span className="j-act-name">{shown(r.title_ar)}</span>{' '}
+              <small className="la-chip" data-kind={r.kind}>{ACTIVITY_KIND_ICO[r.kind] && <Ico name={ACTIVITY_KIND_ICO[r.kind]} />}{ACTIVITY_KIND_AR[r.kind] || r.kind}</small>{' '}
+              <small className="la-chip j-word">{r.required ? JOURNEY_KEY_AR.required : JOURNEY_KEY_AR.optional}</small>{' '}
+              <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : completionSource(r) === 'auto' ? 'j-auto' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
+              {r.dimension && <> <small className="la-chip">{DIM[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small></>}
+              {r.needs_review && <> <small className="la-chip warn">{JOURNEY_KEY_AR.review}</small></>}
+            </span>
+            <span className="la-row">
+              <RowMove {...mv} entity="stage_requirements" id={r.id} name={`${ACTIVITY_AR} «${plain(r.title_ar)}»`} keysRef={rkeys} />
+              {canWrite && <button className="la-link" onClick={() => edit({ title: `تحرير ${ACTIVITY_AR}`, fields: lockReqCode(reqFields(stages, catalog.learning_models || [], catalog.lab_links || [])), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
+            </span>
+          </>)}</KeyRow>
+        ))}
+      </ul>
+      {canWrite && (
+        <button className="la-link" onClick={() => newReq(s.key)}>+ {ACTIVITY_AR}</button>
+      )}
+    </>)}</KeyRow>
+  );
   const toAddStage = () => {
     const btn = document.querySelector('[data-add-stage]');
     if (!btn) return;
@@ -209,56 +310,40 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
       {/* الترويسة الموحدة (المرحلة 7 و18) وسطر حالتها الواحد (المرحلة 19) */}
       <ScreenHead title="الرحلة والمتطلبات" status={<JourneyStatus pid={pid} data={pdata} issues={issues} onIssue={toIssue} />}
         actions={onProgram ? <ProgramBar current={pid} onProgram={onProgram} programs={pdata?.success ? pdata.programs : null} /> : null} />
-      <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} pop />
-      <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} />
-      <p className="la-muted">الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الحاجة، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
-      {Object.entries(PHASE).map(([ph, phl]) => (
-        <React.Fragment key={ph}>
-          <div className="la-row between">
-            <h3 className="la-phase">{phl}</h3>
-            {canWrite && <button className="btn-sm ghost" data-add-stage={ph} onClick={async () => {
-              const title_ar = await prompt(`اسم المرحلة الجديدة في «${phl}»`, '');
-              if (!title_ar) return;
-              const r = await L('admin.stage-create', { program_id: pid, title_ar, phase: ph });
-              if (!r.success) return toast(r.message);
-              toast('أُضيفت المرحلة آخر الرحلة. رتّبها بالأسهم واضبط نوعها ومتى تُفتح من «تحرير».');
-              reload();
-            }}>+ مرحلة</button>}
-          </div>
-          {stages.filter((s) => s.phase === ph).map((s) => (
-            <KeyRow as="section" key={s.key} rowId={s.key} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>{(skeys) => (<>
-              <div className="la-row between">
-                <div><b>{s.sort}. {shown(s.title_ar, s)}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
-                <div className="la-row">
-                  <RowMove {...mv} entity="journey_stages" id={s.key} name={`المرحلة ${s.sort}`} keysRef={skeys} />
-                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs, stages, s.key, catalog.assessment_minutes), values: stageToForm(s), onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) })}>تحرير</button>}
-                </div>
-              </div>
-              <p className={`la-rule ${stageRules(s).mode}`}>{stageRuleSummary(s, stages)}</p>
-              {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
-              <ul className="la-reqs">
-                {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (
-                  <KeyRow key={r.id} rowId={r.id} id={`jreq-${r.id}`} className={r.active ? '' : 'off'}>{(rkeys) => (<>
-                    <span>
-                      <code>{r.code}</code> {shown(r.title_ar)} <small className="la-chip">{KIND[r.kind]}</small> <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
-                      {r.dimension && <small className="la-chip">{DIM[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small>}
-                      {!r.required && <small className="la-chip">اختياري</small>}
-                      {r.needs_review && <small className="la-chip warn">مراجعة</small>}
-                    </span>
-                    <span className="la-row">
-                      <RowMove {...mv} entity="stage_requirements" id={r.id} name={`المتطلب ${r.code}`} keysRef={rkeys} />
-                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: lockReqCode(reqFields(stages, catalog.learning_models || [], catalog.lab_links || [])), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
-                    </span>
-                  </>)}</KeyRow>
-                ))}
-              </ul>
-              {canWrite && (
-                <button className="la-link" onClick={() => newReq(s.key)}>+ متطلب</button>
-              )}
-            </>)}</KeyRow>
-          ))}
-        </React.Fragment>
-      ))}
+      {/* العرض الواحد (المرحلة 21): الشريط الزمني القصير مفتوحًا، وتفصيل الأنشطة الزمني مطويًا، ثم المحاور وبطاقاتها */}
+      <StageStrip model={timeline} onStage={toStage} />
+      <details className="j-tl-detail">
+        <summary>التفصيل الزمني للأنشطة</summary>
+        <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} pop />
+      </details>
+      <JourneyKey />
+      <div className="j-board">
+        {board.phases.map(({ key: ph, title: phl, stages: list, orphan }) => (
+          <section key={ph} className="j-axis" aria-labelledby={`j-axis-${ph}`}>
+            <div className="la-row between">
+              <h3 className="la-phase" id={`j-axis-${ph}`}>{phl}</h3>
+              {canWrite && !orphan && <button className="btn-sm ghost" data-add-stage={ph} onClick={async () => {
+                const title_ar = await prompt(`اسم المرحلة الجديدة في «${phl}»`, '');
+                if (!title_ar) return;
+                const r = await L('admin.stage-create', { program_id: pid, title_ar, phase: ph });
+                if (!r.success) return toast(r.message);
+                toast('أُضيفت المرحلة آخر الرحلة. رتّبها بالأسهم واضبط نوعها ومتى تُفتح من «تحرير».');
+                reload();
+              }}>+ مرحلة</button>}
+            </div>
+            {orphan && <p className="la-hint warn" role="note">{NO_AXIS_NOTE_AR}</p>}
+            <div className="j-cards">{list.map(stageCard)}</div>
+          </section>
+        ))}
+      </div>
+      {board.services.length > 0 && (
+        <section className="j-service" aria-labelledby="j-service-h">
+          <h3 className="la-phase" id="j-service-h">{PARALLEL_SERVICE_AR}</h3>
+          <p className="la-muted">{PARALLEL_SERVICE_NOTE_AR}</p>
+          <div className="j-cards">{board.services.map(stageCard)}</div>
+        </section>
+      )}
+      <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} onList={setMsList} />
       {editor}
     </>
   );

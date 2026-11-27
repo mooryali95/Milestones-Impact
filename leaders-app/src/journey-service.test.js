@@ -65,7 +65,7 @@ describe('القواعد: «خدمة» تُحفظ منذ T2 بإتاحتها، �
   });
   it('الجملة على البطاقة', () => {
     const s = SVC.find((x) => x.key === 'consulting');
-    expect(stageRuleSummary(s, SVC)).toBe('خدمة عند الحاجة · تُتاح بعد اكتمال «مرحلة approval» حتى نهاية الرحلة · لا تأخذ من الرحلة أيامًا ولا تُحسب في التقدم ولا يُشترط اكتمالها');
+    expect(stageRuleSummary(s, SVC)).toBe('خدمة موازية · تُتاح بعد اكتمال «مرحلة approval» حتى نهاية الرحلة · لا تأخذ من الرحلة أيامًا ولا تُحسب في التقدم ولا يُشترط اكتمالها');
     expect(serviceAvailAr({ rules: { lane: 'service', unlock: 'always' } })).toBe('متاحة من بداية الرحلة حتى نهاية الرحلة');
     expect([sessionsMaxAr(1), sessionsMaxAr(2), sessionsMaxAr(3), sessionsMaxAr(null)]).toEqual(['حتى جلسة واحدة للمشارك', 'حتى جلستين للمشارك', 'حتى 3 جلسات للمشارك', '']);
   });

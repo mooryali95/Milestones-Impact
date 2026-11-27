@@ -58,19 +58,35 @@ export const REQ_STATUS = { pending: 'لم يُنجز', submitted: 'بانتظا
 export const PHASE_AR = { admission: 'القبول', qualification: 'التأهيل', impact: 'الأثر' };
 // قواعد المرحلة (يضبطها الأدمن لكل مرحلة في كل برنامج). الفارغ = السلوك الأصلي:
 // إلزامية، تُفتح بعد اكتمال ما قبلها، وتكتمل بمتطلباتها الإلزامية.
-export const STAGE_MODE_AR = { required: 'إلزامية', on_demand: 'عند الطلب', optional: 'اختيارية مقترحة' };
+// نوع المرحلة (rules.mode) في واجهة الإدارة وحدها (تصور الرحلة والمسار 2026-11-27، 4.1 البند 4، قرار المالك 6.2):
+// «إضافية» لا «اختيارية» حتى لا تتشارك المرحلة والنشاط كلمة. تسميات عرض للقيم المخزنة نفسها، فلا ترحيل ولا مساس بالنسخ
+export const STAGE_MODE_AR = { required: 'أساسية', on_demand: 'عند الطلب', optional: 'إضافية' };
+// مصطلحات محرر الرحلة في الإدارة (4.1): «نشاط» بدل «متطلب»، و«خدمة موازية» للمسار lane=service، و«يكتمل تلقائيًا».
+// شاشات المشارك والبريد لا تقرأ هذه، فلا تتغير (4.1 البند 3)
+export const ACTIVITY_AR = 'نشاط';
+export const AUTO_DONE_AR = 'يكتمل تلقائيًا';
+export const PARALLEL_SERVICE_AR = 'خدمة موازية';
+export const PARALLEL_SERVICE_NOTE_AR = 'متاحة طوال الرحلة ولا تحجب ما بعدها';
+export const TRACK_ONLY_AR = 'خاصة بالمسار';
+// مفتاح الرموز الواحد في محرر الرحلة (4.2 البند 3 و4.3 البند 4): كل علامة بكلمتها، لا باللون أو الحد وحده
+export const JOURNEY_KEY_AR = Object.freeze({
+  title: 'مفتاح الرموز', required: 'إلزامي', optional: 'اختياري', auto: AUTO_DONE_AR, review: 'يحتاج مراجعة',
+});
+// طي المعالم المطابقة للافتراض (4.2 البند 2)
+export const milestonesFoldedAr = (n) => countAr(n, 'معلم واحد يتبع نهاية مرحلته تلقائيًا', 'معلمان يتبعان نهايتي مرحلتيهما تلقائيًا', 'معالم تتبع نهايات المراحل تلقائيًا', 'معلمًا يتبع نهايات المراحل تلقائيًا');
 export const STAGE_UNLOCK_AR = {
   previous: 'بعد اكتمال المراحل الإلزامية قبلها', with: 'تبدأ مع مرحلة أختارها', always: 'متاحة من البداية', stages: 'بعد اكتمال مراحل أختارها',
   day: 'بعد عدد أيام من بداية الدفعة', approval: 'حين يفتحها الأدمن أو الخبير',
   // للخدمة وحدها (الاستشارة خدمة، 2026-11-24): يكفي شرط واحد مما يختاره الأدمن
   any: 'حين يتحقق أي شرط أختاره (للخدمة)',
 };
-export const STAGE_COMPLETE_AR = { required: 'بإنجاز متطلباتها الإلزامية', any: 'بإنجاز أي متطلب فيها', approval: 'باعتماد الأدمن أو الخبير' };
+export const STAGE_COMPLETE_AR = { required: 'بإنجاز أنشطتها الإلزامية', any: 'بإنجاز أي نشاط فيها', approval: 'باعتماد الأدمن أو الخبير' };
 export const STAGE_STATUS_AR = { done: 'مكتملة', active: 'الحالية', available: 'متاحة عند الحاجة', locked: 'مقفلة' };
 // تدخل الأدمن لمشارك بعينه في مرحلة: يفتحها أو يعتمد اكتمالها أو يعفيه منها
 // الخط الزمني «الرحلة في لمحة» (J1b): نوع كل نشاط بكلمة، ومن يكمله، وحال المرحلة في الدفعة
+// أسماء أنواع النشاط، مصدر واحد للإدارة والمشارك وقوالب النشاط (4.1 البند 11): لا يتشارك نوعان اسمًا
 export const ACTIVITY_KIND_AR = Object.freeze({
-  workshop: 'تدريب', check: 'تدريب', meeting: 'لقاء', reading: 'قراءة واختبار', video: 'مقطع مرئي', coaching: 'توجيه فردي',
+  workshop: 'جلسة جماعية', check: 'تدريب', meeting: 'لقاء', reading: 'قراءة واختبار', video: 'مقطع مرئي', coaching: 'توجيه فردي',
   curriculum: 'منهج المسار', upload: 'رفع ملف', form: 'نموذج', model: 'نموذج تطبيقي', capstone: 'وثيقة المبادرة',
   survey: 'استبانة', lab: 'أداة من المختبر', auto: 'آلي',
 });
@@ -385,7 +401,7 @@ export const rubricLevelAr = (n) => RUBRIC_LEVEL_AR[Math.round(Number(n))] || nu
 export const EXPERT_RATING_PCT = Object.freeze({ 1: 0, 2: 25, 3: 50, 4: 75, 5: 100 });
 
 // كيف يكتمل بند الرحلة (completionSource)
-export const COMPLETION_AR = { auto: 'آلي من حالة المشارك', evidence: 'مرتبط بمكانه ودليله', manual: 'يدوي' };
+export const COMPLETION_AR = { auto: AUTO_DONE_AR, evidence: 'مرتبط بمكانه ودليله', manual: 'يدوي' };
 
 // ── تقييم 360 (تصور 2026-11-11، اعتمده المالك) ──
 // مجموعات المقيّمين: المدير يظهر باسم دوره (معلن له)، وغيره لا يظهر إلا مجمّعًا مع اثنين على الأقل من مجموعته

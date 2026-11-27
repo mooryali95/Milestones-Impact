@@ -136,9 +136,11 @@ test('البرنامج: نموذج المرحلة يختار «خدمة لمن �
   const calls = await setup(page, 1440);
   await nav(page, 'الرحلة والمتطلبات');
   const tl = page.getByRole('region', { name: 'رحلة البرنامج' });
+  // المرحلة 21: تفصيل الأنشطة الزمني مطوي تحت الشريط القصير
+  await page.locator('details.j-tl-detail > summary').click();
   await expect(tl.getByRole('group', { name: 'الخدمات' })).toContainText('الاستشارة');
   const sec = page.locator('.la-stage-ed', { hasText: 'الاستشارة' });
-  await expect(sec.locator('.la-rule')).toHaveText('خدمة عند الحاجة · تُتاح بعد اكتمال «اعتماد المستوى» حتى نهاية الرحلة · لا تأخذ من الرحلة أيامًا ولا تُحسب في التقدم ولا يُشترط اكتمالها');
+  await expect(sec.locator('.la-rule')).toHaveText('خدمة موازية · تُتاح بعد اكتمال «اعتماد المستوى» حتى نهاية الرحلة · لا تأخذ من الرحلة أيامًا ولا تُحسب في التقدم ولا يُشترط اكتمالها');
   await sec.locator('.btn-sm', { hasText: 'تحرير' }).first().click();
   const form = page.getByRole('dialog', { name: 'مرحلة: الاستشارة' });
   await expect(form.getByRole('combobox', { name: /^طبيعتها في الرحلة/ })).toHaveValue('service');
