@@ -78,7 +78,8 @@ describe('فخامة الشهادة: التوقيع والختم والتاري�
   });
   it('بلا موقّع: اسم الجهة المصدرة بالعربية، بلا توقيع مصطنع', () => {
     const h = certificateHtml(base, '');
-    expect(h).toContain(`<b>${ISSUER_AR}</b>`);
+    // اسم الجهة عربي الأساس واسم المنصة اللاتيني معزول، فلا ينقلب ترتيبه في كتلة التوقيع
+    expect(h).toContain('<b dir="rtl">منصة <bdi dir="ltr">Milestone Impact</bdi></b>');
     expect(h).not.toContain('class="issuer"');
     expect(h).toMatch(/<div class="ink"><\/div>/);
   });

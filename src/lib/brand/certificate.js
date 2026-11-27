@@ -72,7 +72,7 @@ const seal = (valid) => `<svg class="cseal" viewBox="0 0 120 120" xmlns="http://
 export const ISSUER_AR = 'منصة Milestone Impact';
 const attest = (s) => s
   ? `<div class="attest"><div class="ink">${s.image ? `<img src="${esc(s.image)}" alt="">` : ''}</div><div class="line"></div><b>${esc(s.name)}</b>${s.title ? `<span>${esc(s.title)}</span>` : ''}</div>`
-  : `<div class="attest"><div class="ink"></div><div class="line"></div><b>${ISSUER_AR}</b><span>الجهة المصدِرة</span></div>`;
+  : `<div class="attest"><div class="ink"></div><div class="line"></div><b dir="rtl">منصة <bdi dir="ltr">Milestone Impact</bdi></b><span>الجهة المصدِرة</span></div>`;
 
 // السلم (تصور الفخامة، المرحلة 2): الاسم أبرز عنصر، ولا وزن دون 400. بالنقطة
 export const CERT_TYPE = Object.freeze({ name: 40, title: 28, body: 12, verify: 7.5, serial: 8, rights: 7, signer: 10, signerTitle: 8 });
