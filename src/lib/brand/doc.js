@@ -7,7 +7,7 @@
 // المرجع: Milestone-Impact-Brand-Brief (الألوان، الخطوط الخفيفة، الماسة، الختم مرة واحدة).
 // كل نص يدخل الوثيقة يمر عبر esc(): النافذة ترث نطاق التطبيق.
 import { pdfServer } from './pdf-source.js';
-import { orgLogoHtml, refreshLogos, primeLogos, logosPending } from './logo.js';
+import { orgLogoHtml, refreshLogos, primeLogos, logosPending, logoInfo, logoIsLight } from './logo.js';
 import { DOC_LIVE_HEAD_AR, DOC_WATERMARK_AR, REPORT_RIGHTS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 
@@ -364,11 +364,13 @@ function runningHead(meta) {
   const b = meta.brand;
   const logo = b && safeLogo(b.logo);
   const color = (b && brandColor(b.color)) || C.gold;
-  const org = b ? (logo ? `<img src="${esc(logo)}" alt="">` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
+  // الشعار الفاتح على رقعة جرافيتية كما في الغلاف، فلا يضيع على أبيض الترويسة
+  const light = logo && (logoInfo(logo)?.light ?? logoIsLight(logo));
+  const org = b ? (logo ? `<span class="ph-logo${light ? ' light' : ''}"><img src="${esc(logo)}" alt=""></span>` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
   return `<div id="pdf-head" style="position:absolute;top:0;left:0;width:794px;height:${mmPx(PAGE_MM.top)}px;background:#fff;direction:rtl;display:flex;align-items:center;gap:10px;padding:14px ${mmPx(PAGE_MM.side)}px 0;font:400 ${TYPE_SCALE.footer}pt 'Noto Kufi Arabic',sans-serif;color:${C.muted}">
 <span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:6mm">${org}</span>` : ''}</span><span style="display:flex;align-items:center;direction:ltr;margin-right:auto" class="ph-mi">${LOGO}</span>
 <i style="position:absolute;bottom:12px;left:${mmPx(PAGE_MM.side)}px;right:${mmPx(PAGE_MM.side)}px;height:1px;background:${color};opacity:.7"></i>
-</div><style>#pdf-head .ph-org img{height:6mm;max-width:40mm;object-fit:contain;display:block}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:4mm;width:auto;display:block}</style>`;
+</div><style>#pdf-head .ph-org img{height:6mm;max-width:40mm;object-fit:contain;display:block}#pdf-head .ph-logo{display:flex;align-items:center}#pdf-head .ph-logo.light{background:${C.graphite};padding:1mm 1.5mm}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:4mm;width:auto;display:block}</style>`;
 }
 
 // يفتح الوثيقة في نافذة مستقلة بشريط «طباعة أو حفظ PDF». يعيد false إن حُجبت النافذة.

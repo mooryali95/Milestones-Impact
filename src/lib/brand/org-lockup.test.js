@@ -97,6 +97,12 @@ describe('العلامة المشتركة على الغلاف', () => {
     expect(head).toContain('class="ph-mi"');
     expect(head).toMatch(/#pdf-head \.ph-mi svg\{height:4mm/);
   });
+  it('ترويسة الصفحات: الشعار الفاتح على رقعة جرافيتية فلا يضيع على الأبيض', () => {
+    const p = documentHtml(meta({ name: 'ج', logo: svg('<svg viewBox="0 0 100 100"><path fill="#fff"/></svg>') }), '', { pdf: true });
+    const head = p.slice(p.indexOf('id="pdf-head"'));
+    expect(head).toContain('<span class="ph-logo light"');
+    expect(head).toMatch(/#pdf-head \.ph-logo\.light\{background:#0B272F;padding:1mm 1\.5mm/i);
+  });
   it('علامة المنصة في الطرف المقابل: الهامش التلقائي فيزيائي، فاتجاهها ltr يقلب الهامش المنطقي إلى اليسار فتلتصق بالجهة', () => {
     const p = documentHtml(meta({ name: 'ج', logo: png(400, 100) }), '', { pdf: true });
     const mi = p.match(/<span style="([^"]*)" class="ph-mi">/)[1];
