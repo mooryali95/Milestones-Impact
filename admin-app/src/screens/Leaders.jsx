@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // سياق تطبيق القادة: المنهجية والكتاب والمختبر والمشاركون والجهات والشهادات
 // ════════════════════════════════════════════════════════════════
-import { PageHeader } from '../PageHeader.jsx';
+import { PageHeader, SectionTitle } from '../PageHeader.jsx';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { lazyNamed, lazyRetry } from '../lazy-retry.js';
 import { L } from '../leaders.js';
@@ -56,6 +56,8 @@ export { TABS };
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
 const TAB_KEYS = new Set(TABS.map(([k]) => k));
 const TAB_LABEL = Object.fromEntries(TABS);
+// عنوان الترويسة والمستند للقسم: اسمه في الأقسام نفسه، و«تطبيق القادة» لقسم غير معروف
+export const sectionTitle = (tab) => TAB_LABEL[tab] || 'تطبيق القادة';
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key> · capstones/<id>
 const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
 
@@ -161,10 +163,12 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else body = <Orgs data={orgData} reload={loadOrgs} canWrite={canWrite} orgId={orgId} onOpen={(id) => (id ? openOrg(id) : at('orgs'))} onPerson={openPerson} />;
 
   return (
+    <SectionTitle.Provider value={sectionTitle(tab)}>
     <div className="dash-body">
+      {/* عنوان الترويسة وعنوان المستند اسم القسم المفتوح (المرحلة 7)، واسم التطبيق فوقه سطرًا صغيرًا */}
       {/* الترويسة: العنوان وحده، والنطاق في عنوان المستند (تصور 2026-11-26، القسم العام البند 3) */}
       {/* مفتاحها القسم: التبديل بين الأقسام يعيد تركيبها فينتقل التركيز إلى h1 (PageHeader)، ولا يُسحب عند أول تحميل */}
-      <PageHeader key={tab} eyebrow="المنتج الأول" title="تطبيق القادة" domain="leaders.sunkvalue.com" status={!canWrite ? 'عرض فقط' : null} />
+      <PageHeader key={tab} eyebrow="تطبيق القادة" title={sectionTitle(tab)} domain="leaders.sunkvalue.com" status={!canWrite ? 'عرض فقط' : null} />
       {/* على الشاشات العريضة الأقسام عمود جانبي ثابت بجوار المحتوى، فلا تأخذ من ارتفاع الشاشة شيئًا (الأنماط في leaders-admin.css) */}
       <div className="la-shell">
       <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
@@ -196,5 +200,6 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
         <ScreenBoundary key={tab}><Suspense fallback={<Spinner />}>{body}</Suspense></ScreenBoundary></div>
       </div>
     </div>
+    </SectionTitle.Provider>
   );
 }

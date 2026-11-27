@@ -40,7 +40,7 @@ const PRESETS = [
 ];
 const EMPTY = { full_name: '', email: '', phone: '', title: '', bio: '', linkedin_url: '', roles: [], dimensions: [], levels: [], sectors: '', languages: ['ar'], weekly_hours: '', years_experience: '', hourly_rate: '', admin_note: '', committees: [] };
 
-const Chips = ({ list, labels }) => (list?.length ? <span className="ex-chips">{list.map((k) => <span key={k} className="la-chip">{labels[k] || k}</span>)}</span> : <span className="la-muted">·</span>);
+const Chips = ({ list, labels }) => (list?.length ? <span className="ex-chips">{list.map((k) => <span key={k} className="la-chip">{labels[k] || k}</span>)}</span> : <Missing reason="لم يُحدَّد" />);
 
 function Toggles({ value, options, onChange, disabled }) {
   const on = new Set(value || []);
@@ -140,7 +140,7 @@ function Service({ s, rate }) {
         <span><b>{s.attended}</b>جلسة منعقدة{s.no_show ? <small> · {s.no_show} غياب</small> : null}</span>
         <span><b>{s.upcoming}</b>جلسة قادمة</span>
         <span><b>{reviews}</b>مراجعة{reviews ? <small> · {r.models || 0} نموذج · {r.capstones || 0} وثيقة مبادرة · {r.requirements || 0} متطلب</small> : null}</span>
-        <span className="ex-cost"><b>{s.cost != null ? money(s.cost) : '·'}</b>التكلفة المحسوبة{rate == null ? <small> · حدّد سعر الساعة</small> : <small> · {money(rate)}/ساعة</small>}</span>
+        <span className="ex-cost"><b>{s.cost != null ? money(s.cost) : <Missing reason={rate == null ? 'لم يُحدَّد سعر الساعة' : 'لم تُحسب التكلفة'} />}</b>التكلفة المحسوبة{rate == null ? <small> · حدّد سعر الساعة</small> : <small> · {money(rate)}/ساعة</small>}</span>
       </div>
       {s.recent?.length ? (
         <ul className="la-log">{s.recent.map((x) => <li key={x.id}><small>{date(x.starts_at)}</small> {x.participants?.full_name || 'مشارك'} <span className="la-chip">{COACH_AR[x.status] || x.status}</span></li>)}</ul>
@@ -162,7 +162,7 @@ function Ratings({ r }) {
       {!s.count ? <p className="la-muted">لا تقييمات بعد. يُطلب من المشارك تقييم كل جلسة منعقدة وكل خدمة مكتملة.</p> : <>
         <div className="ex-kpis">
           <span className="ex-cost"><b>{s.avg} / 5</b>المتوسط العام</span>
-          {Object.entries(RATE_TO_EXPERT).map(([k, l]) => <span key={k}><b>{r.criteria[k] ?? '·'}</b>{l}</span>)}
+          {Object.entries(RATE_TO_EXPERT).map(([k, l]) => <span key={k}><b>{r.criteria[k] ?? <Missing reason="لم يُقيَّم" />}</b>{l}</span>)}
         </div>
         {r.comments.length > 0 && <ul className="la-log">{r.comments.map((c, i) => <li key={i}><small>{date(c.created_at)} · {c.overall}/5</small> «{c.comment}»</li>)}</ul>}
       </>}

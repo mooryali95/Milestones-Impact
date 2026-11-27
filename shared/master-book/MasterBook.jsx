@@ -13,7 +13,7 @@ import { chapterDeps } from './deps.js';
 import { ProposalEditor, ProposalsSheet, useDialogFocus } from './Proposals.jsx';
 import ReleaseSheet from './Release.jsx';
 import { REFLECTION } from '../../supabase/functions/leaders-api/book-proposals.js';
-import { canResume, chapterRef, cleanPrefs, FONTS, hashRef, hashWithRef, inHScroll, isMarked, LEGACY_KEY, lineHeight, liveMarks, normalizeAr, readerKey, refIndex, resumeAt, searchBook, SIZES, SPACINGS, THEMES, toggleMark } from './reader.js';
+import { bookShape, canResume, chapterRef, cleanPrefs, FONTS, hashRef, hashWithRef, inHScroll, isMarked, LEGACY_KEY, lineHeight, liveMarks, normalizeAr, readerKey, refIndex, resumeAt, searchBook, SIZES, SPACINGS, THEMES, toggleMark } from './reader.js';
 import './master-book.css';
 
 const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -588,7 +588,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin', u
   // القارئ طبقة كاملة فوق التطبيق بتمرير خاص بها، فلا تتحرك الصفحة خلفها
   useEffect(() => { const b = document.body; const was = b.style.overflow; b.style.overflow = 'hidden'; return () => { b.style.overflow = was; }; }, []);
 
-  const load = useCallback(() => api.get().then(setData), [api]);
+  const load = useCallback(() => api.get().then((r) => setData(bookShape(r))), [api]);
   useEffect(() => { load(); }, [load]);
   const key = data?.success ? readerKey(data.viewer) : null;
   useEffect(() => { if (!key) return; store.del(LEGACY_KEY); setPrefs(cleanPrefs(store.get(key))); }, [key]);
