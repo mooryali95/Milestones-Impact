@@ -58,3 +58,17 @@ describe('أمان الرسم ومصادره', () => {
     expect(b.svg).toContain('الفعلي 19 (تحقق 75%)');
   });
 });
+
+describe('محور الشهور في المخطط الزمني', () => {
+  it('لا تسمية شهر تخرج عن عرض الرسم ولو انتهى الجدول عند الحافة', () => {
+    const d = { sections: [{ key: 'schedule', fields: [{ key: 'activities', columns: ['الرمز', 'النشاط', 'البداية', 'النهاية', 'يعتمد على'], value: [['A', 'أ', '2026-01-01', '2026-06-15', ''], ['B', 'ب', '2026-06-16', '2026-10-31', 'A']] }] }] };
+    const svg = V.ganttSvg(V.scheduleModel(d), { today: 0 }).svg;
+    const W = Number(svg.match(/viewBox="0 0 ([\d.]+)/)[1]);
+    const labels = [...svg.matchAll(/<text x="([\d.-]+)"[^>]*data-axis-w="([\d.]+)"/g)];
+    expect(labels.length).toBeGreaterThan(5);
+    for (const [, x, w] of labels) {
+      expect(Number(x) - Number(w) / 2).toBeGreaterThanOrEqual(0);
+      expect(Number(x) + Number(w) / 2).toBeLessThanOrEqual(W);
+    }
+  });
+});

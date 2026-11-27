@@ -78,8 +78,12 @@ export function ganttSvg(m, { today = Date.now(), width = 1000, compact = false 
   for (let t = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), 1); t <= max; ) { if (t >= min) ticks.push(t); const d = new Date(t); t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1); }
   const step = Math.max(1, Math.ceil(ticks.length / 12));
   for (const t of ticks.filter((_, i) => i % step === 0)) {
+    // التسمية تُحصر داخل عرض الرسم فلا تُقص عند الحافة (عرض تقديري للحرف 7 بكسل بحجم 12)
+    const txt = isVirtual(t) ? whenAr(t) : new Date(t).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+    const lw = [...txt].length * 7 + 4;
+    const lx = Math.min(W - lw / 2 - 2, Math.max(lw / 2 + 2, X(t)));
     g += `<line x1="${X(t).toFixed(1)}" y1="${top - 8}" x2="${X(t).toFixed(1)}" y2="${H - 14}" stroke="${VC.faint}" stroke-width="1"/>`
-      + `<text x="${X(t).toFixed(1)}" y="${top - 14}" font-size="12" fill="${VC.muted}" text-anchor="middle">${esc(isVirtual(t) ? whenAr(t) : new Date(t).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { month: 'short', year: '2-digit', timeZone: 'UTC' }))}</text>`;
+      + `<text x="${lx.toFixed(1)}" y="${top - 14}" font-size="12" fill="${VC.muted}" text-anchor="middle" data-axis-w="${lw.toFixed(1)}">${esc(txt)}</text>`;
   }
   // صفوف متناوبة الخلفية
   rows.forEach((_, i) => { if (i % 2) g += `<rect x="0" y="${Y(i)}" width="${W}" height="${rowH}" fill="${VC.stripe}"/>`; });
