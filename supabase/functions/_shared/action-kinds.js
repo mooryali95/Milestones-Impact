@@ -71,6 +71,8 @@ export const LEADERS_ADMIN_LOGGED_READS = new Set([
   'cohort-visit',
   // تحميل الوثيقة النهائية PDF (المرحلة 21): الوثيقة وتذكرة مربوطة ببصمتها، وكل تنزيل سطر admin.docExport. لكل أدوار اللوحة
   'doc-export',
+  // خطة تصدير مبادرات الدفعة (cohort-export.ts): صفوف المعتمد بلا بيانات تواصل، وكل طلب سطر cohort_export. لكل أدوار اللوحة
+  'cohort-export',
 ].map((k) => `admin.${k}`));
 
 // أفعال admin-api للقراءة (فروع index.ts التي لا تكتب). الدخول والرموز والمفاتيح والجلسات كتابة
@@ -90,7 +92,7 @@ export const isReadAction = (fn, action) => (READS[fn] || []).some((s) => s.has(
 // - اطلاع الإدارة المسجَّل (LEADERS_ADMIN_LOGGED_READS).
 // هذه لا يعيدها العميل تلقائيًا بعد خطأ شبكة أبدًا، ويُعرض «تعذّر التأكد، تحقّق قبل الإعادة» (والدخول رسالة الشبكة، AUTH_ACTIONS)
 export const NO_REPLAY = new Set([
-  'me.export', 'handbook.export', ...LEADERS_ADMIN_LOGGED_READS,
+  'me.export', 'handbook.export', 'coord.cohort-export', ...LEADERS_ADMIN_LOGGED_READS,
   'auth.start', 'auth.verify', 'auth.google', 'coord.auth-start', 'coord.auth-verify', 'passkey.auth-options', 'passkey.auth-verify',
   'xp.auth-start', 'xp.auth-verify', 'xp.auth-google', 'workshop.scan', 'cert.verify', 'doc.verify', 'rater.submit', 'sponsor.submit', 'share.get', 'share.note',
   'outcome.submit', 'expert.apply', 'offer.respond', 'cron.reminders', 'cron.expert-offers',
