@@ -27,14 +27,15 @@ describe('مصدر أسئلة صاحب القرار', () => {
   });
 });
 
-describe('حالة العمل: كل باب يبدأ صفحة', () => {
+describe('حالة العمل: الباب ينساب بحاجز واسع، والاعتماد وحده صفحة مفروضة (ضبط الفراغات 2026-11-27)', () => {
   const r = build('M3I3L3');
   const list = secs(r.body);
-  it('كل باب بعد الأول صفحة مفروضة، والأول بعد صفحة القرار', () => {
+  it('كل باب بعد الأول يكمل في الصفحة إن اتسعت، والأول بعد صفحة القرار', () => {
     expect(r.form.key).toBe('case');
     expect(list.length).toBeGreaterThan(6);
-    expect(list.slice(1).every((x) => x.np)).toBe(true);
-    expect(list.some((x) => x.flow)).toBe(false);
+    expect(list.slice(1, -1).every((x) => !x.np && x.flow)).toBe(true);
+    expect(list.at(-1).np).toBe(true);
+    expect(r.body).toContain('class="in-keep wide"');
     expect(r.body).toContain('class="in-dec"');
   });
   it('كل باب يفتح بسؤال صاحب القرار بخطه الجانبي، ومنه باب الأثر', () => {

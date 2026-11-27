@@ -22,8 +22,8 @@ describe('أرقام الجداول', () => {
     expect(h).toMatch(/<td class="num">480,000<\/td>/);
     expect(h).toMatch(/<td class="num">12%<\/td>/);
     expect(h).toMatch(/<td class="num">1,200 ريال<\/td>/);
-    expect(h).toMatch(/<td>تشغيل<\/td>/);
-    expect(h).toMatch(/<td>نص<\/td>/);
+    expect(h).toMatch(/<td class="w1">تشغيل<\/td>/);
+    expect(h).toMatch(/<td class="w1">نص<\/td>/);
   });
   it('بلا التفاف وبأرقام جدولية وعرض أدنى 22mm', () => {
     const r = rule(css(documentHtml({ title: 'ت' }, '')), '.tbl td.num');

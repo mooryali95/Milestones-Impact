@@ -81,9 +81,10 @@ describe('ميثاق المبادرة: صفحة مولّدة', () => {
   it('الوثيقة الاحترافية: الفهرس أولًا بروابطه، ثم الميثاق ومسوّغات المبادرة قبل الفصول', () => {
     const { body } = capstoneReport(doc());
     const i = (t) => body.indexOf(t);
-    expect(i('فهرس الوثيقة')).toBeGreaterThan(0);
+    // إصلاح 2026-11-27: عنوان الفهرس «المحتويات» من DOC_TEXT.toc
+    expect(i('<h2>المحتويات</h2>')).toBeGreaterThan(0);
     expect(body).toContain('href="#ch-charter"');
-    expect(i('id="ch-charter"')).toBeGreaterThan(i('فهرس الوثيقة'));
+    expect(i('id="ch-charter"')).toBeGreaterThan(i('<h2>المحتويات</h2>'));
     expect(i('id="ch-case"')).toBeGreaterThan(i('id="ch-charter"'));
     expect(i('id="ch-initiative-charter"')).toBeGreaterThan(i('id="ch-case"'));
     expect(body).toContain('البعد التجاري');

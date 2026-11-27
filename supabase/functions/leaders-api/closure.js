@@ -26,6 +26,8 @@ const GATES = {
   'tracking.verify-confirmed': () => ({ gate: 'مراجعة الأثر', decision: 'أكّد أرقام المراجعة', by: 'الراعي' }),
   'tracking.verify-disputed': () => ({ gate: 'مراجعة الأثر', decision: 'اعترض على أرقام المراجعة', by: 'الراعي' }),
 };
+// نافذة دمج القرار المكرر في السجل
+export const DEDUPE_MS = 10 * 60 * 1000;
 export const GATE_ACTIONS = Object.freeze(Object.keys(GATES));
 
 /**
@@ -34,9 +36,17 @@ export const GATE_ACTIONS = Object.freeze(Object.keys(GATES));
  * @param {{ approved_at?: string | null }} [capstone] لحظة الاعتماد من الوثيقة نفسها
  */
 export function gateDecisions(events = [], capstone = {}) {
-  const out = (events || []).filter((e) => GATES[e.action]).map((e) => ({ at: e.created_at, ...GATES[e.action](e) }));
-  if (capstone?.approved_at) out.push({ at: capstone.approved_at, gate: 'بوابة الاعتماد', decision: 'اعتُمدت الوثيقة', by: 'المنصة' });
-  return out.filter((x) => x.at).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const out = (events || []).filter((e) => GATES[e.action]).map((e) => ({ at: e.created_at, entity: e.entity_id ?? null, ...GATES[e.action](e) }));
+  if (capstone?.approved_at) out.push({ at: capstone.approved_at, entity: null, gate: 'بوابة الاعتماد', decision: 'اعتُمدت الوثيقة', by: 'المنصة' });
+  const sorted = out.filter((x) => x.at).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  // القرار نفسه على الكيان نفسه خلال نافذة قصيرة (إعادة إرسال أو نقرتان) صف واحد، ويبقى آخرها
+  const kept = [];
+  for (const x of sorted) {
+    const prev = kept.findLast((y) => y.gate === x.gate && y.decision === x.decision && y.by === x.by && (y.entity == null || x.entity == null || y.entity === x.entity));
+    if (prev && Date.parse(x.at) - Date.parse(prev.at) <= DEDUPE_MS) kept.splice(kept.indexOf(prev), 1);
+    kept.push(x);
+  }
+  return kept.map(({ entity, ...x }) => x);
 }
 
 // ── تقرير الإغلاق ──

@@ -67,7 +67,8 @@ export const SEAL = (label = 'MILESTONE IMPACT') => `<svg class="seal" width="12
 
 // ── مكونات المحتوى ──
 // القسم القصير لا ينقسم بين صفحتين فلا يبقى عنوانه وحيدًا أسفل الصفحة؛ والجدول الطويل (أكثر من 15 صفًا) ينقسم بصفوفه
-const short = (body) => (body.match(/<tr/g) || []).length <= 16;
+// والنص الطويل (نحو نصف صفحة فأكثر) لا يُعلَّم قصيرًا، فلا يمحو break-inside: avoid كل مواضع الكسر في مساحة كبيرة
+const short = (body) => (body.match(/<tr/g) || []).length <= 16 && String(body).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').length < 1400;
 export const section = (en, ar, body, note) => `<section class="sec${short(body) ? ' keep' : ''}">
   <header><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p class="note">${esc(note)}</p>` : ''}</header>
   ${body}
@@ -87,9 +88,13 @@ export const bars = (rows, total, { ltr = false } = {}) => (rows.length ? `<div 
   return `<div class="bar"><span class="bl"${ltr ? ' dir="ltr"' : ''}>${esc(r.label)}</span><span class="bt"><i style="width:${pct.toFixed(1)}%"></i>${diamond(7)}</span><b>${num(r.value)}</b></div>`;
 }).join('')}</div>` : '<p class="muted">لا بيانات بعد.</p>');
 
+// ضبط الفراغات (2026-11-27): يكمل الباب في الصفحة نفسها إن بقي منها هذا القدر على الأقل (نحو ثلث مساحة المتن). مصدر واحد للحالة والنسخة المؤسسية
+export const SOFT_KEEP_MM = 85;
+// كلمة مفردة في خلية (شهري، ربعي، عالٍ...) لا تنكسر بين سطرين (قرار المالك 2026-11-27)
+export const oneWord = (v) => !isRaw(v) && /^\S{1,16}$/.test(String(v ?? '').trim());
 // جدول: cols [{ label, align?, ltr?, width? }]، rows مصفوفة قيم (نص أو { html })
 export const table = (cols, rows, empty = 'لا بيانات') => `<table class="tbl"><thead><tr>${cols.map((c) => `<th${c.width ? ` style="width:${c.width}"` : ''}>${esc(c.label)}</th>`).join('')}</tr></thead>
-<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${isNumeric(v) ? ' class="num"' : ''}${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : num(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
+<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${isNumeric(v) ? ' class="num"' : oneWord(v) ? ' class="w1"' : ''}${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : num(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
 
 export const progress = (pct) => `<span class="pg"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span><span class="pgn">${num(Math.round(pct))}%</span>`;
 // علامة HTML الخام رمز لا يُزوَّر (المرحلة 21): كائن قادم من القاعدة أو JSON يحمل html لا يمر خامًا، بل يُهرَّب نصًا
@@ -128,10 +133,13 @@ export function structuralAccent(...candidates) {
 
 // ── قواعد التشارك (قرار المالك 2026-11-25): الجهة في الصدارة، والبرنامج (هوية الدفعة) سطر توقيع صغير، وMilestone علامة خافتة.
 // شعار الجهة بفئة أبعاده (logo.js): عريض 14 مم بعرض أقصى 64 مم، مربع 20 مم، طويل 24 مم بعرض أقصى 20 مم، داخل لوحة 4×5 مم. شعار الدفعة 9 مم. علامة Milestone 9 مم
-function coBrand(b, id, kindLabel, ctl) {
+function coBrand(b, id, kindLabel, ctl, refLabel) {
   const plogo = safeLogo(b.programLogo);
   const program = b.program || plogo ? `<div class="prog">${plogo ? `<img src="${esc(plogo)}" alt="${esc(b.program || '')}">` : ''}${b.program ? `<span>${esc(b.program)}</span>` : ''}</div>` : '';
-  const ref = ctl ? '' : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
+  // نسخة الإرسال: الرقم المرجعي بتسمية عربية (refLabel) بلا لاحقة
+  const ref = ctl ? '' : refLabel
+    ? `<div class="ref ar" style="margin-top:4mm;text-align:start;letter-spacing:0;text-transform:none;font-family:'Noto Kufi Arabic',sans-serif">${esc(refLabel)}<b><bdi dir="ltr">${esc(id)}</bdi></b>${esc(kindLabel || '')}</div>`
+    : `<div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
   return `${lockup(b)}${program}${ref}`;
 }
 
@@ -211,7 +219,9 @@ html.embed { background: transparent; } html.embed .toolbar { display: none !imp
 html.embed .sheet { margin: 0 auto; box-shadow: 0 0 0 1px ${C.line}; }
 @media screen and (max-width: 700px) { html.embed .sheet > *:not(.mast) { padding-inline: 6mm; } html.embed .mast { padding: 8mm 6mm; } html.embed .mast .meta { grid-template-columns: repeat(2, 1fr); } }
 p, li { orphans: 3; widows: 3; text-wrap: pretty; }
-h2, h3 { break-after: avoid; }
+h2, h3, h4 { break-after: avoid; break-inside: avoid; }
+figure, .callout, .kpis, .bar, .tbl thead { break-inside: avoid; }
+.tbl thead { display: table-header-group; }
 h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: none; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; }
 @media screen { .toolbar { display: flex; } }
@@ -236,7 +246,8 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .sec { margin-top: 9mm; break-inside: auto; }
 .sec.keep { break-inside: avoid; }
 .tbl tr { break-inside: avoid; }
-.sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; }
+.sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; break-inside: avoid; }
+.sec > header + * { break-before: avoid; }
 .sec h2 { font-weight: ${T.chapterWeight}; font-size: ${T.chapter}pt; margin: 1mm 0 0; }
 .sec .note { margin: 1mm 0 0; color: ${C.muted}; font-size: ${TS.caption}pt; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(30mm, 1fr)); border-top: 1px solid ${C.gold}; border-bottom: 1px solid ${C.line}; }
@@ -264,6 +275,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .tbl td { padding: 2.2mm 1.5mm; border-bottom: 1px solid ${C.line}; vertical-align: top; }
 .tbl tr { break-inside: avoid; }
 .tbl td.c { text-align: center; padding: 6mm; }
+.tbl td.w1 { white-space: nowrap; }
 .tbl td.num { white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 22mm; }
 .tbl td:has(.pg) { white-space: nowrap; }
 .pg { display: inline-block; width: 16mm; height: 2px; background: ${C.line}; vertical-align: middle; margin-inline-end: 2mm; }
@@ -273,7 +285,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .callout b { display: block; font-weight: 400; font-size: ${TS.h3}pt; color: ${C.graphite}; margin-bottom: 1.5mm; }
 .callout p { margin: 0; font-size: ${TS.body}pt; line-height: 1.9; color: ${C.slate}; }
 .points { list-style: none; margin: 0; padding: 0; display: grid; gap: 2.2mm; }
-.points li { position: relative; padding-right: 5mm; font-size: ${TS.body}pt; line-height: 1.8; color: ${C.slate}; }
+.points li { position: relative; padding-right: 5mm; text-align: justify; text-justify: inter-word; box-sizing: border-box; width: 100%; font-size: ${TS.body}pt; line-height: 1.8; color: ${C.slate}; }
 .points li::before { content: ''; position: absolute; right: 0; top: 2.2mm; width: 1.8mm; height: 1.8mm; background: ${C.gold}; transform: rotate(45deg); }
 .tag { display: inline-block; border: 1px solid ${C.line}; padding: 0 2mm; border-radius: 2px; font-size: ${TS.footer}pt; color: ${C.slate}; white-space: nowrap; }
 .tag.gold { border-color: ${C.gold}; color: ${C.gold}; }
@@ -283,13 +295,22 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .close p { margin: 0; font-size: ${TS.caption}pt; color: ${C.slate}; max-width: 120mm; }
 .close .sig { font-size: ${TS.small}pt; } .close .sig b { font-weight: 400; display: block; }
 .rights { margin-top: 8mm; font-size: ${TS.footer}pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; word-break: keep-all; overflow-wrap: normal; }
-.rights .rt-meta { display: block; white-space: nowrap; margin-top: 1mm; font-variant-numeric: tabular-nums; }
+.rights .rt-meta { display: block; white-space: nowrap; margin-top: 1mm; font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .rights b { font-weight: 400; color: ${C.slate}; }
+/* إشعار الحقوق لا ينفصل عن الخاتمة والختم (لا صفحة أخيرة يتيمة بسطرين)، وفي الملف خاتمة أقصر وختم أصغر يتسعان معه */
+.close + .rights { break-before: avoid; }
+html.pdf .close { margin-top: 6mm; padding-top: 4mm; }
+html.pdf .close .seal { width: 26mm !important; height: 26mm !important; }
+html.pdf .rights { margin-top: 4mm; }
 .dm { display: inline-block; vertical-align: middle; }
 .mast .stamp { display: inline-block; border: 1px solid ${C.gold}; color: ${C.goldText}; padding: .5mm 3mm; border-radius: 2px; font-size: ${TS.small}pt; font-weight: 500; letter-spacing: 0; background: ${C.paper}; line-height: 1.6; }
 .mast > .stamp { position: absolute; top: 6mm; inset-inline-end: 18mm; }
 .mast .ctlrow { display: flex; align-items: center; justify-content: space-between; gap: 4mm; margin-top: 3mm; flex-wrap: wrap; }
 .mast .ctl { font: 400 ${TS.footer}pt "Noto Sans", sans-serif; letter-spacing: .14em; color: ${C.muted}; direction: ltr; unicode-bidi: isolate; }
+.mast .ctl-dt { font-size: ${TS.footer}pt; color: ${C.muted}; margin-inline-end: auto; }
+.mast .ctl-dt::before { content: '·'; margin-inline-end: 2mm; }
+.mast .vm.cover { margin-top: 4mm; border-top: 0; padding-top: 0; }
+.mast .vm.cover .qr { width: 18mm; height: 18mm; }
 .mast.co .top { direction: rtl; align-items: center; justify-content: flex-start; }
 .mast.co .org { display: flex; align-items: center; }
 .mast.co .org.plate { background: ${C.paper}; background-color: ${C.paper}; margin: 0; padding: 4mm 5mm; border: 0.25mm solid ${C.line}; border-radius: 0; box-shadow: none; }
@@ -332,18 +353,19 @@ html.pdf .mast.co .accent { bottom: 0; }
 <article class="sheet">
   <header class="mast${meta.brand ? ' co' : ''}">
     ${meta.stamp && !(meta.brand && meta.control) ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}
-    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel, meta.control) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
+    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel, meta.control, meta.refLabel) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
     ${accent ? `<i class="accent${accent.guard ? ' guard' : ''}" style="background:${accent.color}"></i>` : ''}
     <span class="eyebrow">${esc(meta.eyebrow || 'Milestone Impact · Report')}</span>
     <h1>${esc(meta.title)}</h1>${meta.brand ? '<i class="rule" aria-hidden="true"></i>' : ''}
     ${meta.subtitle ? `<p class="sub">${esc(meta.subtitle)}</p>` : ''}
     ${rows.length ? `<div class="meta"${meta.brand ? ` style="--n:${rows.length}"` : ''}>${rows.map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
-    ${meta.brand && meta.control ? `<div class="ctlrow"><bdi class="ctl" dir="ltr"${meta.controlLabel ? ` role="note" aria-label="${esc(meta.controlLabel)}"` : ''}>${esc(meta.control)}</bdi>${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}</div>` : ''}
+    ${meta.brand && meta.control ? `<div class="ctlrow"><bdi class="ctl" dir="ltr"${meta.controlLabel ? ` role="note" aria-label="${esc(meta.controlLabel)}"` : ''}>${esc(meta.control)}</bdi>${meta.controlDate ? `<span class="ctl-dt">${esc(meta.controlDate)}</span>` : ''}${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}</div>` : ''}
+    ${meta.brand && meta.coverMark ? meta.coverMark : ''}
   </header>
   ${body}
   <div class="close">
     <p class="thesis">من النية… إلى الأثر</p>
-    <p>${esc(meta.closing || 'أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.')}</p>
+    <p>${esc(meta.closing || 'أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.').replace(/[A-Z0-9]{4}(?:-[A-Z0-9]{4})+/g, (f) => `<bdi dir="ltr" style="white-space:nowrap;unicode-bidi:isolate">${f}</bdi>`)}</p>
     ${isLiveDoc(meta) ? `<span class="mi-mark" aria-hidden="true">${LOGO}</span>` : SEAL()}
   </div>
   <footer class="rights">

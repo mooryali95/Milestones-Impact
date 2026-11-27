@@ -5,12 +5,12 @@
 // (capstone.doc / admin.capstone / sponsor.get / coord.capstone). يبني على
 // محرك الوثائق doc.js فتخرج بالهوية نفسها، ويضيف رسوم الوثيقة: شجرة هيكل
 // التجزئة، والمخطط الزمني، وخريطة المخاطر، وملخص التكلفة.
-import { bars, callout, esc, kpis, points, raw, section, table, TYPE_SCALE as TS } from './doc.js';
-import { costLabel, displayPages, pageNumberOf, parseDate, parseNumber, CHAPTER_STANDING_AR, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { bars, callout, esc, kpis, points, raw, section, table, SOFT_KEEP_MM, TYPE_SCALE as TS } from './doc.js';
+import { costLabel, dateAr, displayPages, pageNumberOf, parseDate, parseNumber, CHAPTER_STANDING_AR, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
-import { CHAPTER_STANDING_NOTE_AR, CONFIDENTIAL_AR, DIM_AR, DOC_CHARTER_NOTE_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SUMMARY_AR, DOC_WORKING_AR, LEVEL_AR as LVL, LEVELS as LEVEL_LIST, REVIEW_ANNEX_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { businessCase, charterData, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
+import { CHAPTER_STANDING_NOTE_AR, CONFIDENTIAL_AR, DIM_AR, DOC_CHARTER_NOTE_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SEND_STAMP_AR, DOC_SUMMARY_AR, DOC_TEXT, DOC_WORKING_AR, docRecommendAr, SEND_SECTIONS, LEVEL_AR as LVL, LEVELS as LEVEL_LIST, REVIEW_ANNEX_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { benefitsOf, businessCase, charterData, execSummary, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
 import { chapterInfo, groupByPhase, termsIn } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
 import { BOARDS, costBarsSvg, ganttLegend, ganttSvg, networkLegend, networkSvg, sCurveSvg, scheduleModel } from './visuals.js';
 import { closureData } from '../../../supabase/functions/leaders-api/closure.js';
@@ -28,6 +28,9 @@ export const paras = (t) => String(t || '').split(/\n+/).map((x) => x.trim()).fi
 export const STYLE = `<style>
 .cp-p { margin: 0 0 2mm; font-size: ${TS.body}pt; line-height: ${TS.workLeading}; color: #2C4148; }
 .cp-f { margin: 0 0 4mm; break-inside: avoid; }
+.cp-f ul:not([class]) { list-style: none; margin: 0; padding: 0; }
+.cp-f ul:not([class]) li { position: relative; text-align: justify; box-sizing: border-box; padding-inline-start: 5mm; margin: 0 0 1.2mm; width: auto; max-width: none; text-indent: 0; }
+.cp-f ul:not([class]) li::before { content: ''; position: absolute; inset-inline-start: 0.6mm; top: 2.2mm; width: 1.6mm; height: 1.6mm; background: #A97A2E; transform: rotate(45deg); }
 .cp-f > b { display: block; font-weight: 400; font-size: ${TS.caption}pt; color: #5F7176; margin-bottom: 1mm; }
 .cp-toc { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 10mm; }
 .cp-toc li { display: flex; gap: 3mm; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; font-size: ${TS.small}pt; break-inside: avoid; }
@@ -81,6 +84,9 @@ export const STYLE = `<style>
 .tbl td { overflow-wrap: break-word; }
 /* صفحات تبدأ من أعلى الورقة: الفهرس، والميثاق، ومسوّغات المبادرة، وخطة الانطلاق، وأول الفصول، والملاحق. قاعدة واحدة تحكم الطباعة وملف PDF (pdf.js) */
 .cp-np + .sec { break-before: page; }
+/* نسخة الإرسال (ضبط الفراغات 2026-11-27): الميثاق والمسوّغات وخطة الانطلاق تكمل في الصفحة نفسها إن بقي منها نحو ثلثها
+   (حاجز SOFT_KEEP_MM غير مرئي يمنع بدء الباب في أسفل صفحة)، ولا تُفرض لها صفحة جديدة */
+.cp-keep { display: block; height: ${SOFT_KEEP_MM}mm; margin-bottom: -${SOFT_KEEP_MM}mm; break-inside: avoid; visibility: hidden; }
 .cp-why { break-after: avoid; }
 .tbl thead { break-after: avoid; }
 .kpis, .cp-case, .cp-launch > div, .cp-toc2 li, .cp-charter tr, .cp-gloss tr, .points li, .cp-check li, .cp-tree li { break-inside: avoid; }
@@ -225,7 +231,8 @@ export function columnWidths(columns, rows) {
     const avg = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
     // أطول كلمة لا تنكسر (تاريخ أو رقم أو رمز) تحدد أدنى عرض للعمود
     const word = Math.max(0, ...list.flatMap((r) => String(r[i] ?? '').split(/\s+/).map((t) => t.length)));
-    return Math.max(Math.pow(Math.max(avg, String(c).length * 0.45, 4), 0.85), Math.min(16, word) * 0.95);
+    // والكلمة المفردة لا تنكسر (td.w1)، فيحسب لها هامش الخلية (نحو حرفين ونصف) فلا تضيق عنها في الجدول العريض
+    return Math.max(Math.pow(Math.max(avg, String(c).length * 0.45, 4), 0.85), (Math.min(16, word) + 2.5) * 0.95);
   });
   const sum = w.reduce((a, b) => a + b, 0) || 1;
   return w.map((x) => `${((x / sum) * 100).toFixed(1)}%`);
@@ -369,32 +376,35 @@ function caseBlock(doc, pages = displayPages(doc.sections)) {
 }
 
 // خطة الانطلاق: أول 90 يومًا، مولّدة من البطاقة والجدول والمعالم والقياس والمخاطر (business-case.js launchPlan)
-function launchBlock(doc) {
+function launchBlock(doc, { send = false } = {}) {
+  const L = DOC_TEXT.launch;
   const l = launchPlan(doc);
   if (!l || l.empty) return '';
   const list = (items, empty) => (items.length ? `<ul>${items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : `<p class="cp-ref">${esc(empty)}</p>`);
   return anchor('launch', true) + section('للتنفيذ', 'خطة الانطلاق: أول 90 يومًا', `
-    <div class="cp-launch">${l.windows.map((w) => `<div><h3>${esc(w.title)}</h3><small>${esc(w.range || 'من تاريخ البداية')}</small>${list(w.items, 'لا شيء مؤرخ في هذه المدة.')}</div>`).join('')}</div>
+    <div class="cp-launch">${l.windows.map((w) => `<div><h3>${esc(w.title)}</h3><small>${esc(w.range || L.from)}</small>${list(w.items, L.none)}</div>`).join('')}</div>
     ${points([
-      ...l.measure.map((t) => raw(`<b>أول قياس:</b> ${esc(t)}`)),
-      ...l.watch.map((t) => raw(`<b>راقب من اليوم الأول:</b> ${esc(t)}`)),
-      l.operator && raw(`<b>يتسلم بعدك:</b> ${esc(l.operator)}`),
+      ...l.measure.map((t) => raw(`<b>${esc(L.measure)}:</b> ${esc(t)}`)),
+      ...l.watch.map((t) => raw(`<b>${esc(L.watch)}:</b> ${esc(t)}`)),
+      l.operator && raw(`<b>${esc(L.operator)}:</b> ${esc(l.operator)}`),
     ].filter(Boolean), '')}
-    ${l.missing.length ? `<p class="cp-ref">لتكتمل الخطة: ${esc(l.missing.join('، و'))}.</p>` : ''}`,
-  'ما تفعله غدًا: تُولَّد من البطاقة والجدول وسجل المعالم وخطة القياس وسجل المخاطر، فلا تُكتب مرتين.');
+    ${l.missing.length && !send ? `<p class="cp-ref">${esc(L.missing)} ${esc(l.missing.join('، و'))}.</p>` : ''}`,
+  L.note);
 }
 
 // الفهرس: الأقسام الأمامية، ثم الفصول مجمّعة بمراحل بناء المبادرة، بروابط تقفز إليها، وحالة كل فصل في المسودة
 // pages: صفحات العرض (displayPages)؛ الصفحة المجمّعة سطر واحد بعنوانيها ومرساة أصلها
-function tocBlock(pages, front, { draft }) {
+function tocBlock(pages, front) {
   const groups = groupByPhase(pages.map((p) => ({ ...p[0], title: pageTitle(p) })));
   // لا عدّ للحقول الفارغة في الفهرس (قرار المالك 2026-11-24): ما ينقص في ملحقه وحده
   const state = () => '';
-  return anchor('toc', true) + section('الفهرس', 'فهرس الوثيقة', `<div class="cp-toc2">
-    <div class="ph"><h3>للقرار والتنفيذ</h3><ol class="front">${front.map(([k, t]) => `<li><a href="#ch-${k}">${esc(t)}</a><span class="cp-pgno" data-ref="#ch-${k}"></span></li>`).join('')}</ol></div>
-    ${groups.map((g, gi) => `<div class="ph"><h3>${gi + 1}. ${esc(g.title)} <small>${g.items.length} ${g.items.length === 1 ? 'فصل' : g.items.length === 2 ? 'فصلان' : 'فصول'}</small></h3>${g.lead ? `<p>${esc(g.lead)}</p>` : ''}
+  const T = DOC_TEXT.toc;
+  // فهرس مؤسسي: عناوين المستويين الأول والثاني وأرقام صفحاتها، بلا عدّ ولا وصف ولا تعليمات واجهة
+  return anchor('toc', true) + section(T.eyebrow, T.title, `<div class="cp-toc2">
+    <div class="ph"><h3>${esc(T.front)}</h3><ol class="front">${front.map(([k, t]) => `<li><a href="#ch-${k}">${esc(t)}</a><span class="cp-pgno" data-ref="#ch-${k}"></span></li>`).join('')}</ol></div>
+    ${groups.map((g, gi) => `<div class="ph"><h3>${gi + 1}. ${esc(DOC_TEXT.phaseTitles[g.key] || g.title)}</h3>
       <ol>${g.items.map((s) => `<li><span class="n">${String(s.n).padStart(2, '0')}</span><a href="#ch-${esc(s.key)}">${esc(s.title)}</a>${state(s)}<span class="cp-pgno" data-ref="#ch-${esc(s.key)}"></span></li>`).join('')}</ol></div>`).join('')}
-  </div>`, draft ? 'الفصول مجمّعة بالأسئلة التي تجيب عنها، وما ينقص منها في الملحق الأخير. انقر عنوانًا لتنتقل إليه.' : 'الفصول مجمّعة بالأسئلة التي تجيب عنها. انقر عنوانًا لتنتقل إليه.');
+  </div>`);
 }
 
 // ملحق اللوحات المرئية: ما لا يقع في فصل بعينه (visuals.js). يُبنى منه ما اكتملت بياناته وحده
@@ -406,7 +416,7 @@ function visualsBlock(viz) {
     <h3>مخطط الشبكة والمسار الحرج</h3>
     ${kpis([{ value: st.activities, label: 'نشاطًا' }, { value: st.finish, label: 'يومًا على المسار الحرج' }, { value: st.critical, label: 'نشاطًا حرجًا' }])}
     <figure class="cp-fig">${net.svg}${networkLegend()}<figcaption>المسار الحرج: ${esc(st.path.join(' ← '))}</figcaption></figure>`,
-  'رسوم تُولَّد من فصول الوثيقة نفسها، فلا تُكتب مرتين.');
+  DOC_TEXT.visuals.note);
 }
 
 // ملحق المراجع (المرحلة 4، وعرضه المجمّع في المرحلة 24): للمستشار والخبير والإدارة وحدهم. يبنيه الخادم في review_levels
@@ -489,7 +499,7 @@ function glossaryBlock(doc) {
 function decisionsBlock(list) {
   if (!Array.isArray(list) || !list.length) return '';
   return section('السجل', 'سجل قرارات البوابات', table([{ label: 'التاريخ', width: '30mm' }, { label: 'البوابة', width: '34mm' }, { label: 'القرار' }, { label: 'من', width: '24mm' }],
-    list.map((x) => [fmt(x.at), x.gate, x.decision, x.by])), 'من سجل التدقيق كما وقع، لا يُعدَّل ولا يُحذف. الأدوار لا الأسماء.');
+    list.map((x) => [fmt(x.at), x.gate, x.decision, x.by])), DOC_TEXT.decisions.note);
 }
 
 function closureBlock(doc) {
@@ -532,14 +542,14 @@ export function placeRow(m) {
 // ملف العمل الكامل يُسمّى باسمه فلا يُخلط بالوثيقة المؤسسية. التاريخ بأرقام لاتينية (YYYY-MM-DD)
 const PDF_PREFIX = { institutional: 'وثيقة-المبادرة', working: 'ملف-عمل-المبادرة', draft: 'مسودة-وثيقة-المبادرة' };
 // kind: 'institutional' الوثيقة المؤسسية، 'working' ملف العمل بملحقه، 'draft' ملف العمل بلا ملحق (قارئ قبل الاعتماد)
-export function pdfFileName(m = {}, kind = 'institutional', now = new Date()) {
+export function pdfFileName(m = {}, kind = 'institutional', now = new Date(), { send = false } = {}) {
   const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   // تنظيف قبل البديل: محارف الاتجاه الخفية، وما لا يصلح في اسم ملف، ثم قص بنقاط الترميز لا بوحدات UTF-16 فلا يُشطر حرف
   const clean = (v) => [...String(v ?? '').replace(/[‎‏‪-‮⁦-⁩]/g, '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().replace(/\s+/g, '-')]
     .slice(0, 60).join('').replace(/-+$/, '');
   const name = clean(m.initiative) || clean(m.ref) || 'المبادرة';
   // رقم الوثيقة وإصدارها لاحقة قصيرة: نسختان في اليوم نفسه لا تتطابقان اسمًا
-  const tag = clean(`${String(m.ref || '').replace(/^MI-CP-/, '')}${m.version ? `-V${m.version}` : ''}`).replace(/^-+/, '');
+  const tag = clean(`${String(m.ref || '').replace(/^MI-CP-/, '')}${m.version && !send ? `-V${m.version}` : ''}`).replace(/^-+/, '');
   return [PDF_PREFIX[kind] || PDF_PREFIX.institutional, name, ymd, tag].filter(Boolean).join('-');
 }
 
@@ -549,14 +559,49 @@ const profileHint = (profile) => {
   return DIM_AR[dim] && LVL[lv] ? `${DIM_AR[dim]}: مستوى ${LVL[lv]}` : '';
 };
 
+// الملخص التنفيذي من execSummary (business-case.js). glance: مؤشرات «المبادرة في سطور» تُعرض معه في صفحة واحدة
+function summaryBlock(doc, { example, approved, send, glance, funding }) {
+  const S = DOC_TEXT.summary;
+  const x = execSummary(doc);
+  // التاريخ بصيغة عربية واحدة في الوثيقة كلها (dateAr): «4 يناير 2026» كما في الغلاف والنظرة العامة
+  const d0 = x.start ? dateAr(x.start) : '', d1 = x.end ? dateAr(x.end) : '';
+  const period = d0 || d1 ? `${d0 ? `<bdi class="num">${esc(d0)}</bdi>` : ''}${d0 && d1 ? ' إلى ' : d1 ? 'حتى ' : ''}${d1 ? `<bdi class="num">${esc(d1)}</bdi>` : ''}` : '';
+  const periodTxt = d0 && d1 ? `من ${d0} إلى ${d1}` : '';
+  // المشكلة في الملخص جملة واحدة، ونصها كاملًا في بابها
+  const problem1 = x.problem ? (String(x.problem).match(/^[\s\S]*?[.؟!](?=\s|$)/)?.[0] || x.problem).trim() : null;
+  // الراعي في الملخص بصفته وحدها (ما قبل النقطتين)، ووصف مسؤوليته في باب الحوكمة
+  const sponsor1 = x.sponsor ? `${String(x.sponsor).split(/[:：]/)[0].trim().replace(/[.،\s]+$/, '')}.` : null;
+  const amount = x.cost && x.cost.kind !== 'envelope' ? money(x.cost.value) : null;
+  const rec = example ? null : docRecommendAr({ amount, operator: x.operator, period: periodTxt, firstStep: x.firstStep });
+  const costLbl = x.cost ? (x.cost.kind === 'withContingency' ? S.costTotal : x.cost.kind === 'envelope' ? S.envelope : S.cost) : '';
+  const pend = (ch) => (send || example ? null : raw(`<span class="cp-ref">${esc(S.pending(ch))}</span>`));
+  const row = (label, html, ch) => (html ? raw(`<b>${esc(label)}:</b> ${html}`) : ch ? (pend(ch) && raw(`<b>${esc(label)}:</b> ${pend(ch).html}`)) : null);
+  const items = [
+    rec && raw(`<b>${esc(S.recommend)}:</b> ${esc(rec)}`),
+    row(S.problem, problem1 && esc(problem1), 'ميثاق المبادرة'),
+    row(S.value, x.benefits.length && esc(x.benefits.map((b) => `${b.title}${b.target ? ` (المستهدف ${b.target})` : ''}`).join('؛ ')), 'سجل المنافع'),
+    row(costLbl || S.cost, x.cost && `${esc(money(x.cost.value))}${x.cost.contingency && x.cost.kind === 'withContingency' ? ` مع احتياطي ${esc(x.cost.contingency)}%` : ''}${funding ? `، من ${esc(funding)}` : ''}`, 'خطة التكلفة'),
+    row(S.period, period, 'الجدول الزمني'),
+    sponsor1 && raw(`<b>${esc(S.sponsor)}:</b> ${esc(sponsor1)}`),
+  ].filter(Boolean);
+  const draft = approved || example || send ? '' : `<p class="cp-draft">${esc(DOC_TEXT.draftNotice)}</p>`;
+  // نسخة الإرسال: الوصف فقرة افتتاحية بلا صندوق يكرر عنوان الصفحة
+  const lead = !x.summary ? '' : send ? `<p class="cp-p cp-lead" style="margin-top:5mm">${esc(x.summary)}</p>` : callout(example ? 'عن المثال' : DOC_SUMMARY_AR, x.summary);
+  return section(S.eyebrow, S.title, `${glance}${lead}${points(items, '')}${draft}`);
+}
+
 // appendix: ملحق «ما ينقص». annex: ملحق المراجع، بطلب صريح وحده (المرحلة 21). final: تحميل الأدمن للنهائية، فغير المعتمدة بختم ظاهر
 // qr: رمز التحقق في المعتمدة (المرحلة 32)، بالبصمة المجمّدة وحدها كما في المؤسسية
+// send: نسخة الإرسال (final بلا ملحق ما ينقص): وثيقة خارجية لا تحمل أدوات العمل (صندوق المسودة، الفحوص الآلية، سجل البوابات،
+// علامات «يحتاج مراجعة»)، وأقسامها من قائمة السماح SEND_SECTIONS وحدها، وختم واحد على الغلاف DOC_SEND_STAMP_AR
 export function capstoneReport(input, { appendix = true, annex = false, final = false, qr = true } = {}) {
+  const send = final && !appendix;
+  const allow = (k) => !send || SEND_SECTIONS.includes(k);
   // ملف العمل الكامل: المشتق (الغلاف والميثاق وحالة العمل والمؤشرات) من القيم الصالحة، والفصول بكل ما كُتب
   // وتالفه معلَّم «يحتاج مراجعة»، وما ينقص في ملحقه. المثال المحلول يُعرض كما هو
   const exampleIn = !!input?.meta?.example;
   const { doc, gaps } = exampleIn ? { doc: input, gaps: [] } : cleanDoc(input);
-  const annotated = exampleIn ? input : cleanDoc(input, { keep: true }).doc;
+  const annotated = exampleIn ? input : send ? doc : cleanDoc(input, { keep: true }).doc;
   const gapKeys = new Set(gaps.map((g) => g.chapter_key));
   const m = doc.meta || {};
   const secs = doc.sections || [];
@@ -577,26 +622,23 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
     // الجاهزية مقياس عمل داخلي: تُعرض حين تحملها الوثيقة فقط، والنسخ الخارجة من المنصة بلا جاهزية إلا بإذن (withoutReadiness)
     m.readiness != null && { value: `${m.readiness}%`, label: 'الجاهزية' },
   ].filter(Boolean);
-  if (tiles.length) body += section('نظرة أولى', 'المبادرة في سطور', kpis(tiles));
+  const glance = tiles.length ? kpis(tiles) : '';
 
-  // الملخص لصاحب القرار: الخلاصة التنفيذية، ثم ما يُطلب منه. الهدف والمشكلة في الميثاق فلا يتكرران هنا
-  body += section('لصاحب القرار', 'الملخص التنفيذي', `
-    ${doc.summary ? callout(example ? 'عن المثال' : DOC_SUMMARY_AR, doc.summary) : ''}
-    ${points([
-      doc.cost?.withContingency > 0 && raw(`<b>المطلوب:</b> ${esc(money(doc.cost.withContingency))}${doc.cost.contingency ? ` مع احتياطي ${esc(doc.cost.contingency)}%` : ''}${funding ? `، من ${esc(funding)}` : ''}`),
-      (m.start || m.end) && raw(`<b>المدة:</b> <bdi dir="ltr">${esc(m.start || '·')}</bdi> إلى <bdi dir="ltr">${esc(m.end || '·')}</bdi>`),
-      m.sponsor && raw(`<b>الراعي:</b> ${esc(m.sponsor)}`),
-    ].filter(Boolean), '')}
-    ${approved || example ? '' : `<p class="cp-draft">${esc(DOC_WORKING_AR)}: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
+  // الملخص لصاحب القرار (execSummary مصدره الواحد): التوصية أولًا، ثم المشكلة والمنافع والكلفة والمدة والراعي.
+  // ما لا بيانات له لا يُعرض في نسخة الإرسال، ويُشار في ملف العمل إلى فصله. الملخص الشحيح يُدمج بـ«المبادرة في سطور» فلا صفحة شبه فارغة
+  body += summaryBlock(doc, { example, approved, send, glance, funding });
 
   const pages = displayPages(secs);
-  const charter = charterBlock(doc), bcase = caseBlock(doc, pages), launch = launchBlock(doc);
+  const charter = charterBlock(doc), bcase = caseBlock(doc, pages), launch = launchBlock(doc, { send });
   const viz = scheduleModel(doc);
   const visuals = visualsBlock(viz);
   const gapsHtml = example || !appendix ? '' : gapsBlock(gaps);
   const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'مسوّغات المبادرة'], launch && ['launch', 'خطة الانطلاق'], visuals && ['visuals', 'اللوحات المرئية'], ['glossary', 'مسرد المصطلحات'], gapsHtml && ['gaps', 'ما ينقص لإكمال الوثيقة']].filter(Boolean);
-  body += tocBlock(pages, front, { draft: !approved && !example });
-  body += charter + bcase + launch;
+  body += tocBlock(pages, front);
+  // نسخة الإرسال: لا صفحة مفروضة لهذه الأبواب، بل حاجز لين (cp-keep) قبل كل منها
+  // الحاجز أول ما في القسم (كما in-keep في النسخة المؤسسية)، لا قبله: فلا يتداخل هامشه السالب مع هامش القسم ومرساته
+  const softly = (h) => (send && h ? h.replace(/^<span class="cp-anchor cp-np"/, '<span class="cp-anchor"').replace(/<section class="sec[^"]*">/, '$&<i class="cp-keep" aria-hidden="true"></i>') : h);
+  body += softly(charter) + softly(bcase) + softly(launch);
 
   // الفصول بصفحات العرض: للتأسيسي يُجمع الفصلان القصيران في صفحة (displayPages)، والبيانات والجاهزية كما هي
   const marked = new Map(secs.map((s, i) => [s.key, annotated.sections[i] || s]));
@@ -609,9 +651,9 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
 
   body += visuals;
 
-  if (!approved && !example && (doc.checks || []).length) {
+  if (!send && !approved && !example && (doc.checks || []).length) {
     body += section('فحوص آلية', 'فحوص الاتساق بين الفصول', `<ul class="cp-check">${doc.checks.map((c) => `<li class="${c.ok ? 'ok' : 'no'}">${esc(c.title)}${c.detail ? `<small>${esc(c.detail)}</small>` : ''}</li>`).join('')}</ul>`,
-      'يفحصها النظام آليًا: كل حزمة لها مالك وتكلفة، وكل منفعة لها خط أساس وخطة قياس، والجدول داخل مدة المبادرة.');
+      DOC_TEXT.checks.note);
   }
 
   if (doc.review) {
@@ -641,29 +683,33 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
 
   if (approved && doc.tracking?.summary) body += trackingBlock(doc.tracking);
   body += closureBlock(doc);
-  if (!example) body += decisionsBlock(doc.decisions);
+  // سجل البوابات أثر تدقيق داخلي: في ملف العمل والنسخة الكاملة، ولا يخرج في نسخة الإرسال
+  if (!example && allow('decisions')) body += decisionsBlock(doc.decisions);
   body += glossaryBlock(doc);
   body += gapsHtml;
   if (annex) body += levelAnnex(doc) || levelAnnexEmpty();
 
   return {
     meta: {
-      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document',
-      footer: footerLine(`${m.ref || 'MI-CP'}-V${m.version || 1}`, mark?.fingerprint), pageAr: true, selfFonts: true,
+      id: (send ? `${m.ref || 'MI-CP'}` : `${m.ref || 'MI-CP'}-V${m.version || 1}`), kind: 'CP', kindLabel: send ? 'وثيقة المبادرة' : 'Initiative Document',
+      // نسخة الإرسال: تسمية الرقم المرجعي على الغلاف بالعربية، ولا وسم لاتيني فوق العنوان
+      ...(send ? { refLabel: DOC_TEXT.send.docNo } : {}),
+      footer: footerLine((send ? `${m.ref || 'MI-CP'}` : `${m.ref || 'MI-CP'}-V${m.version || 1}`), mark?.fingerprint), pageAr: true, selfFonts: true,
       // ملف العمل بملحقه لمن يعمل عليها؛ وبلا ملحق (القارئ قبل الاعتماد) يُسمّى «وثيقة المبادرة»
-      pdfName: pdfFileName(m, example ? 'institutional' : appendix ? 'working' : 'draft'),
+      pdfName: pdfFileName(m, example ? 'institutional' : appendix ? 'working' : 'draft', new Date(), { send }),
       // شعار الجهة ولونها على الغلاف وترويسة الصفحات (doc.js)، كما في الوثيقة المؤسسية
       ...(example ? {} : { brand: { name: m.org?.name || null, logo: m.org?.logo || null, color: m.org?.color || null } }),
-      eyebrow: example ? 'Leaders Program · Worked example' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
-      subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، أُعدّت في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
-      rows: [['قائد المبادرة', m.participant?.name || '·'], ...placeRow(m), ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']].filter(([k, v]) => v !== '·' || k === 'قائد المبادرة'),
+      eyebrow: example ? 'Leaders Program · Worked example' : send ? 'برنامج القادة' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
+      subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : send ? DOC_TEXT.sendSubtitle(m.scope_title) : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، أُعدّت في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
+      rows: [['قائد المبادرة', m.participant?.name || '·'], ...placeRow(m), ['الدفعة', m.cohort || '·'], ...(send ? [] : [['الحالة', m.status_title || '·']])].filter(([k, v]) => v !== '·' || k === 'قائد المبادرة'),
       // ختم «مسودة عمل» في الغلاف لكل ما لم يُعتمد (doc.js meta.stamp)
-      stamp: approved || example ? null : final ? DOC_LIVE_AR : !appendix ? null : DOC_WORKING_AR,
+      stamp: approved || example ? null : send ? DOC_SEND_STAMP_AR : final ? DOC_LIVE_AR : !appendix ? null : DOC_WORKING_AR,
       confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : CONFIDENTIAL_AR, rights: example ? undefined : DOC_RIGHTS_AR,
       closing: example
         ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع تعرفه، وقارن بنيتها بهذا المثال.'
         : approved
         ? 'وثيقة معتمدة. تُعرض من نسختها المحفوظة لحظة الاعتماد، فلا يغيّرها تعديل لاحق.'
+        : send ? DOC_TEXT.sendClosing
         : 'نسخة عمل تُبنى آليًا من فصول المبادرة لحظة إصدارها.',
     },
     body,
