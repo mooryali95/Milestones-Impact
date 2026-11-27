@@ -701,6 +701,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.save': A.save,
   'admin.delete': A.remove,
   'admin.reorder': A.reorder,
+  'admin.requirement-move': A.requirementMove,
   'admin.clone-instrument': A.cloneInstrument,
   'admin.activate-instrument': A.activateInstrument,
   'admin.lab': () => L.adminOverview(),

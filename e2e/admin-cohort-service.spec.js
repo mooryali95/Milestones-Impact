@@ -141,8 +141,12 @@ test('البرنامج: نموذج المرحلة يختار «خدمة لمن �
   await expect(tl.getByRole('group', { name: 'الخدمات' })).toContainText('الاستشارة');
   const sec = page.locator('.la-stage-ed', { hasText: 'الاستشارة' });
   await expect(sec.locator('.la-rule')).toHaveText('خدمة موازية · تُتاح بعد اكتمال «اعتماد المستوى» حتى نهاية الرحلة · لا تأخذ من الرحلة أيامًا ولا تُحسب في التقدم ولا يُشترط اكتمالها');
-  await sec.locator('.btn-sm', { hasText: 'تحرير' }).first().click();
+  // المرحلة 22: التحرير في وضع البناء من «⋯»، و«شروط متقدمة» مطوية في اللوحة الجانبية
+  await page.getByRole('radio', { name: 'بناء' }).click();
+  await sec.getByRole('button', { name: /^إجراءات المرحلة/ }).first().click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'مرحلة: الاستشارة' });
+  await form.getByText('شروط متقدمة').click();
   await expect(form.getByRole('combobox', { name: /^طبيعتها في الرحلة/ })).toHaveValue('service');
   await expect(form.getByRole('combobox', { name: /^نوع المرحلة/ })).toHaveCount(0);
   await expect(form.getByRole('combobox', { name: /^متى تُتاح/ })).toHaveValue('stages');
@@ -151,7 +155,8 @@ test('البرنامج: نموذج المرحلة يختار «خدمة لمن �
   await form.getByRole('button', { name: 'حفظ' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row?.rules).toEqual({ mode: 'on_demand', unlock: 'stages', complete: 'required', lane: 'service', after: ['approval'] });
   // نموذج النشاط: حد الجلسات للمشارك
-  await page.locator('.la-reqs li', { hasText: 'لقاء استشاري مع خبير' }).getByRole('button', { name: 'تحرير' }).click();
+  await page.locator('.la-reqs li', { hasText: 'لقاء استشاري مع خبير' }).getByRole('button', { name: /^إجراءات نشاط/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const rf = page.getByRole('dialog').filter({ hasText: 'حد الجلسات للمشارك' });
   const max = rf.getByRole('spinbutton', { name: /^حد الجلسات للمشارك/ });
   await expect(max).toHaveValue('2');
@@ -164,8 +169,12 @@ test('مرحلة متتابعة تختار «خدمة»: «بعد ما قبله�
   const calls = await setup(page, 1440);
   await nav(page, 'الرحلة والمتطلبات');
   const sec = page.locator('.la-stage-ed', { hasText: 'الدعم والتمكين' });
-  await sec.locator('.btn-sm', { hasText: 'تحرير' }).first().click();
+  // المرحلة 22: التحرير في وضع البناء من «⋯»، و«شروط متقدمة» مطوية في اللوحة الجانبية
+  await page.getByRole('radio', { name: 'بناء' }).click();
+  await sec.getByRole('button', { name: /^إجراءات المرحلة/ }).first().click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'مرحلة: الدعم والتمكين' });
+  await form.getByText('شروط متقدمة').click();
   await form.getByRole('combobox', { name: /^طبيعتها في الرحلة/ }).selectOption('service');
   await expect(form.getByRole('combobox', { name: /^متى تُتاح/ })).toHaveValue('previous');
   await form.getByRole('button', { name: 'حفظ' }).click();

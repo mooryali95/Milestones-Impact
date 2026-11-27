@@ -157,16 +157,24 @@ describe('Move المشترك في المنهجية (Methodology.jsx)', () => {
       { id: 'r2', code: 'R2', stage_key: 's1', sort: 2, title_ar: 'ب', kind: 'task', active: true, required: true },
     ],
   });
-  it('Alt مع السهم على صف المتطلب ينقله وحده، ثم saveQueue وkeepSpot', async () => {
+  // المرحلة 22: النقل في وضع البناء وحده، وبالإجراء الذري admin.requirement-move الذي يعيد المرحلتين فلا إعادة تحميل ولا keepSpot
+  it('Alt مع السهم على صف النشاط في وضع البناء ينقله وحده بالنقل الذري، ولا ينقل في وضع العرض', async () => {
     await mount(<Journey catalog={jcat()} reload={() => {}} canWrite onProgram={() => {}} />);
-    const row = host.querySelector('[data-mt-row="r2"]');
-    expect(row).not.toBeNull();
-    await act(async () => { row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true })); });
+    const press = async () => {
+      const row = host.querySelector('[data-mt-row="r2"]');
+      expect(row).not.toBeNull();
+      await act(async () => { row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true })); });
+      await flush();
+    };
+    await press();
+    expect(calls.filter(([a]) => a === 'admin.requirement-move' || a === 'admin.reorder').length).toBe(0);
+    await act(async () => { host.querySelector('[data-mode="build"]').click(); });
     await flush();
-    const rs = calls.filter(([a]) => a === 'admin.reorder');
+    await press();
+    const rs = calls.filter(([a]) => a === 'admin.requirement-move');
     expect(rs.length).toBe(1);
-    expect(rs[0][1]).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
-    expect(readQueue().ids).toEqual(['r2', 'r1']);
-    expect(takeSpot('methodology')).toMatchObject({ id: 'r2' });
+    expect(rs[0][1]).toMatchObject({ id: 'r2', position: 1 });
+    expect(calls.filter(([a]) => a === 'admin.reorder').length).toBe(0);
+    window.history.replaceState(null, '', window.location.pathname);
   });
 });

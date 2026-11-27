@@ -1199,7 +1199,22 @@ export async function stageMove(a: Admin, b: Body) {
   return { success: true, summary: plan.summary, direction: plan.direction, journey: fresh.journey, progress: fresh.progress ?? null };
 }
 
-// مرحلة جديدة في برنامج: مفتاح يُولَّد، وتأتي آخر الرحلة، وقواعدها تُضبط بعدها من «تحرير»
+// مرحلة جديدة في برنامج (المرحلة 22، 4.4): أربعة حقول (الاسم والمحور والنوع والمدة)، وتُدرج آخر محورها لا آخر الرحلة.
+// sort مشترك بين المحاور، فيُزاح ما بعد موضعها بواحد بمنطق الترتيب نفسه، وكل ذلك يمر بحارس القواعد (withGuard) قبل أي كتابة،
+// ويُسجَّل صف تدقيق واحد يذكر المفاتيح المزاحة والمرحلة التي صار مرجع «بعد السابقة» لها هو الجديدة
+const PHASE_ORDER = ['admission', 'qualification', 'impact'];
+export const STAGE_CREATE_MODES = ['required', 'on_demand', 'optional'];
+// موضع الإدراج: بعد آخر مرحلة من المحور نفسه، وإلا بعد آخر مرحلة من محور يسبقه، وإلا أول الرحلة
+export function stageInsertAt(list: any[], phase: string) {
+  const sorted = [...list].sort((x, y) => (x.sort ?? 0) - (y.sort ?? 0));
+  const rank = PHASE_ORDER.indexOf(phase);
+  let at = 0;
+  sorted.forEach((s, i) => { const r = PHASE_ORDER.indexOf(s.phase); if (s.phase === phase || (r >= 0 && r < rank)) at = i + 1; });
+  const sort = at < sorted.length ? Number(sorted[at].sort ?? 0) : Number(sorted[sorted.length - 1]?.sort ?? 0) + 1;
+  // ما يُزاح: كل مرحلة sort لها يساوي موضع الإدراج أو يزيد، بواحد، فلا تتكرر قيمة ولا يتغير ترتيب ما سواها
+  const shifted = sorted.filter((s) => Number(s.sort ?? 0) >= sort);
+  return { sort, shifted, next: sorted[at] || null };
+}
 export async function stageCreate(a: Admin, b: Body) {
   requireWrite(a);
   const pid = /^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
@@ -1207,14 +1222,27 @@ export async function stageCreate(a: Admin, b: Body) {
   if (!title) throw new Fail('اسم المرحلة مطلوب');
   const why = hardcodedFacts(title);
   if (why) throw new Fail(why, 400, 'hardcoded');
-  const phase = ['admission', 'qualification', 'impact'].includes(b.phase) ? b.phase : 'qualification';
-  const { data: rows } = await db.from('journey_stages').select('sort').eq('program_id', pid).order('sort', { ascending: false }).limit(1);
+  const phase = PHASE_ORDER.includes(b.phase) ? b.phase : 'qualification';
+  const mode = STAGE_CREATE_MODES.includes(b.mode) ? b.mode : 'required';
+  const days = Math.max(0, Math.min(365, Math.round(Number(b.duration_days) || 0)));
+  const { data: rows } = await db.from('journey_stages').select('key, sort, phase').eq('program_id', pid);
+  const { sort, shifted, next } = stageInsertAt(rows || [], phase);
   const key = `s-${Date.now().toString(36)}`;
+  const rules = mode === 'required' ? {} : { mode };
+  const fresh = { key, title_ar: title, phase, sort, active: true, rules, duration_days: days };
+  const moved = new Set(shifted.map((s: any) => s.key));
+  await withGuard(pid, (list) => [...list.map((s: any) => (moved.has(s.key) ? { ...s, sort: Number(s.sort ?? 0) + 1 } : s)), fresh]);
+  // الإزاحة من الأكبر إلى الأصغر واحدة واحدة: لا تتكرر قيمة sort في أي لحظة، وإن انقطعت بقي الترتيب كما هو وفجوة لا أكثر
+  const stamp = { updated_at: new Date().toISOString(), updated_by: a.email };
+  for (const s of [...shifted].sort((x: any, y: any) => Number(y.sort) - Number(x.sort))) {
+    must(await db.from('journey_stages').update({ sort: Number(s.sort) + 1, ...stamp }).eq('program_id', pid).eq('key', s.key), 'تعذّر ترتيب المراحل');
+  }
   const row = must(await db.from('journey_stages').insert({
-    program_id: pid, key, title_ar: title, phase, sort: (rows?.[0]?.sort || 0) + 1, duration_label: '', duration_days: 0, active: true, rules: {},
+    program_id: pid, ...fresh, duration_label: '', ...stamp,
   }).select('*').single(), 'تعذّر إنشاء المرحلة');
-  await audit('admin', a.email, 'journey_stages.create', 'journey_stages', `${pid}:${key}`, null, { title_ar: title, phase });
-  return { success: true, row };
+  await audit('admin', a.email, 'journey_stages.create', 'journey_stages', `${pid}:${key}`, null,
+    { title_ar: title, phase, mode, duration_days: days, sort, shifted: shifted.map((s: any) => s.key), after_new: next?.key || null });
+  return { success: true, row, shifted: shifted.map((s: any) => s.key), next: next?.key || null };
 }
 
 // ── الإعدادات القابلة للتحرير: كل ما يشكّل المنهجية ──
@@ -1721,6 +1749,14 @@ export async function remove(a: Admin, b: Body) {
     const { count } = await db.from('handbook_progress').select('module_id', { count: 'exact', head: true }).eq('module_id', b.id);
     if (count) throw new Fail(`أتمّ هذا الباب ${count} مشارك، وحذفه يمحو تقدمهم ونقاطهم. حرّر محتواه بدل حذفه`, 409, 'in_use');
   }
+  if (b.entity === 'stage_requirements') {
+    // الإخفاء هو الافتراضي (المرحلة 22): النشاط مرجع لتقدم المشاركين وللنسخ المحفوظة، فلا يُحذف نهائيًا إلا ما لم يدخل شيئًا منهما
+    const { count } = await db.from('participant_requirements').select('requirement_id', { count: 'exact', head: true }).eq('requirement_id', b.id);
+    if (count) throw new Fail(`لهذا النشاط تقدم ${count} مشارك؛ أخفه بدل حذفه حتى يبقى تقدمهم`, 409, 'in_use');
+    const { data: req } = await db.from('stage_requirements').select('program_id').eq('id', b.id).limit(1);
+    const { data: vs } = req?.[0] ? await db.from('program_versions').select('data').eq('program_id', req[0].program_id) : { data: [] };
+    if ((vs || []).some((v: any) => (v.data?.requirements || []).some((r: any) => String(r.id) === String(b.id)))) throw new Fail('هذا النشاط في نسخة محفوظة من البرنامج؛ أخفه بدل حذفه', 409, 'in_version');
+  }
   if (b.entity === 'content_items') {
     const { count } = await db.from('content_progress').select('item_id', { count: 'exact', head: true }).eq('item_id', b.id);
     if (count) throw new Fail('لهذه المادة تقدم مشاركين؛ أوقفها بدل حذفها حتى لا يضيع', 409);
@@ -1755,20 +1791,115 @@ async function withGuard(pid: string, change: (list: any[]) => any[]) {
 export async function reorder(a: Admin, b: Body) {
   requireWrite(a);
   const e = ENTITIES[b.entity];
-  if (!e?.sortable || !Array.isArray(b.ids)) throw new Fail('ترتيب غير صالح');
-  // المراحل تتكرر مفاتيحها بين البرامج، فيُرتَّب داخل برنامج واحد
-  const programId = b.entity === 'journey_stages' ? (/^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId()) : null;
-  if (programId) {
-    const order = new Map(b.ids.map((id: string, i: number) => [String(id), i + 1]));
+  if (!e?.sortable || !Array.isArray(b.ids) || !b.ids.length || b.ids.length > 500) throw new Fail('ترتيب غير صالح');
+  const ids = b.ids.map((x: unknown) => String(x));
+  if (new Set(ids).size !== ids.length) throw new Fail('ترتيب غير صالح: معرّف مكرر');
+  const stamp = STAMPED.has(b.entity) ? { updated_at: new Date().toISOString(), updated_by: a.email } : {};
+  // المراحل تتكرر مفاتيحها بين البرامج، فيُرتَّب داخل برنامج واحد، وكل مفتاح في الطلب يجب أن يكون من مراحله
+  if (b.entity === 'journey_stages') {
+    const programId = /^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
+    const { data } = await db.from('journey_stages').select('key').eq('program_id', programId);
+    const known = new Set((data || []).map((s: any) => s.key));
+    if (ids.some((k: string) => !known.has(k))) throw new Fail('في الترتيب مرحلة ليست من هذا البرنامج', 400, 'scope');
+    const order = new Map(ids.map((id: string, i: number) => [id, i + 1]));
     await withGuard(programId, (list) => list.map((s: any) => (order.has(s.key) ? { ...s, sort: order.get(s.key) } : s)));
+    for (const [i, id] of ids.entries()) must(await db.from(e.table).update({ sort: i + 1, ...stamp }).eq('key', id).eq('program_id', programId), 'تعذّر الترتيب');
+    await audit('admin', a.email, `${b.entity}.reorder`, b.entity, programId, null, ids);
+    return { success: true };
   }
-  await Promise.all(b.ids.map((id: string, i: number) => {
-    let q = db.from(e.table).update({ sort: i + 1 }).eq(e.key[programId ? 1 : 0], id);
-    if (programId) q = q.eq('program_id', programId);
-    return q;
-  }));
-  await audit('admin', a.email, `${b.entity}.reorder`, b.entity, null, null, b.ids);
+  // أنشطة الرحلة (المرحلة 22، 4.4 البند 3): كل المعرفات من البرنامج نفسه والمرحلة نفسها، وإلا رُفض الطلب كله،
+  // وتُكتب في عبارة واحدة (upsert للصفوف كاملة) فإما يُحفظ الترتيب كله أو لا شيء
+  if (b.entity === 'stage_requirements') {
+    const rows = must(await db.from('stage_requirements').select('*').in('id', ids), 'تعذّر قراءة الأنشطة') as any[];
+    if (rows.length !== ids.length) throw new Fail('في الترتيب نشاط غير موجود', 400, 'scope');
+    const pid = rows[0].program_id, stage = rows[0].stage_key;
+    // الطلب مربوط بالبرنامج المعروض (أو الافتراضي) كما في requirementMove، لا بأول صف
+    const want = UUID_RE.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
+    if (String(want) !== String(pid)) throw new Fail('في الترتيب نشاط ليس من هذا البرنامج', 400, 'scope');
+    if (rows.some((r) => r.program_id !== pid || r.stage_key !== stage)) throw new Fail('الترتيب داخل مرحلة واحدة من برنامج واحد', 400, 'scope');
+    await withGuard(String(pid), (list) => list);
+    const byId = new Map(rows.map((r) => [String(r.id), r]));
+    // الصفوف كاملة تُكتب (upsert)، فتُفحص قبل الكتابة: أي حفظ آخر لها منذ قراءتها يُرفض 409 حتى لا يُكتب فوقه بقيم قديمة
+    await assertUnchanged(rows);
+    must(await db.from('stage_requirements').upsert(ids.map((id: string, i: number) => ({ ...byId.get(id), sort: i + 1, ...stamp })), { onConflict: 'id' }), 'تعذّر الترتيب، ولم يتغير شيء');
+    await audit('admin', a.email, `${b.entity}.reorder`, b.entity, `${pid}:${stage}`, null, ids);
+    return { success: true };
+  }
+  await Promise.all(ids.map((id: string, i: number) => db.from(e.table).update({ sort: i + 1, ...stamp }).eq(e.key[0], id)));
+  await audit('admin', a.email, `${b.entity}.reorder`, b.entity, null, null, ids);
   return { success: true };
+}
+
+// نقل نشاط إلى مرحلة أخرى أو موضع آخر (المرحلة 22، 4.4 البند 1): إجراء واحد يغير stage_key وsort معًا، داخل حارس القواعد،
+// وبعبارة كتابة واحدة (upsert للصفوف المتأثرة كاملة) فيُحفظ النقل كله أو لا شيء، مع صف تدقيق واحد.
+// التزامن: الواجهة ترسل ما رأته (مرحلة النشاط وموضعه، ومعرفات المرحلة الهدف)، وأي اختلاف عما في القاعدة يُرفض 409 برسالة
+// التقدم والنسخ: إن أكمله مشاركون أو دخل نسخة مجمدة يُطلب تأكيد صريح (confirm) قبل النقل
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// حارس التحديث المفقود: الصفوف المقروءة تُعاد قراءتها قبل upsert، وإن حُفظ أي منها (updated_at) أو حُذف منذ القراءة يُرفض 409
+async function assertUnchanged(rows: any[]) {
+  if (!rows.length) return;
+  const now = must(await db.from('stage_requirements').select('id, updated_at, stage_key, sort').in('id', rows.map((r) => r.id)), 'تعذّر قراءة الأنشطة') as any[];
+  const m = new Map(now.map((r) => [String(r.id), r]));
+  if (rows.some((r) => { const n = m.get(String(r.id)); return !n || String(n.updated_at ?? '') !== String(r.updated_at ?? '') || n.stage_key !== r.stage_key || Number(n.sort) !== Number(r.sort); }))
+    throw new Fail('عدّل مدير آخر هذه الأنشطة للتو، فلم يتغير شيء. حدّث الصفحة وأعد المحاولة', 409, 'conflict');
+}
+export async function requirementMove(a: Admin, b: Body) {
+  requireWrite(a);
+  const id = String(b.id || '');
+  if (!UUID_RE.test(id)) throw new Fail('نشاط غير صالح', 400);
+  const to = String(b.stage_key || '');
+  if (!to || to.length > 80) throw new Fail('المرحلة المستهدفة مطلوبة', 400);
+  const pid = UUID_RE.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
+  const { data: found } = await db.from('stage_requirements').select('*').eq('id', id).limit(1);
+  const me = found?.[0];
+  if (!me) throw new Fail('النشاط غير موجود', 404, 'not_found');
+  if (String(me.program_id) !== pid) throw new Fail('النشاط ليس من هذا البرنامج', 400, 'scope');
+  const { data: target } = await db.from('journey_stages').select('key, title_ar').eq('program_id', pid).eq('key', to).limit(1);
+  if (!target?.[0]) throw new Fail('المرحلة المستهدفة ليست من هذا البرنامج', 400, 'scope');
+  const from = String(me.stage_key);
+  const { data: siblings } = await db.from('stage_requirements').select('*').eq('program_id', pid).in('stage_key', [...new Set([from, to])]);
+  const rows = (siblings || []) as any[];
+  const bySort = (x: any, y: any) => Number(x.sort ?? 0) - Number(y.sort ?? 0) || String(x.id).localeCompare(String(y.id));
+  const conflict = () => new Fail('عدّل مدير آخر هذه المرحلة للتو، فلم يُنقل شيء. حدّث الصفحة وأعد المحاولة', 409, 'conflict');
+  // التزامن على الخادم لا على العميل: ما رآه المدير مطلوب، وناقصه 400
+  if (b.expect_stage == null || b.expect_sort == null || !Array.isArray(b.target_ids)) throw new Fail('النقل يحتاج المرحلة والموضع كما رأيتهما ومعرفات المرحلة الهدف', 400);
+  if (b.source_ids != null && !Array.isArray(b.source_ids)) throw new Fail('معرفات المرحلة المصدر غير صالحة', 400);
+  if (b.expect_stage != null && (String(b.expect_stage) !== from || (b.expect_sort != null && Number(b.expect_sort) !== Number(me.sort)))) throw conflict();
+  const targetNow = rows.filter((r) => r.stage_key === to && String(r.id) !== id).sort(bySort);
+  if (Array.isArray(b.target_ids)) {
+    const seen = b.target_ids.map(String).filter((x: string) => x !== id);
+    if (seen.length !== targetNow.length || seen.some((x: string, i: number) => x !== String(targetNow[i].id))) throw conflict();
+  }
+  if (Array.isArray(b.source_ids) && from !== to) {
+    const srcNow = rows.filter((r) => r.stage_key === from && String(r.id) !== id).sort(bySort);
+    const seen = b.source_ids.map(String).filter((x: string) => x !== id);
+    if (seen.length !== srcNow.length || seen.some((x: string, i: number) => x !== String(srcNow[i].id))) throw conflict();
+  }
+  const pos = Math.max(1, Math.min(targetNow.length + 1, Math.round(Number(b.position) || targetNow.length + 1)));
+  // التقدم والنسخ المجمدة قبل أي كتابة
+  const { count: done } = await db.from('participant_requirements').select('requirement_id', { count: 'exact', head: true }).eq('requirement_id', id);
+  const { data: versions } = await db.from('program_versions').select('id, data').eq('program_id', pid);
+  const frozen = (versions || []).filter((v: any) => (v.data?.requirements || []).some((r: any) => String(r.id) === id)).length;
+  if ((done || frozen) && !b.confirm) {
+    const lines = [done ? `أكمله ${done} مشاركًا أو بدأه في مرحلته الحالية، ويبقى تقدمهم محفوظًا.` : '', frozen ? `هو في ${frozen} نسخة محفوظة؛ الدفعات المثبتة عليها لا تتأثر حتى ترقيتها.` : ''].filter(Boolean);
+    throw new Fail(lines.join(' '), 409, 'confirm', { progress: done || 0, versions: frozen });
+  }
+  await withGuard(pid, (list) => list);
+  const nextTarget = [...targetNow];
+  nextTarget.splice(pos - 1, 0, { ...me, stage_key: to });
+  const nextSource = from === to ? [] : rows.filter((r) => r.stage_key === from && String(r.id) !== id).sort(bySort);
+  const stamp = { updated_at: new Date().toISOString(), updated_by: a.email };
+  const before = new Map(rows.map((r) => [String(r.id), r]));
+  const changed = [...nextTarget.map((r, i) => ({ ...r, stage_key: to, sort: i + 1 })), ...nextSource.map((r, i) => ({ ...r, sort: i + 1 }))]
+    .filter((r) => { const o = before.get(String(r.id)); return !o || o.stage_key !== r.stage_key || Number(o.sort) !== r.sort; });
+  if (changed.length) {
+    await assertUnchanged(changed.map((r) => before.get(String(r.id))).filter(Boolean));
+    must(await db.from('stage_requirements').upsert(changed.map((r) => ({ ...r, ...stamp })), { onConflict: 'id' }), 'تعذّر النقل، ولم يتغير شيء');
+  }
+  await audit('admin', a.email, 'stage_requirements.move', 'stage_requirements', id, { stage_key: from, sort: me.sort },
+    { stage_key: to, position: pos, shifted: changed.map((r) => r.id).filter((x) => String(x) !== id), confirmed: !!b.confirm, progress: done || 0, versions: frozen });
+  const { data: after } = await db.from('stage_requirements').select('*').eq('program_id', pid).in('stage_key', [...new Set([from, to])]);
+  return { success: true, from, to, position: pos, total: nextTarget.length, stage_title: target[0].title_ar, rows: after || [] };
 }
 
 // إصدار جديد من أداة القياس: نسخة كاملة من الأسئلة تصبح هي الفعالة

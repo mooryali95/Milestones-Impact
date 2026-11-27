@@ -148,7 +148,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else if (tab === 'payments') body = <Payments canWrite={canWrite} onPerson={openPerson} payId={payId} onOpen={(id) => { at('payments', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => (k ? openTrack(k) : at('tracks'))} onPerson={openPerson} />;
-  else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} />;
+  else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} onPatch={(fn) => setCatalog((c) => (c?.success ? fn(c) : c))} />;
   else if (tab === 'programs') body = <Programs canWrite={canWrite} cohortId={cohortId} onCohort={(id) => { at('programs', id); window.scrollTo({ top: 0 }); }} onEditJourney={pickProgram} onPerson={openPerson} />;
   else if (tab === 'content') body = <ContentBank {...meth} />;
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;

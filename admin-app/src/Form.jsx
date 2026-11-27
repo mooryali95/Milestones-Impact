@@ -14,6 +14,9 @@
 // confirmDelete() ← سؤال الحذف بالشكل نفسه (معاينة من الخادم)، وقيمة مربعه تمر إلى onDelete({ [name]: قيمة })
 // choice ← اختيار واحد صريح بأزرار راديو: options [{ value, label, help, disabled?, note? }]، وrequired نص الخطأ إن لم يُختر (بلا قيمة مسبقة)
 // الإغلاق دون حفظ (Esc أو النقر خارجه أو «إلغاء») يسأل أولًا إن تغيّر شيء، فلا يضيع ما كُتب سهوًا.
+// panel ← لوحة جانبية لا نافذة وسطى (المرحلة 22، 4.3 البند 3): 480px على جهة نهاية السطر، ودرج سفلي على الهاتف، بالحبس والإغلاق نفسيهما
+// groups ← [{ key, title, open?, lead? }]: الحقول ذات group تُجمع تحت عنوانها، والمطوي (open: false) في details، وlead سطر أعلى القسم
+// onSave يعيد { success, silent } فيُغلق بلا إعادة تحميل، أو { success, nextForm } فيفتح المحرر نموذجًا تاليًا (اختيار النوع ثم تفاصيله)
 import React, { useEffect, useState } from 'react';
 import { useEscape, useGuardedClose, useUI } from './ui.jsx';
 
@@ -24,7 +27,9 @@ export const toLocal = (iso) => {
   return isNaN(d) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
 };
 
-export default function Form({ title, fields, values = {}, onSave, onDelete, onClose, notes = null, confirmSave = null, confirmDelete = null, saveLabel = 'حفظ', focusField = null }) {
+// حقل داخل قسم مطوي (details) يُفتح قسمه قبل تركيزه، فلا يبقى الخطأ أو الحقل المطلوب مخفيًا
+const openFold = (el) => { const d = el?.closest?.('details'); if (d) d.open = true; };
+export default function Form({ title, fields, values = {}, onSave, onDelete, onClose, notes = null, confirmSave = null, confirmDelete = null, saveLabel = 'حفظ', focusField = null, panel = false, groups = null, lead = null }) {
   const { confirm } = useUI();
   const [start] = useState(() => Object.fromEntries(fields.map((f) => [f.name,
     f.type === 'check' ? !!values[f.name]
@@ -38,7 +43,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
   const close = useGuardedClose(JSON.stringify(v) !== JSON.stringify(start), () => onClose());
   useEscape(close);
   // focusField: يفتح النموذج على حقل بعينه (مثل «حدد الموعد» على حقل البدء، المرحلة 12)
-  useEffect(() => { if (!focusField) return; const el = document.getElementById(`f-${focusField}`); (el?.matches('input,select,textarea') ? el : el?.querySelector('input:not([disabled]),select,textarea'))?.focus(); }, [focusField]);
+  useEffect(() => { if (!focusField) return; const el = document.getElementById(`f-${focusField}`); openFold(el); (el?.matches('input,select,textarea') ? el : el?.querySelector('input:not([disabled]),select,textarea'))?.focus(); }, [focusField]);
 
   const set = (name) => (e) => setV({ ...v, [name]: e.target.value });
   const submit = async (e) => {
@@ -56,7 +61,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
     }));
     // اختيار صريح لم يُحسم: يوقف الحفظ برسالته، فلا يُحفظ بقيمة لم يخترها أحد
     const missing = fields.find((f) => f.type === 'choice' && f.required && (!f.show || f.show(v)) && !out[f.name]);
-    if (missing) { setError(missing.required); document.getElementById(`f-${missing.name}`)?.querySelector('input:not([disabled])')?.focus(); return; }
+    if (missing) { setError(missing.required); const mel = document.getElementById(`f-${missing.name}`); openFold(mel); mel?.querySelector('input:not([disabled])')?.focus(); return; }
     setBusy(true);
     const ask = confirmSave ? await confirmSave(out, v) : null;
     setBusy(false);
@@ -67,7 +72,13 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
     setBusy(true);
     const res = await onSave(ask?.patch || picked ? { ...out, ...ask.patch, ...picked } : out);
     setBusy(false);
-    if (res?.success) onClose(true); else setError(res?.message || 'تعذّر الحفظ');
+    if (res?.success) onClose(res.nextForm ? { nextForm: res.nextForm } : res.silent ? 'silent' : true);
+    else {
+      setError(res?.message || 'تعذّر الحفظ');
+      // خطأ مربوط بحقل (مثل رمز مكرر): يُفتح قسمه المطوي ويُركَّز، فلا يبقى الحقل مخفيًا تحت الخطأ
+      const fel = res?.field ? document.getElementById(`f-${res.field}`) : null;
+      if (fel) { openFold(fel); (fel.matches('input,select,textarea') ? fel : fel.querySelector('input:not([disabled]),select,textarea'))?.focus(); }
+    }
   };
   const optionsOf = (f) => (typeof f.options === 'function' ? f.options(v) : f.options) || {};
   const noteList = notes ? (notes(v) || []).filter((n) => n?.text) : [];
@@ -85,11 +96,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
     if (res?.success) onClose(true); else setError(res?.message || 'تعذّر الحذف');
   };
 
-  return (
-    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <form className="la-form mi-form" role="dialog" aria-modal="true" aria-label={title} onSubmit={submit}>
-        <h3>{title}</h3>
-        {fields.filter((f) => !f.show || f.show(v)).map((f) => {
+  const field = (f) => {
           const id = `f-${f.name}`;
           const common = { id, name: f.name, value: v[f.name], onChange: set(f.name), dir: f.dir, readOnly: f.readOnly || undefined };
           if (f.type === 'check') {
@@ -160,7 +167,23 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
                 : <input {...common} type={f.type === 'number' ? 'number' : f.type === 'email' ? 'email' : f.type === 'datetime' ? 'datetime-local' : f.type === 'date' ? 'date' : 'text'} step={f.type === 'number' ? 'any' : undefined} />}
             </label>
           );
-        })}
+        };
+  return (
+    <div className={`mid-ov${panel ? ' j-panel-ov' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <form className={`la-form mi-form${panel ? ' j-panel' : ''}`} role="dialog" aria-modal="true" aria-label={title} onSubmit={submit}>
+        <h3>{title}</h3>
+        {lead && <p className="la-muted j-panel-lead">{lead}</p>}
+        {!groups ? fields.filter((f) => !f.show || f.show(v)).map(field) : (<>
+          {fields.filter((f) => !f.show || f.show(v)).filter((f) => !f.group).map(field)}
+          {groups.map((g) => {
+            const list = fields.filter((f) => !f.show || f.show(v)).filter((f) => f.group === g.key);
+            if (!list.length) return null;
+            const inner = <>{g.lead && <p className="la-rule">{g.lead}</p>}{list.map(field)}</>;
+            return g.open === false
+              ? <details key={g.key} className="la-form-group" data-group={g.key}><summary>{g.title}</summary>{inner}</details>
+              : <fieldset key={g.key} className="la-form-group" data-group={g.key}><legend>{g.title}</legend>{inner}</fieldset>;
+          })}
+        </>)}
         {noteList.length > 0 && (
           <ul className="la-form-notes" data-testid="form-notes">
             {noteList.map((n) => <li key={n.text} className={n.tone === 'warn' ? 'warn' : ''}>{n.tone === 'warn' && <span aria-hidden="true">! </span>}{n.text}</li>)}

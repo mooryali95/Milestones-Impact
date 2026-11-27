@@ -111,7 +111,8 @@ test('البرنامج على الحاسوب: المحاور والمراحل ا
   expect(await noOverflow(page)).toBe(true);
   // «افتحه في القائمة» ينقل إلى النشاط في الباني
   await panel.getByRole('button', { name: 'افتحه في القائمة' }).click();
-  await expect(page.locator('#jreq-r2 button.la-link')).toBeFocused();
+  // وضع العرض (المرحلة 22) بلا زر في الصف: يُركَّز الصف نفسه
+  await expect(page.locator('#jreq-r2')).toBeFocused();
   // الجدول البديل
   await tl.getByText('عرض الرحلة جدولًا').click();
   await expect(tl.locator('.jt-table tbody tr')).toHaveCount(6);
@@ -228,8 +229,12 @@ test('محرر المرحلة: «مخطط بعد كم يومًا من بدايت
   await tab(page, 'الرحلة والمتطلبات');
   const card = page.locator('.la-stage-ed', { hasText: 'التوجيه على رأس العمل' }).first();
   await expect(card.locator('.la-rule')).toContainText('تُفتح مع بداية «التدريب»');
-  await card.locator('.la-row.between').getByRole('button', { name: 'تحرير' }).click();
+  // المرحلة 22: التحرير في وضع البناء من قائمة «⋯»، واللوحة الجانبية تطوي «شروط متقدمة»
+  await page.getByRole('radio', { name: 'بناء' }).click();
+  await card.getByRole('button', { name: 'إجراءات المرحلة «التوجيه على رأس العمل»' }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'مرحلة: التوجيه على رأس العمل' });
+  await form.getByText('شروط متقدمة').click();
   const off = form.getByLabel('مخطط بعد كم يومًا من بدايتها');
   await expect(off).toBeVisible();
   await expect(form).toContainText('تخطيط للتواريخ وحدها');
@@ -239,6 +244,7 @@ test('محرر المرحلة: «مخطط بعد كم يومًا من بدايت
   expect(saves).toHaveLength(1);
   expect(saves[0]).toMatchObject({ entity: 'journey_stages', row: { key: 'ojt', rules: { unlock: 'with', with: 'training', offset: 7 } } });
   // «متى تُفتح» غير «تبدأ مع»: لا حقل إزاحة
-  await page.locator('.la-stage-ed', { hasText: 'الدعم والتمكين' }).first().locator('.la-row.between').getByRole('button', { name: 'تحرير' }).click();
+  await page.getByRole('button', { name: 'إجراءات المرحلة «الدعم والتمكين»' }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   await expect(page.getByRole('dialog', { name: 'مرحلة: الدعم والتمكين' }).getByLabel('مخطط بعد كم يومًا من بدايتها')).toHaveCount(0);
 });
