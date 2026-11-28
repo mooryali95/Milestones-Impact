@@ -1,5 +1,7 @@
 # لوحة الإدارة لا تُفهرس أي استجابة منها (robots.txt يمنع الزحف أصلًا)
 # وبلا Access-Control-Allow-Origin: * الذي تضيفه Cloudflare Pages افتراضيًا: لا ملف فيها يُطلب من نطاق آخر (البند 9.14)
+# أ9: style-src يُبقي 'unsafe-inline' لأن style= المضمنة كثيرة في React ولوحة الإدارة تفتح وثائق src/lib/brand/* بوسوم <style>
+# متغيرة المحتوى؛ index.html بلا <style> مضمّن، ولا media-src (يرث default-src 'self'). csp-policy.test.js يمنع الاتساع.
 /*
   X-Robots-Tag: noindex, nofollow
   X-Frame-Options: DENY
