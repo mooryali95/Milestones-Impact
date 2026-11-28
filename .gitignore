@@ -42,3 +42,4 @@ leaders/media/.rec-*/
 .content-live/
 supabase/functions/agent-chat/evals/last-run-*.json
 /.deno-cov/
+e2e-reports/

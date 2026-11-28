@@ -17,7 +17,8 @@ export default defineConfig({
   timeout: 30_000,
   workers: 2,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  // في CI مع github تقرير JSON (PLAYWRIGHT_JSON_OUTPUT_NAME من e2e-groups.mjs) يقرؤه scripts/ops/e2e-flaky.mjs للمتذبذبة
+  reporter: process.env.CI ? [['github'], ['json', { outputFile: process.env.PLAYWRIGHT_JSON_OUTPUT_NAME || 'e2e-reports/all.json' }]] : 'list',
   // PW_CHROMIUM: مسار متصفح مثبت سلفًا حين لا يطابق إصدار Playwright المثبت في المشروع (بيئات التطوير السحابية)؛ CI لا يضبطه
   use: { locale: 'ar-SA', trace: 'retain-on-failure', launchOptions: process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {} },
   // E2E_SERVERS (مثل admin,leaders): يشغّل CI خوادم المجموعة وحدها (scripts/ops/e2e-groups.mjs). بلا قيمة: الأربعة.

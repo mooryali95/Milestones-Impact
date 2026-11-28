@@ -2,7 +2,8 @@ name: Stage gates report
 
 # أسبوعيًا ويدويًا: تقرير بوابات المراحل الخمس إلى الاحترافية الكاملة
 # (docs/audit/2026-11-09-خريطة-الطريق-إلى-الاحترافية-الكاملة-v1.md) في ملخص التشغيل.
-# تقرير لا حارس: لا يفشل لأن مرحلة لم تُعبر، ويقرأ الإنتاج وGitHub قراءة فقط.
+# مهمتان: report تقرير لا حارس، لا يفشل لأن مرحلة لم تُعبر، ويقرأ الإنتاج وGitHub قراءة فقط.
+# وe2e-all حارس: يفشل إن فشلت مجموعة أو زادت الاختبارات المتذبذبة على FLAKY_MAX.
 
 on:
   schedule:
@@ -44,3 +45,40 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ops/stage-gates.mjs --md="$GITHUB_STEP_SUMMARY"
+
+  # كل مجموعات رحلات المتصفح أسبوعيًا (لا المتأثرة بالتغيير وحدها كما في ci.yml)، والمتذبذبة فوق الحد تُفشل السير
+  e2e-all:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      # الحد الصغير للرحلات التي نجحت بعد إعادة المحاولة؛ في طلب الدمج تحذير فقط
+      FLAKY_MAX: '2'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/node-deps
+      - name: Build
+        run: npm run build
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
+      - name: End-to-end tests (all groups)
+        env:
+          CI: 'true'
+          E2E_PREBUILT: '1'
+        run: |
+          fail=0
+          for g in $(node scripts/ops/e2e-groups.mjs groups); do node scripts/ops/e2e-groups.mjs run "$g" || fail=1; done
+          exit $fail
+      - name: Flaky end-to-end tests (fail above the limit)
+        if: always()
+        run: node scripts/ops/e2e-flaky.mjs --max="$FLAKY_MAX"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-traces-weekly
+          path: |
+            test-results/
+            e2e-reports/
+          retention-days: 7
+          if-no-files-found: ignore

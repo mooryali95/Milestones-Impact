@@ -209,6 +209,11 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
   // نقل التشفير إلى المفتاح العام (2026-11-14): gpg بملف فيه كتلتان يشفّر للأولى وحدها بصمت، فمفتاح احتياطي يُلصق
   // مع مفتاح المالك في السر كان سيُهمل. السكربت الحقيقي وgpg الحقيقي بمفتاحين مولّدين للاختبار، بلا قاعدة ولا R2
   const hasGpg = spawnSync('gpg', ['--version']).status === 0;
+  // CI يثبّت gpg وage ويضبط REQUIRE_CRYPTO_TOOLS (ci.yml، خطوة Install gpg and age): غيابهما هناك فشل لا تخطٍّ صامت
+  it.runIf(!!process.env.REQUIRE_CRYPTO_TOOLS)('أدوات التشفير مثبتة حيث تُطلب، فلا تُتخطى اختباراتها', () => {
+    expect(hasGpg, 'gpg').toBe(true);
+    expect(spawnSync('age', ['--version']).status === 0 && spawnSync('age-keygen', ['--version']).status === 0, 'age').toBe(true);
+  });
   it.skipIf(process.platform !== 'linux' || !hasGpg)('يشفّر لكل مفتاح في BACKUP_PUBLIC_KEY ويكتب بصماتها، فيفك كل مستلم وحده', () => {
     const base = mkdtempSync(join(tmpdir(), 'mi-gpg-'));
     const bin = join(base, 'bin'); const out = join(base, 'out');
