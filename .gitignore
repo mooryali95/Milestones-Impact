@@ -41,3 +41,4 @@ leaders/media/.rec-*/
 # تصدير المحتوى الحي للمقارنة (scripts/content/export-live.mjs)
 .content-live/
 supabase/functions/agent-chat/evals/last-run-*.json
+/.deno-cov/

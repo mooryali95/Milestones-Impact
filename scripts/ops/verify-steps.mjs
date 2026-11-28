@@ -30,7 +30,10 @@ export const STEPS = [
   { id: 'audit', title: 'لا ثغرة عالية في حزم الإنتاج', ci: true, cmds: ['npm audit --omit=dev --audit-level=high'] },
   { id: 'lint', title: 'Lint', ci: true, cmds: ['npm run lint'] },
   { id: 'deno-check', title: 'أنواع الدوال كلها', ci: true, cmds: ['DENO_NO_PACKAGE_JSON=1 deno check --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none supabase/functions/*/index.ts'] },
-  { id: 'deno-test', title: 'اختبارات Deno', ci: true, cmds: ['DENO_NO_PACKAGE_JSON=1 deno test --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/ supabase/functions/_shared/'] },
+  { id: 'deno-test', title: 'اختبارات Deno', ci: true, cmds: [
+    'DENO_NO_PACKAGE_JSON=1 deno test --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 --coverage=.deno-cov supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/ supabase/functions/_shared/ supabase/functions/creem-webhook/ supabase/functions/send-otp/ supabase/functions/user-api/ supabase/functions/leaders-hooks/',
+    'DENO_NO_PACKAGE_JSON=1 deno coverage --lcov --output=.deno-cov/lcov.info .deno-cov && node scripts/ops/deno-coverage.mjs .deno-cov/lcov.info',
+  ] },
   { id: 'vitest', title: 'اختبارات الوحدات', ci: true, cmds: ['npm test'] },
   { id: 'build', title: 'البناء، والمبني المودع يطابق مصدره', ci: true, cmds: [
     'npm run build',
