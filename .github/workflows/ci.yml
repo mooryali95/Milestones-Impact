@@ -425,6 +425,10 @@ jobs:
       - name: Pending migrations block deploy
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: node scripts/ops/pending-migrations.mjs
+      # السجل المودع scripts/db/applied-manifest.json يسجل كل ترحيل في المستودع مطبقًا، فلا يفترق المستودع عن السجل بصمت.
+      # ترحيل طُبّق ولم يُسجل: node scripts/db/applied-manifest.mjs --add <الاسم> في طلب دمج. قراءة فقط، بلا أسرار.
+      - name: Every repo migration is recorded as applied
+        run: node scripts/db/unrecorded-migrations.mjs
       # ترحيل حاجب جديد منذ release طُبّق للتو: الكود القديم قد لا يعمل عليه، فلا تراجع آلي (ق5)
       - name: Is an automatic rollback safe?
         id: guard
