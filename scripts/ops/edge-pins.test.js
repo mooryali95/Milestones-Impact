@@ -4,7 +4,7 @@
 // رفع إصدار مقصود: غيّر الاستيراد، ثم من جذر المستودع (القفل القائم يبقى ويضاف إليه ما استجد، فلا تتحرك حزمة لم تُمس):
 //   DENO_NO_PACKAGE_JSON=1 deno check --lock=supabase/functions/deno.lock --node-modules-dir=none supabase/functions/*/index.ts
 //   DENO_NO_PACKAGE_JSON=1 deno test --lock=supabase/functions/deno.lock --node-modules-dir=none --allow-env --allow-read \
-//     --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/ supabase/functions/_shared/
+//     --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/ supabase/functions/_shared/ supabase/functions/creem-webhook/ supabase/functions/send-otp/ supabase/functions/user-api/ supabase/functions/leaders-hooks/
 //   (cd supabase/functions/leaders-api && deno check --node-modules-dir=none index.ts && deno test --node-modules-dir=none -A .)
 // واحذف من "specifiers" ما لم يعد مستوردًا. إصدار عمره أقل من 24 ساعة يحتاج --min-dep-age=0، والأفضل انتظاره.
 import { readFileSync, readdirSync } from 'node:fs';
@@ -115,7 +115,7 @@ describe('تثبيت إصدارات الدوال (المرحلة 2 البند 7)
     // البوابة المحلية (npm run gate) تعيد خطوات CI نفسها، فلا تنجح محليًا وتفشل في CI على القفل
     const gate = read('scripts/ops/local-gate.sh');
     expect(gate).toContain("DENO_NO_PACKAGE_JSON=1 deno check --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none supabase/functions/*/index.ts");
-    expect(gate).toContain('DENO_NO_PACKAGE_JSON=1 deno test --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/ supabase/functions/_shared/');
+    expect(gate).toContain('DENO_NO_PACKAGE_JSON=1 deno test --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/ supabase/functions/_shared/ supabase/functions/creem-webhook/ supabase/functions/send-otp/ supabase/functions/user-api/ supabase/functions/leaders-hooks/');
   });
 
   it('قفل leaders-api يحمل كل حزمة في رسم استيرادها (يقرؤه نشرها وحده، والنشر لا يجمّده)', () => {
