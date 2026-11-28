@@ -177,6 +177,16 @@ jobs:
           done
       - name: Apply in order
         run: node scripts/db/apply-migration.mjs $MIGRATIONS
+      # السير بصلاحية قراءة وحدها ولا يدفع إلى main، فيحسب السجل المحدث ويطلب إيداعه: بوابة النشر في ci.yml تقف حتى يُدمج
+      - name: Record the applied migrations (reminder)
+        run: |
+          node scripts/db/applied-manifest.mjs --add $MIGRATIONS
+          git diff --quiet -- scripts/db/applied-manifest.json && exit 0
+          {
+            printf '### سجل الترحيلات المطبقة\n\nطُبّق ما لم يُسجل بعد. أودع السجل في طلب دمج قبل النشر التالي:\n\n'
+            printf '```\nnode scripts/db/applied-manifest.mjs --add %s\n```\n' "$MIGRATIONS"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::أودع scripts/db/applied-manifest.json: node scripts/db/applied-manifest.mjs --add $MIGRATIONS"
 
   # الترحيل الحاجب: النشر فور التطبيق بسير التراجع الموحد نفسه (الدوال السبع ثم release ثم الدخان)، إلى رأس main ساعة النشر.
   # ref = main لا github.sha: إيداع دُمج ونُشر أثناء انتظار الموافقة لا يُرجَع عنه إلى الإيداع الذي شُغّل منه السير

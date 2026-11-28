@@ -44,6 +44,12 @@ export function addApplied(manifest, names, hash = hashOf) {
   return { ...manifest, migrations: sorted };
 }
 
+// ترحيلات المستودع التي لا يسجلها البيان مطبقة
+// الأسماء يمررها scripts/db/unrecorded-migrations.mjs؛ هذا الملف لا يقرأ المجلد كله فلا يجمعه في البيان
+export function unrecorded(manifest, names) {
+  return names.filter((n) => !(n in manifest.migrations)).sort();
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   if (args[0] === '--add' && args.length > 1) {

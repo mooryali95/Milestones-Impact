@@ -4,12 +4,17 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { addApplied, drift, readManifest } from '../../scripts/db/applied-manifest.mjs';
+import { addApplied, drift, readManifest, unrecorded } from '../../scripts/db/applied-manifest.mjs';
 
 const root = join(__dirname, '../..');
 const m = readManifest();
 
 describe('الترحيلات المطبّقة مجمّدة ببصماتها', () => {
+  it('غير المسجل مطبقًا يُذكر باسمه، والمطابقة فارغة', () => {
+    const m = { migrations: { a: 'x', b: 'y' } };
+    expect(unrecorded(m, ['a', 'b'])).toEqual([]);
+    expect(unrecorded(m, ['c', 'a', 'b'])).toEqual(['c']);
+  });
   it('كل ترحيل مطبّق باقٍ ببايتاته كما طُبّق', () => {
     expect(drift(m)).toEqual([]);
   });
