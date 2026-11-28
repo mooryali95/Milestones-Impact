@@ -2,7 +2,7 @@
 //   SUPABASE_ACCESS_TOKEN=... node scripts/db/definer-privileges.mjs     عبر Management API (migrate.yml، الوضع privileges)
 //   SUPABASE_DB_URL=... node scripts/db/definer-privileges.mjs           عبر psql في جلسة للقراءة فقط
 //   node scripts/db/definer-privileges.mjs --from-migrations             على البناء المحلي (PGlite) للمقارنة
-// يطبع جدولًا: الدالة، وهل ينفذها PUBLIC وanon وauthenticated وservice_role، وأي منح لـ anon أو authenticated غير مستثنى
+// يطبع جدولًا: الدالة، وهل ينفذها PUBLIC وanon وauthenticated وservice_role، وأي منح لـ PUBLIC أو anon أو authenticated غير مستثنى
 // في rls-audit-allow.json يُطبع تحذيرًا ويُنهي برمز 1، فيظهر الفرق بين الحية واللقطة قبل أن يكشفه فحص الليل.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +29,7 @@ export function report(rows, allow = {}) {
   for (const r of rows) {
     const roles = ['public', 'anon', 'authenticated', 'service_role'].map((k) => (yes(r[k]) ? 'نعم' : '-'));
     lines.push(`| ${r.fn} | ${roles.join(' | ')} |`);
-    const open = ['anon', 'authenticated'].filter((k) => yes(r[k]));
+    const open = ['public', 'anon', 'authenticated'].filter((k) => yes(r[k]));
     if (open.length && !r.fn.startsWith('sspdf.') && !(tables[r.fn]?.rules || []).includes('definer-exposed')) exposed.push({ fn: r.fn, roles: open });
   }
   return { table: ['| الدالة | PUBLIC | anon | authenticated | service_role |', '|---|---|---|---|---|', ...lines].join('\n'), exposed };

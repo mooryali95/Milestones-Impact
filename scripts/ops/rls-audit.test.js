@@ -76,7 +76,7 @@ describe('rls-audit', () => {
       { fn: 'sspdf.frozen()', public: true, anon: true, authenticated: true, service_role: true },
     ];
     const r = report(rows, { tables: { 'public.ok()': { rules: ['definer-exposed'], reason: 'سبب' } } });
-    expect(r.exposed).toEqual([{ fn: 'public.leak()', roles: ['anon', 'authenticated'] }]);
+    expect(r.exposed).toEqual([{ fn: 'public.leak()', roles: ['public', 'anon', 'authenticated'] }]);
     expect(r.table).toContain('| public.planner_hook_secret() | - | - | - | نعم |');
     expect(PRIV_QUERY).toContain("has_function_privilege('anon'");
     expect(PRIV_QUERY).not.toMatch(/\b(insert|update|delete|grant|revoke)\b/i);
