@@ -1,6 +1,13 @@
 # لا فهرسة لأي استجابة من التطبيق، صفحةً كانت أو ملفًا أو بيانات (robots.txt يشرح لماذا يُسمح بالزحف)
 # سياسة المحتوى تسمح بتحليلات Cloudflare (بلا ملفات تعريف، كلوحة الإدارة) ولا تسمح بأي سكربت مضمّن: سكربت كشف الروبوتات
 # الذي تحقنه Cloudflare في الصفحة يُحجب عمدًا (Cloudflare نفسها لا توصي بـunsafe-inline)، والتحقق البشري صريح بـTurnstile عند الدخول
+# أ9 (تضييق CSP، 2026-11-28): بندان أُبقيا عن قصد بعد الحصر، وcsp-policy.test.js يمنع اتساعهما:
+# - media-src 'self' https: لأن الإدارة تضبط فيديو النشاط «ملف mp4 مباشر يبدأ بـ https» من أي مضيف (methodology.js، videoSource
+#   في logic.js)، وحصره في مضيفات بعينها يكسر فيديوهات مضبوطة. وسائطنا نحن من /media/ (المقدمة وصوت الجولة)، والكاميرا srcObject.
+#   حصره يتطلب أولًا قصر videoSource على مضيفات معتمدة قرارًا من المالك.
+# - style-src 'unsafe-inline' لأن الوسوم <style> تُولَّد وقت التشغيل بمحتوى متغير (غلاف الكتيب في Handbook.jsx، ووثائق
+#   src/lib/brand/* المطبوعة والمضمّنة، وزر Google)، فلا تصلح لها بصمة ثابتة، وstyle= المضمنة كثيرة في React.
+#   index.html نفسه بلا <style> مضمّن. لا unsafe-inline ولا unsafe-eval في script-src.
 /*
   X-Robots-Tag: noindex, nofollow
   X-Frame-Options: DENY
