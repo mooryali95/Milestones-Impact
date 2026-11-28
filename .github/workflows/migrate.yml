@@ -5,6 +5,8 @@ name: Apply migrations (production)
 # المسجّل سلفًا في leaders.schema_migrations يُتخطى، وأول فشل يوقف السلسلة ويُظهر خطأ القاعدة في السجل.
 # الوضع check قراءة فقط: يطبع الجدولة الحية (cron.job وآخر تشغيلاتها) وأسماء أسرار Vault بلا قيم
 # وسجل الترحيلات وأسماء أسرار الدوال (ومنها مفتاحا Turnstile)، ولا يغيّر شيئًا (RUNBOOK.md §3).
+# الوضع privileges قراءة فقط: يطبع صلاحية EXECUTE الحية لـ PUBLIC وanon وauthenticated وservice_role على كل دالة SECURITY DEFINER
+# (scripts/db/definer-privileges.mjs)، ويفشل إن كُشفت دالة لـ anon أو authenticated بلا استثناء في rls-audit-allow.json.
 # الوضع verify قراءة فقط: يشغّل فحوص ملف scripts/db/verify-*.sql (يُسمّى في migrations)، كل فحص في معاملة للقراءة فقط.
 #
 # التطبيق (تصور تحديث المنصة بلا أثر، المرحلة 6):
@@ -30,7 +32,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'apply = نسخة ثم تطبيق · apply-and-deploy = نسخة ثم تطبيق ثم نشر main (للترحيل الحاجب) · check = قراءة الجدولة والسجل فقط · verify = فحوص قراءة من scripts/db/verify-*.sql'
+        description: 'apply = نسخة ثم تطبيق · apply-and-deploy = نسخة ثم تطبيق ثم نشر main (للترحيل الحاجب) · check = قراءة الجدولة والسجل فقط · privileges = صلاحية دوال SECURITY DEFINER الحية (قراءة) · verify = فحوص قراءة من scripts/db/verify-*.sql'
         required: true
         type: choice
         default: apply
@@ -38,6 +40,7 @@ on:
           - apply
           - check
           - verify
+          - privileges
           - apply-and-deploy
       migrations:
         description: 'أسماء الترحيلات بالترتيب مفصولة بمسافة (بلا .sql)؛ تُهمل في وضع check. في وضع verify: مسار ملف الفحص'
@@ -50,7 +53,7 @@ permissions:
 jobs:
   # قراءة فقط: بلا مجموعة تزامن ولا مراجع، فلا تنتظر موافقة ولا نشرًا. بيئة supabase بلا مراجعين تقصرها على main
   read:
-    if: inputs.mode == 'check' || inputs.mode == 'verify'
+    if: inputs.mode == 'check' || inputs.mode == 'verify' || inputs.mode == 'privileges'
     runs-on: ubuntu-latest
     # بيئة supabase: فرعها main وحده بلا مراجعين، وفيها SUPABASE_ACCESS_TOKEN، فلا يقرؤه سير من فرع غير مدموج (RUNBOOK.md §5)
     environment: supabase
@@ -77,6 +80,10 @@ jobs:
       - name: Verify (read only)
         if: env.MODE == 'verify'
         run: node scripts/db/apply-migration.mjs --verify "$MIGRATIONS"
+      # صلاحية EXECUTE الحية على دوال SECURITY DEFINER، جدولًا في السجل وملخص التشغيل، بلا أي كتابة
+      - name: SECURITY DEFINER privileges (read only)
+        if: env.MODE == 'privileges'
+        run: node scripts/db/definer-privileges.mjs
 
   # بوابة المالك وحدها: بيئة migration-approval بمراجع هو المالك، بلا أسرار ولا مجموعة تزامن، فانتظار الموافقة لا يحجز
   # deploy-production (GitHub قد يُدخل الوظيفة مجموعتها قبل أن تنتظر مراجعة البيئة، فتحجب نشر ci.yml أو تلغي المنتظر)

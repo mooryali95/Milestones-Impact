@@ -279,7 +279,11 @@ describe('التزامن والموافقة والنشر بعد التطبيق (
     expect(manual.concurrency).toBeUndefined();
     expect(migrate.jobs.read.environment).toBe('supabase');
     expect(migrate.jobs.read.concurrency).toBeUndefined();
-    expect(migrate.on.workflow_dispatch.inputs.mode.options).toEqual(['apply', 'check', 'verify', 'apply-and-deploy']);
+    expect(migrate.on.workflow_dispatch.inputs.mode.options).toEqual(['apply', 'check', 'verify', 'privileges', 'apply-and-deploy']);
+    // privileges قراءة فقط في وظيفة read: سكربت الصلاحيات وحده، بلا أسرار كتابة
+    const priv = migrate.jobs.read.steps.find((s) => s.if === "env.MODE == 'privileges'");
+    expect(priv.run).toBe('node scripts/db/definer-privileges.mjs');
+    expect(migrate.jobs.read.if).toContain("inputs.mode == 'privileges'");
   });
   it('apply-and-deploy: يرفض حاجبًا لم يُسمَّ قبل أي تطبيق، ثم ينشر رأس main بسير التراجع الموحد فور التطبيق', () => {
     const steps = migrate.jobs.apply.steps;
