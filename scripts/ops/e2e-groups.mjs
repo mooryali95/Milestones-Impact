@@ -3,7 +3,8 @@
 //
 //   node scripts/ops/e2e-groups.mjs --check        كل ملف في مجموعة واحدة بالضبط (يحرسه ci-selective.test.js)
 //   node scripts/ops/e2e-groups.mjs list           المجموعات وملفاتها
-//   node scripts/ops/e2e-groups.mjs run <group>    يشغّل ملفات المجموعة بخوادمها وحدها (E2E_SERVERS)
+//   node scripts/ops/e2e-groups.mjs run <group>    يشغّل ملفات المجموعة بخوادمها وحدها (E2E_SERVERS)، وتقريرها JSON في e2e-reports/<group>.json
+//   node scripts/ops/e2e-groups.mjs groups         معرّفات المجموعات كلها (للسير الأسبوعي)
 //
 // التحقق المحلي الكامل (npm run verify) يبقى يشغّل الرحلات كلها بـ npm run e2e.
 import { readdirSync, readFileSync } from 'node:fs';
@@ -62,16 +63,18 @@ if (isMain) {
       console.log(`${g.id} (${g.title}): ${p.files.length} ملفًا، الخوادم: ${p.servers.join('، ')}`);
       for (const f of p.files) console.log(`  ${f}`);
     }
+  } else if (cmd === 'groups') {
+    console.log(GROUPS.map((g) => g.id).join(' '));
   } else if (cmd === 'run' && GROUPS.some((g) => g.id === group)) {
     const p = plan(group);
     if (!p.files.length) { console.log(`لا ملفات في ${group}.`); process.exit(0); }
     console.log(`رحلات ${group}: ${p.files.length} ملفًا على ${p.servers.join('، ')}`);
     const r = spawnSync('npx', ['playwright', 'test', ...p.files], {
-      cwd: root, stdio: 'inherit', env: { ...process.env, E2E_SERVERS: p.servers.join(',') },
+      cwd: root, stdio: 'inherit', env: { ...process.env, E2E_SERVERS: p.servers.join(','), PLAYWRIGHT_JSON_OUTPUT_NAME: `e2e-reports/${group}.json` },
     });
     process.exit(r.status ?? 1);
   } else {
-    console.error(`الاستعمال: --check | list | run <${GROUPS.map((g) => g.id).join('|')}>`);
+    console.error(`الاستعمال: --check | list | groups | run <${GROUPS.map((g) => g.id).join('|')}>`);
     process.exit(2);
   }
 }

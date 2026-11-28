@@ -51,4 +51,5 @@ export const STEPS = [
 
 // أوامر build-and-test التي لا تفحص شيئًا: تثبيت الحزم والمتصفح
 // وأسطر نقل المخرجات بين الخطوات (>> "$GITHUB_OUTPUT")
-export const CI_SETUP = [/^npm ci\b/, /^npx playwright install\b/, />> "\$GITHUB_OUTPUT"$/];
+// وتثبيت أدوات النظام (gpg وage، أ6) وملخص الرحلات المتذبذبة من تقرير JSON لا يكتبه التشغيل المحلي
+export const CI_SETUP = [/^npm ci\b/, /^npx playwright install\b/, />> "\$GITHUB_OUTPUT"$/, /sudo apt-get install\b/, /^node scripts\/ops\/e2e-flaky\.mjs\b/];

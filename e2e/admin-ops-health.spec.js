@@ -232,6 +232,8 @@ test('المراقب لا يرى البطاقة ولا الشريط، ولا ي�
 
 // لقطتا الطي والفتح بعرض سطح المكتب: OPS_SHOTS=<مجلد> وحده
 test('لقطتا البطاقة مطوية ومفتوحة', async ({ browser }) => {
+  // تخطٍّ مقصود باقٍ (مراجعة أ6): أداة لقطات بصرية للمراجعة اليدوية تكتب صورًا إلى مجلد يسميه المراجع، لا اختبار سلوك؛
+  // سلوك ما تصوّره محروس باختبارات الملف نفسها التي تعمل دائمًا، فتشغيلها في CI يكتب صورًا لا يقرؤها أحد.
   test.skip(!process.env.OPS_SHOTS, 'اللقطات بطلب');
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
@@ -248,6 +250,8 @@ test('لقطتا البطاقة مطوية ومفتوحة', async ({ browser }) 
 // لقطات للمراجعة: OPS_SHOTS=<مجلد> وحده
 for (const [w, h] of [[1440, 900], [390, 844]]) {
   test(`لقطات البطاقة والشريط بعرض ${w}`, async ({ browser }) => {
+    // تخطٍّ مقصود باقٍ (مراجعة أ6): أداة لقطات بصرية للمراجعة اليدوية تكتب صورًا إلى مجلد يسميه المراجع، لا اختبار سلوك؛
+    // سلوك ما تصوّره محروس باختبارات الملف نفسها التي تعمل دائمًا، فتشغيلها في CI يكتب صورًا لا يقرؤها أحد.
     test.skip(!process.env.OPS_SHOTS, 'اللقطات بطلب');
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2 });
     const page = await ctx.newPage();

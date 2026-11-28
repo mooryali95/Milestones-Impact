@@ -66,9 +66,10 @@ jobs:
           fetch-depth: 2
       - id: tree
         run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
-      # على main: شجرة اجتازت طلب دمج أخضر (والقاعدة لم تتحرك بعده) لا تُفحص ثانية
+      # على main: شجرة اجتازت طلب دمج أخضر (والقاعدة لم تتحرك بعده) لا تُفحص ثانية. إعادة الاستعمال محصورة في الدفع
+      # إلى main، وهو مسار النشر وحده (release-gate بعده): طلب الدمج والتشغيل اليدوي والجدولة لا يقرؤون ci-pass أبدًا
       - id: dedupe
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -173,7 +174,13 @@ jobs:
         if: needs.changes.outputs.functions == 'true'
         run: DENO_NO_PACKAGE_JSON=1 deno coverage --lcov --output=.deno-cov/lcov.info .deno-cov && node scripts/ops/deno-coverage.mjs .deno-cov/lcov.info
 
+      # gpg وage لاختبارات التشفير الحقيقي في backups-offsite.test.js، فلا تُتخطى لغيابهما (المشغّل قد لا يحمل age)
+      - name: Install gpg and age
+        run: command -v gpg >/dev/null && command -v age >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq gnupg age; }
+
       - name: Test
+        env:
+          REQUIRE_CRYPTO_TOOLS: '1'
         run: npm test
 
   # البناء والمبني المودع يطابق مصدره، ثم رحلات المتصفح بمجموعات ما تغيّر (scripts/ops/e2e-groups.mjs)
@@ -241,6 +248,11 @@ jobs:
           E2E_PREBUILT: '1'
           GROUPS: ${{ join(fromJSON(needs.changes.outputs.e2e_groups), ' ') }}
         run: for g in $GROUPS; do node scripts/ops/e2e-groups.mjs run "$g" || exit 1; done
+
+      # ما نجح بعد إعادة المحاولة: قائمة في الملخص وتحذير، ولا يُفشل طلب الدمج (الحد في السير الأسبوعي stage-gates.yml)
+      - name: Flaky end-to-end tests (warning only)
+        if: always() && needs.changes.outputs.e2e_groups != '[]'
+        run: node scripts/ops/e2e-flaky.mjs
 
       - uses: actions/upload-artifact@v7
         if: failure()
