@@ -1,0 +1,222 @@
+{
+  "note": "استثناءات فحص RLS (scripts/db/rls-audit.mjs) باسم الجدول الكامل (مخطط.جدول، وللدالة مخطط.اسم(معاملاتها))، ولكل منها قواعده (no-rls، rls-bypass-grant، grant-no-policy، view-grant، foreign-grant، sequence-grant، definer-exposed) وسببه في reason. needs_decision: true يعني مخالفة حقيقية لم تُصلح بعد وتنتظر قرار المالك، ويطبعها الفحص تحذيرًا في كل تشغيل. استثناء بلا سبب أو لا يطابق مخالفة قائمة يُفشل الفحص.",
+  "tables": {
+    "leaders.agent_key_clear(p_by text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "leaders.agent_key_set(p_key text, p_by text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "leaders.agent_key_status(p_ok boolean, p_error text, p_source text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "leaders.agent_runtime()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "leaders.cron_job_status(p_name text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "leaders.erasure_purge(p_participant uuid, p_request uuid, p_by text, p_email_hash text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "leaders.instrument_reliability(p_instrument uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.admin_login_attempt(p_email text, p_ip text, p_max_ip integer, p_max_all integer, p_window_s integer)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.analytics_daily(p_from timestamp with time zone, p_to timestamp with time zone, p_site text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.analytics_pages(p_from timestamp with time zone, p_to timestamp with time zone, p_site text, p_limit integer)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.analytics_sources(p_from timestamp with time zone, p_to timestamp with time zone, p_site text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.contact_requests_guard()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "دالة زناد SECURITY DEFINER لا تُستدعى عبر /rpc فعليًا، لكن EXECUTE الممنوح لـ PUBLIC افتراضيًا لم يُسحب",
+      "needs_decision": true
+    },
+    "public.get_my_admin_role()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.has_permission(p_system text, p_permission text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.page_views_guard()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "دالة زناد SECURITY DEFINER لا تُستدعى عبر /rpc فعليًا، لكن EXECUTE الممنوح لـ PUBLIC افتراضيًا لم يُسحب",
+      "needs_decision": true
+    },
+    "public.planner_can_read_project(pid text, uid uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_check_otp_rate(check_email text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_handle_new_user()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "دالة زناد SECURITY DEFINER لا تُستدعى عبر /rpc فعليًا، لكن EXECUTE الممنوح لـ PUBLIC افتراضيًا لم يُسحب",
+      "needs_decision": true
+    },
+    "public.planner_hook_secret()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_is_approved(uid uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_is_manzuma(uid uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_is_owner(uid uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_keepalive_ping()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_log_otp_attempt(log_email text, was_success boolean)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_lookup_user_by_email(lookup_email text)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_notify_workbench()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "دالة زناد SECURITY DEFINER لا تُستدعى عبر /rpc فعليًا، لكن EXECUTE الممنوح لـ PUBLIC افتراضيًا لم يُسحب",
+      "needs_decision": true
+    },
+    "public.planner_owns_project(pid text, uid uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_shared_with_me(pid text, uid uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_shared_with_me_edit(pid text, uid uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    },
+    "public.planner_touch_updated_at()": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "دالة زناد SECURITY DEFINER لا تُستدعى عبر /rpc فعليًا، لكن EXECUTE الممنوح لـ PUBLIC افتراضيًا لم يُسحب",
+      "needs_decision": true
+    },
+    "public.planner_transfer_ownership(pid text, new_owner uuid)": {
+      "rules": [
+        "definer-exposed"
+      ],
+      "reason": "EXECUTE ممنوح لـ anon وauthenticated عبر PUBLIC الافتراضي ولم يُسحب في الترحيلات؛ لم يُتحقق بعد أيها يُستدعى من الواجهة عمدًا",
+      "needs_decision": true
+    }
+  }
+}

@@ -84,7 +84,7 @@ describe('CI والاختبارات', () => {
     expect(seed).toMatch(/grant usage on schema leaders to service_role;/);   // اللقطة بلا صلاحيات؛ الوصول عبر service_role وحده
     expect(read('scripts/integration/golden.mjs')).toMatch(/\['-At', '-q', '-v', 'ON_ERROR_STOP=1'/);
     for (const f of ['google_test.ts', 'passkeys_test.ts', 'payments_test.ts']) expect(statSync(join(root, `supabase/functions/leaders-api/${f}`)).size).toBeGreaterThan(500);
-    expect(read('scripts/db/snapshot.mjs')).toContain("import { DATA_ONLY } from './data-only.mjs'");
+    expect(read('scripts/db/local-db.mjs')).toContain("import { DATA_ONLY } from './data-only.mjs'");   // البناء المحلي المشترك بين snapshot.mjs وrls-audit.mjs
   });
   it('dependabot وNode المثبت وvite 7.3.7 فما فوق', () => {
     expect(read('.github/dependabot.yml')).toMatch(/package-ecosystem: npm/);

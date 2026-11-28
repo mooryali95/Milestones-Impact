@@ -110,6 +110,8 @@ jobs:
           node scripts/db/migrations-list.mjs --check
           # لقطة البنية المودعة = اللقطة + ترحيلاتها (بناء محلي في PGlite)؛ الحية تُفحص ليليًا في schema-check.yml
           node scripts/db/snapshot.mjs --from-migrations --check
+          # كل جدول في المخططات المكشوفة بـ RLS مفعّلة وبلا منح مباشر غير مقصود لـ anon/authenticated (الاستثناءات في rls-audit-allow.json)؛ الحية ليليًا في schema-check.yml
+          node scripts/db/rls-audit.mjs --from-migrations
           # بنك القياس v5 وv5.1 وv5.2 مولَّد من مصادره ومتحقق منه (الأطوال، مسميات الأُطر، التقارب مع كتيب v3).
           # وترحيلاته مطبّقة فمجمّدة ببصماتها (applied-manifest.test.js): مصدر معدَّل يفشل هنا، ومعه ترحيله المعاد توليده هناك
           node scripts/questions/build-v5.mjs > /dev/null && node scripts/questions/build-v5_1.mjs > /dev/null && node scripts/questions/build-v5_2.mjs > /dev/null
