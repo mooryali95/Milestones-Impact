@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { audit, loadAllow, QUERY } from '../db/rls-audit.mjs';
+import { report, PRIV_QUERY } from '../db/definer-privileges.mjs';
+import { PRELUDE } from '../db/local-db.mjs';
 
 const row = (o) => ({ schema: 'leaders', name: 't', kind: 'r', rls: true, options: '', grants: '[]', policy_roles: '[]', ...o });
 
@@ -49,5 +52,55 @@ describe('rls-audit', () => {
   });
   it('الاستعلام يستثني sspdf المجمد', () => {
     expect(QUERY).toContain("'sspdf'");
+  });
+  it('لا استثناء ينتظر قرار المالك، ولا دالة للخادم وحده مستثناة (20261130060000)', () => {
+    const tables = loadAllow('scripts/db/rls-audit-allow.json').tables;
+    expect(Object.entries(tables).filter(([, e]) => e.needs_decision).map(([k]) => k)).toEqual([]);
+    for (const fn of ['planner_hook_secret()', 'planner_log_otp_attempt(log_email text, was_success boolean)', 'planner_check_otp_rate(check_email text)'])
+      expect(tables[`public.${fn}`]).toBeUndefined();
+  });
+  it('اللقطة تحمل ACL الدوال: سر الخطاف وتسجيل محاولة الرمز للخادم وحده، والمساعدات بلا anon', () => {
+    const base = readFileSync('supabase/schema/baseline.sql', 'utf8');
+    const grantOf = (fn) => base.match(new RegExp(`grant execute on function public\\.${fn}\\([^)]*\\) to ([^;]+);`))?.[1];
+    expect(grantOf('planner_hook_secret')).toBe('service_role');
+    expect(grantOf('planner_log_otp_attempt')).toBe('service_role');
+    expect(grantOf('planner_check_otp_rate')).toBe('service_role');
+    expect(grantOf('planner_is_owner')).toBe('authenticated, service_role');
+    expect(base).toMatch(/revoke all on function public\.planner_hook_secret\(\) from public, anon, authenticated, service_role;/);
+  });
+  it('فحص الصلاحيات الحي: يعرض الجدول ويرفع المكشوف لـ anon بلا استثناء', () => {
+    const rows = [
+      { fn: 'public.planner_hook_secret()', public: false, anon: false, authenticated: false, service_role: true },
+      { fn: 'public.leak()', public: 't', anon: 't', authenticated: 't', service_role: 't' },
+      { fn: 'public.ok()', public: false, anon: true, authenticated: true, service_role: true },
+      { fn: 'sspdf.frozen()', public: true, anon: true, authenticated: true, service_role: true },
+    ];
+    const r = report(rows, { tables: { 'public.ok()': { rules: ['definer-exposed'], reason: 'سبب' } } });
+    expect(r.exposed).toEqual([{ fn: 'public.leak()', roles: ['public', 'anon', 'authenticated'] }]);
+    expect(r.table).toContain('| public.planner_hook_secret() | - | - | - | نعم |');
+    expect(PRIV_QUERY).toContain("has_function_privilege('anon'");
+    expect(PRIV_QUERY).not.toMatch(/\b(insert|update|delete|grant|revoke)\b/i);
+  });
+  it('الترحيل 20261130060000 في PGlite: يسحب سر الخطاف وتسجيل الرمز من anon وauthenticated، ويبقي المساعدات لـ authenticated، ويتخطى الغائبة', async () => {
+    const { PGlite } = await import('@electric-sql/pglite');
+    const db = new PGlite();
+    await db.exec(PRELUDE);
+    await db.exec(`create function public.planner_hook_secret() returns text language sql security definer as 'select 1::text';
+      create function public.planner_log_otp_attempt(text, boolean) returns void language sql security definer as 'select';
+      create function public.planner_is_owner(uuid) returns boolean language sql security definer as 'select true';
+      grant execute on function public.planner_hook_secret(), public.planner_log_otp_attempt(text, boolean), public.planner_is_owner(uuid) to anon, authenticated;
+      create schema leaders; create table leaders.schema_migrations (name text primary key);`);
+    const mig = readFileSync('supabase/migrations/20261130060000_planner_definer_privileges.sql', 'utf8');
+    await db.exec(mig);
+    await db.exec(mig);
+    const can = async (role, fn) => (await db.query(`select has_function_privilege('${role}', '${fn}', 'EXECUTE') as ok`)).rows[0].ok;
+    for (const fn of ['public.planner_hook_secret()', 'public.planner_log_otp_attempt(text, boolean)']) {
+      expect(await can('anon', fn)).toBe(false);
+      expect(await can('authenticated', fn)).toBe(false);
+      expect(await can('service_role', fn)).toBe(true);
+    }
+    expect(await can('anon', 'public.planner_is_owner(uuid)')).toBe(false);
+    expect(await can('authenticated', 'public.planner_is_owner(uuid)')).toBe(true);
+    await db.close();
   });
 });

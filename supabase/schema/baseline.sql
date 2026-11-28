@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261130050000_leaders_upload_size_limit
+-- as-of migration: 20261130060000_planner_definer_privileges
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -6479,6 +6479,95 @@ CREATE OR REPLACE TRIGGER planner_projects_owner_guard BEFORE UPDATE ON public.p
 CREATE OR REPLACE TRIGGER trg_planner_projects_touch BEFORE UPDATE ON public.planner_projects FOR EACH ROW EXECUTE FUNCTION planner_touch_updated_at();
 
 CREATE OR REPLACE TRIGGER trg_planner_resources_touch BEFORE UPDATE ON public.planner_resources FOR EACH ROW EXECUTE FUNCTION planner_touch_updated_at();
+
+revoke all on function leaders.agent_key_clear(p_by text) from public, anon, authenticated, service_role;
+grant execute on function leaders.agent_key_clear(p_by text) to service_role;
+
+revoke all on function leaders.agent_key_set(p_key text, p_by text) from public, anon, authenticated, service_role;
+grant execute on function leaders.agent_key_set(p_key text, p_by text) to service_role;
+
+revoke all on function leaders.agent_key_status(p_ok boolean, p_error text, p_source text) from public, anon, authenticated, service_role;
+grant execute on function leaders.agent_key_status(p_ok boolean, p_error text, p_source text) to service_role;
+
+revoke all on function leaders.agent_runtime() from public, anon, authenticated, service_role;
+grant execute on function leaders.agent_runtime() to service_role;
+
+revoke all on function leaders.cron_job_status(p_name text) from public, anon, authenticated, service_role;
+grant execute on function leaders.cron_job_status(p_name text) to service_role;
+
+revoke all on function leaders.erasure_purge(p_participant uuid, p_request uuid, p_by text, p_email_hash text) from public, anon, authenticated, service_role;
+grant execute on function leaders.erasure_purge(p_participant uuid, p_request uuid, p_by text, p_email_hash text) to service_role;
+
+revoke all on function leaders.instrument_reliability(p_instrument uuid) from public, anon, authenticated, service_role;
+grant execute on function leaders.instrument_reliability(p_instrument uuid) to service_role;
+
+revoke all on function public.admin_login_attempt(p_email text, p_ip text, p_max_ip integer, p_max_all integer, p_window_s integer) from public, anon, authenticated, service_role;
+grant execute on function public.admin_login_attempt(p_email text, p_ip text, p_max_ip integer, p_max_all integer, p_window_s integer) to service_role;
+
+revoke all on function public.analytics_daily(p_from timestamp with time zone, p_to timestamp with time zone, p_site text) from public, anon, authenticated, service_role;
+grant execute on function public.analytics_daily(p_from timestamp with time zone, p_to timestamp with time zone, p_site text) to service_role;
+
+revoke all on function public.analytics_pages(p_from timestamp with time zone, p_to timestamp with time zone, p_site text, p_limit integer) from public, anon, authenticated, service_role;
+grant execute on function public.analytics_pages(p_from timestamp with time zone, p_to timestamp with time zone, p_site text, p_limit integer) to service_role;
+
+revoke all on function public.analytics_sources(p_from timestamp with time zone, p_to timestamp with time zone, p_site text) from public, anon, authenticated, service_role;
+grant execute on function public.analytics_sources(p_from timestamp with time zone, p_to timestamp with time zone, p_site text) to service_role;
+
+revoke all on function public.contact_requests_guard() from public, anon, authenticated, service_role;
+
+revoke all on function public.get_my_admin_role() from public, anon, authenticated, service_role;
+
+revoke all on function public.has_permission(p_system text, p_permission text) from public, anon, authenticated, service_role;
+
+revoke all on function public.page_views_guard() from public, anon, authenticated, service_role;
+
+revoke all on function public.planner_can_read_project(pid text, uid uuid) from public, anon, authenticated, service_role;
+grant execute on function public.planner_can_read_project(pid text, uid uuid) to authenticated, service_role;
+
+revoke all on function public.planner_check_otp_rate(check_email text) from public, anon, authenticated, service_role;
+grant execute on function public.planner_check_otp_rate(check_email text) to service_role;
+
+revoke all on function public.planner_handle_new_user() from public, anon, authenticated, service_role;
+grant execute on function public.planner_handle_new_user() to service_role;
+
+revoke all on function public.planner_hook_secret() from public, anon, authenticated, service_role;
+grant execute on function public.planner_hook_secret() to service_role;
+
+revoke all on function public.planner_is_approved(uid uuid) from public, anon, authenticated, service_role;
+grant execute on function public.planner_is_approved(uid uuid) to authenticated, service_role;
+
+revoke all on function public.planner_is_manzuma(uid uuid) from public, anon, authenticated, service_role;
+grant execute on function public.planner_is_manzuma(uid uuid) to authenticated, service_role;
+
+revoke all on function public.planner_is_owner(uid uuid) from public, anon, authenticated, service_role;
+grant execute on function public.planner_is_owner(uid uuid) to authenticated, service_role;
+
+revoke all on function public.planner_keepalive_ping() from public, anon, authenticated, service_role;
+grant execute on function public.planner_keepalive_ping() to anon, authenticated, service_role;
+
+revoke all on function public.planner_log_otp_attempt(log_email text, was_success boolean) from public, anon, authenticated, service_role;
+grant execute on function public.planner_log_otp_attempt(log_email text, was_success boolean) to service_role;
+
+revoke all on function public.planner_lookup_user_by_email(lookup_email text) from public, anon, authenticated, service_role;
+grant execute on function public.planner_lookup_user_by_email(lookup_email text) to authenticated;
+
+revoke all on function public.planner_notify_workbench() from public, anon, authenticated, service_role;
+grant execute on function public.planner_notify_workbench() to service_role;
+
+revoke all on function public.planner_owns_project(pid text, uid uuid) from public, anon, authenticated, service_role;
+grant execute on function public.planner_owns_project(pid text, uid uuid) to authenticated, service_role;
+
+revoke all on function public.planner_shared_with_me(pid text, uid uuid) from public, anon, authenticated, service_role;
+grant execute on function public.planner_shared_with_me(pid text, uid uuid) to authenticated, service_role;
+
+revoke all on function public.planner_shared_with_me_edit(pid text, uid uuid) from public, anon, authenticated, service_role;
+grant execute on function public.planner_shared_with_me_edit(pid text, uid uuid) to authenticated, service_role;
+
+revoke all on function public.planner_touch_updated_at() from public, anon, authenticated, service_role;
+grant execute on function public.planner_touch_updated_at() to service_role;
+
+revoke all on function public.planner_transfer_ownership(pid text, new_owner uuid) from public, anon, authenticated, service_role;
+grant execute on function public.planner_transfer_ownership(pid text, new_owner uuid) to authenticated, service_role;
 
 -- ── بيانات مرجعية ──
 insert into leaders.dimensions (key, title_ar, title_en, sort) values

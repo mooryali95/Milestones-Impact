@@ -54,4 +54,15 @@ union all
 select 7, n.nspname, c.relname || '.' || t.tgname, replace(pg_get_triggerdef(t.oid), 'CREATE TRIGGER', 'CREATE OR REPLACE TRIGGER') || ';'
   from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
   where not t.tgisinternal and n.nspname in ('leaders','public') and c.relname !~ 'backup'
+union all
+-- صلاحية EXECUTE على دوال SECURITY DEFINER: تُسحب من الجميع ثم تُمنح لمن يملكها فعلًا، فتحمل اللقطة حالة المنح
+-- كما هي ولا يظن فحص RLS (rls-audit.mjs --from-migrations) أن PUBLIC يملكها بالافتراض
+select 8, n.nspname, p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')',
+  format('revoke all on function %I.%I(%s) from public, anon, authenticated, service_role;', n.nspname, p.proname, pg_get_function_identity_arguments(p.oid))
+  || coalesce((select format(E'\ngrant execute on function %I.%I(%s) to %s;', n.nspname, p.proname, pg_get_function_identity_arguments(p.oid), string_agg(r.rolname, ', ' order by r.rolname))
+       from pg_roles r where r.rolname in ('anon','authenticated','service_role') and has_function_privilege(r.oid, p.oid, 'EXECUTE')
+       having count(*) > 0), '')
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname in ('leaders','public') and p.prokind='f' and p.prosecdef
+  and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
 order by 1, 2, 3

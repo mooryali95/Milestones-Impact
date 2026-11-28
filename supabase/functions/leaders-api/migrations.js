@@ -204,6 +204,7 @@ export const MIGRATIONS = [
   '20261130030000_leaders_capstone_doc_options',
   '20261130040000_admin_login_attempts_atomic',
   '20261130050000_leaders_upload_size_limit',
+  '20261130060000_planner_definer_privileges',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
