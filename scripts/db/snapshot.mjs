@@ -8,61 +8,15 @@
 // اللقطة تحمل في ترويستها آخر ترحيل دخل فيها (as-of)، فالبناء المحلي يطبّق ما بعده فقط.
 // الحية هي الحقيقة؛ الفحص المحلي يضمن أن اللقطة والترحيلات في المستودع متسقان، والفحص
 // الحي (ليليًا في schema-check.yml) يكشف انحراف الإنتاج عن المستودع.
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { DATA_ONLY } from './data-only.mjs';
+import { BASELINE as OUT, AS_OF_RE, committed, migrationNames, localQuery as buildLocal, liveQuery } from './local-db.mjs';
 
-const REF = process.env.SUPABASE_PROJECT_REF || 'eormhcupwgwpllhrfxxg';
-const OUT = new URL('../../supabase/schema/baseline.sql', import.meta.url);
-const MIGRATIONS = new URL('../../supabase/migrations/', import.meta.url);
 const args = process.argv.slice(2);
 const flag = (k) => args.includes(k);
 const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
-
-const AS_OF_RE = /^-- as-of migration: (\S+)$/m;
-const committed = () => { try { return readFileSync(OUT, 'utf8'); } catch { return ''; } };
-const migrationNames = () => readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).map((f) => f.replace(/\.sql$/, '')).sort();
-
-// ── المصدر: القاعدة الحية ──
-function liveQuery(token) {
-  return async (sql) => {
-    const r = await fetch(`https://api.supabase.com/v1/projects/${REF}/database/query`, {
-      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: sql }),
-    });
-    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
-    return r.json();
-  };
-}
-
-// ── المصدر: بناء محلي في PGlite من اللقطة المودعة والترحيلات الأحدث من نقطتها ──
-// ما توفره Supabase لكل مشروع قبل أي ترحيل (كما في baseline-schema.test.js)
-const PRELUDE = `create role anon; create role authenticated; create role service_role; create schema auth; create schema extensions;
-  create table auth.users (id uuid primary key, email text);
-  create function auth.uid() returns uuid language sql as 'select null::uuid';
-  create function auth.role() returns text language sql as 'select null::text';
-  create function auth.jwt() returns jsonb language sql as 'select null::jsonb';`;
-// ترحيلات بيانات محضة تُتخطى في البناء المحلي: القائمة في data-only.mjs (مشتركة مع سير التكامل)
-async function localQuery() {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const db = new PGlite();
-  await db.exec(PRELUDE);
-  const base = committed();
-  await db.exec(base);
-  const asOf = opt('--after') || base.match(AS_OF_RE)?.[1];
-  if (!asOf) throw new Error('اللقطة المودعة بلا سطر as-of؛ مرّر --after <اسم آخر ترحيل فيها>');
-  const pending = migrationNames().filter((n) => n > asOf);
-  for (const n of pending) {
-    if (DATA_ONLY.has(n)) continue;
-    try { await db.exec(readFileSync(new URL(`${n}.sql`, MIGRATIONS), 'utf8')); }
-    catch (e) { throw new Error(`فشل تطبيق ${n} محليًا: ${e.message}`); }
-    // كل ترحيل يُطبَّق في الإنتاج بجلسة مستقلة؛ دواله المؤقتة (pg_temp) لا تبقى للتالي
-    await db.exec('discard temp').catch(() => {});
-  }
-  console.error(`بناء محلي: اللقطة (${asOf}) + ${pending.length} ترحيلًا`);
-  const q = async (sql) => (await db.query(sql)).rows;
-  q.asOf = pending.length ? pending[pending.length - 1] : asOf;
-  return q;
-}
+// المصدران (الحية، والبناء المحلي في PGlite من اللقطة والترحيلات الأحدث من نقطتها) في local-db.mjs
+const localQuery = () => buildLocal({ after: opt('--after') });
 
 // ── التوليد ──
 const REFERENCE = ['dimensions', 'levels'];   // بيانات مرجعية صغيرة تشير إليها قيود الجداول
